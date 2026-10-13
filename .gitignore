@@ -4,6 +4,7 @@ node_modules/
 # Build Vite
 dist/
 dist-ssr/
+*.tsbuildinfo
 *.local
 
 # Variabili d'ambiente e segreti (mai su GitHub)
