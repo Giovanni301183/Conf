@@ -5,6 +5,7 @@ import { MIN_CUSC, clone, defaultData, newPrev, normPrev, num } from '../domain/
 import { download, fileName } from '../domain/format';
 import { AUTO } from '../domain/plan';
 import { KEY_ARCH, KEY_DRAFT, KEY_PREV, R, S, commit, getP, load, save, setP, store, unstore } from './state';
+import { delArch, online, pushArch } from './remote';
 
 /* ---------- Avvisi ---------- */
 let toastFn: (m: string) => void = () => {};
@@ -27,7 +28,9 @@ export function isBlank(p) { return !p._id && snap({ ...p, data: '' }) === snap(
 export function isDirty() { const e = curEntry(); return e ? snap(e.prev) !== snap(S.prev) : !isBlank(S.prev); }
 export function prevName(p) { return p._nome || [p.cliente, p.rif].filter(Boolean).join(' · ') || 'Preventivo senza nome'; }
 export function righeTxt(p) { return p.righe.map(r => `${num(r.n)}×${r.taglia} ${r.tipo === 'Basso' ? 'Basso' : 'Agri'}`).join(', '); }
-function saveArch() {
+// Con Supabase le voci cambiate vanno al server (archivio condiviso); senza, l'archivio resta nel browser.
+function saveArch(changed: any[] = []) {
+  if (online()) { pushArch(changed); return true; }
   if (store(KEY_ARCH, S.arch)) return true;
   alert("Spazio del browser esaurito: elimina qualche preventivo dall'archivio oppure esportalo su file e poi eliminalo.");
   return false;
@@ -42,7 +45,7 @@ export function archSave(asNew: boolean) {
     totale: R.total, prezzo: R.prezzo, kwp: R.kwp, nTracker: R.nTracker, righe: righeTxt(P), prev: clone(P), dati: clone(S.data) };
   const i = S.arch.findIndex(a => a.id === id);
   if (i >= 0) S.arch[i] = e; else S.arch.unshift(e);
-  if (saveArch()) toast(i >= 0 ? `Preventivo "${nome}" aggiornato` : `Preventivo "${nome}" salvato nell'archivio`);
+  if (saveArch([e])) toast(i >= 0 ? `Preventivo "${nome}" aggiornato` : `Preventivo "${nome}" salvato nell'archivio`);
   save();
 }
 export function archOpen(id: string) {
@@ -58,11 +61,12 @@ export function archOpen(id: string) {
 export function archDup(id: string) {
   const e = S.arch.find(a => a.id === id); if (!e) return;
   const c = clone(e); c.id = 'p' + Date.now().toString(36); c.nome = e.nome + ' (copia)'; c.salvato = new Date().toISOString(); c.prev._id = c.id; c.prev._nome = c.nome;
-  S.arch.unshift(c); saveArch();
+  S.arch.unshift(c); saveArch([c]);
 }
 export function archDel(id: string) {
   const e = S.arch.find(a => a.id === id); if (!e || !confirm(`Eliminare definitivamente "${e.nome}" dall'archivio?`)) return;
-  S.arch = S.arch.filter(a => a.id !== id); saveArch();
+  S.arch = S.arch.filter(a => a.id !== id);
+  if (online()) delArch(id); else saveArch();
   if (S.prev._id === id) { delete S.prev._id; save(); }
 }
 export function archDl(id: string) {
@@ -73,17 +77,18 @@ export function archExp() {
   download(`archivio_preventivi_${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ tipo: 'archivio', preventivi: S.arch }));
 }
 function archImport(j) {
-  let n = 0;
+  let n = 0; const added: any[] = [];
   const add = (prev, dati, nome) => {
     const id = 'p' + Date.now().toString(36) + n++; const p = clone(prev); p._id = id; p._nome = nome || prevName(p);
     const r = compute(dati || S.data, p);
     S.arch.unshift({ id, nome: p._nome, cliente: p.cliente, rif: p.rif, data: p.data, salvato: new Date().toISOString(), totale: r.total, prezzo: r.prezzo, kwp: r.kwp, nTracker: r.nTracker, righe: righeTxt(p), prev: p, dati: clone(dati || S.data) });
+    added.push(S.arch[0]);
   };
   if (j.tipo === 'archivio' && Array.isArray(j.preventivi)) {
-    for (const e of j.preventivi) { if (S.arch.some(a => a.id === e.id)) continue; S.arch.unshift(e); n++; }
+    for (const e of j.preventivi) { if (S.arch.some(a => a.id === e.id)) continue; S.arch.unshift(e); added.push(e); n++; }
   } else if (j.prev) add(j.prev, j.data, j.nome);
   else throw new Error('il file non contiene preventivi');
-  saveArch(); toast(`${n} preventiv${n === 1 ? 'o importato' : 'i importati'} nell'archivio`);
+  saveArch(added); toast(`${n} preventiv${n === 1 ? 'o importato' : 'i importati'} nell'archivio`);
 }
 export function newPreventivo() {
   if (isDirty() && !confirm('Il preventivo attuale ha modifiche non salvate. Iniziare comunque un nuovo preventivo?')) return;

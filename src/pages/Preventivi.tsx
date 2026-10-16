@@ -2,6 +2,7 @@
 import { Fold } from '../components/ui';
 import { eur, fDate, fN } from '../domain/format';
 import { KEY_DRAFT, S, commit, load } from '../store/state';
+import { cloud, uploadLocali } from '../store/remote';
 import { archDel, archDl, archDup, archExp, archOpen, archSave, draftDel, draftOpen, isDirty, newPreventivo, pickFile, prevName, righeTxt } from '../store/actions';
 
 const fd = (iso: string) => { const d = new Date(iso); return isNaN(+d) ? '–' : d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }); };
@@ -16,12 +17,21 @@ export function Preventivi() {
     <>
       <div className="card head"><div className="headrow">
         <div><h2>Archivio preventivi</h2>
-          <p className="hint" style={{ margin: 0 }}>{n} preventiv{n === 1 ? 'o salvato' : 'i salvati'} in questo browser. Ogni preventivo conserva anche il listino usato.</p></div>
+          <p className="hint" style={{ margin: 0 }}>{n} preventiv{n === 1 ? 'o salvato' : 'i salvati'} {cloud.session ? "nell'archivio condiviso" : 'in questo browser'}. Ogni preventivo conserva anche il listino usato.</p></div>
         <span className="sp" />
         <input placeholder="Cerca per nome, cliente, commessa…" value={S.ui.aq} onChange={e => { S.ui.aq = e.target.value; commit(); }} style={{ width: 260 }} />
         <button className="btn" onClick={run(() => archSave(false))}>Salva preventivo corrente</button>
         <button className="btn p" onClick={run(newPreventivo)}>+ Nuovo preventivo</button>
       </div></div>
+
+      {cloud.locali.length > 0 && (
+        <div className="card head"><div className="headrow">
+          <div><h2>Preventivi solo in questo browser</h2><p className="hint" style={{ margin: 0 }}>
+            {cloud.locali.length} preventiv{cloud.locali.length === 1 ? 'o' : 'i'} dell'archivio locale non {cloud.locali.length === 1 ? 'è' : 'sono'} ancora sul server: {cloud.locali.slice(0, 3).map(e => e.nome).join(', ')}{cloud.locali.length > 3 ? '…' : ''}</p></div>
+          <span className="sp" />
+          <button className="btn p" onClick={() => { uploadLocali(); }}>Carica nell'archivio condiviso</button>
+        </div></div>
+      )}
 
       {dr && (
         <div className="card head"><div className="headrow">
@@ -44,7 +54,7 @@ export function Preventivi() {
                   <td><b>{e.nome}</b>{cur && <> <span className="tag on">aperto{isDirty() ? ' · modificato' : ''}</span></>}<div className="muted small">{e.cliente || '–'}</div></td>
                   <td>{e.rif || '–'}<div className="muted small">{fDate(e.data)}</div></td>
                   <td className="small">{e.righe}</td><td className="n">{fN(e.kwp, 2)}</td><td className="n">{eur(e.totale)}</td><td className="n"><b>{e.prezzo != null ? eur(e.prezzo) : '–'}</b></td>
-                  <td className="small muted">{fd(e.salvato)}</td>
+                  <td className="small muted">{fd(e.salvato)}{e.autore ? <div>{e.autore.split('@')[0]}</div> : null}</td>
                   <td className="acts">
                     <button className="btn s p" onClick={run(() => archOpen(e.id))}>Apri</button>
                     <button className="btn s" onClick={run(() => archDup(e.id))} title="Duplica">Duplica</button>
@@ -59,7 +69,7 @@ export function Preventivi() {
       )}
 
       <Fold id="ar-file" title="Backup e trasferimento" sum="Esporta tutto l'archivio su file o importa preventivi da file (per altri PC o colleghi)">{() => <>
-        <p className="hint">L'archivio vive nel browser di questo PC. Per sicurezza esportalo ogni tanto su file; il file si importa da qui su un altro PC.</p>
+        <p className="hint">{cloud.session ? "L'archivio è sul server, condiviso con i colleghi. L'esportazione su file resta utile come copia di sicurezza." : "L'archivio vive nel browser di questo PC. Per sicurezza esportalo ogni tanto su file; il file si importa da qui su un altro PC."}</p>
         <div className="toolbar"><button className="btn" onClick={archExp}>Esporta tutto l'archivio</button><button className="btn" onClick={() => pickFile('arch')}>Importa da file…</button>
           <span className="muted">Accetta sia l'archivio completo sia un singolo preventivo scaricato.</span></div>
       </>}</Fold>

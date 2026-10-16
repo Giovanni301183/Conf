@@ -37,7 +37,10 @@ export const S: State = {
 // Risultato del calcolo sul preventivo aperto: si aggiorna a ogni commit().
 export let R = compute(S.data, S.prev);
 
-export function save() { store(KEY_DATA, S.data); store(KEY_PREV, S.prev); }
+// Chiamato dopo ogni salvataggio: con Supabase attivo invia il listino al server.
+let saveHook = () => {};
+export function setSaveHook(f: () => void) { saveHook = f; }
+export function save() { store(KEY_DATA, S.data); store(KEY_PREV, S.prev); saveHook(); }
 export function saveUi() { store(KEY_UI, { tab: S.ui.tab, view: S.ui.view, folds: S.ui.folds }); }
 
 let version = 0;

@@ -12,6 +12,8 @@ import { Extra } from './pages/Extra';
 import { Margini } from './pages/Margini';
 import { Lavorazione } from './pages/Lavorazione';
 import { Montaggio } from './pages/Montaggio';
+import { Accesso } from './pages/Accesso';
+import { cloud, logout, setCloudToast } from './store/remote';
 
 const VIEWS: Record<Tab, () => React.ReactNode> = {
   archivio: Preventivi, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
@@ -27,13 +29,14 @@ function Kpi({ label, value, cls = '' }: { label: string; value: string; cls?: s
 export default function App() {
   useStore();
   const { toast, node } = useToastState();
-  useEffect(() => setToast(toast));
+  useEffect(() => { setToast(toast); setCloudToast(toast); });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  if (cloud.fase !== 'locale' && cloud.fase !== 'pronto') return <><Accesso />{node}</>;
   const View = VIEWS[S.ui.tab];
   const dirty = isDirty();
   return (
@@ -58,6 +61,12 @@ export default function App() {
             <button className="btn" onClick={save} title="Salva nell'archivio (Ctrl+S)">Salva</button>
             <button className="btn p" onClick={printCosti}>Stampa / PDF</button>
           </div>
+          {cloud.session && (
+            <div className="user" title={cloud.sync === 'errore' ? 'Ultimo salvataggio sul server non riuscito' : cloud.sync === 'salvo' ? 'Salvataggio sul server…' : 'Dati sincronizzati con il server'}>
+              <span className={`dot ${cloud.sync}`} />{cloud.session.user.email}
+              <button className="btn s" onClick={() => { if (!isDirty() || confirm('Il preventivo aperto ha modifiche non salvate. Uscire comunque?')) logout().then(commit); }}>Esci</button>
+            </div>
+          )}
         </div>
       </header>
       <div className="navbar">
