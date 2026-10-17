@@ -22,7 +22,7 @@ export const TABS = [['archivio', 'Preventivi'], ['listino', 'Listino'], ['disti
 export type Tab = (typeof TABS)[number][0];
 
 export interface Ui {
-  tab: Tab; view: string; folds: Record<string, boolean>; open: Set<string>; sizeSel: string; openSd: Set<number>; filter: string; aq: string;
+  tab: Tab; view: string; av: 'elenco' | 'kpi' | 'mappa'; kf: { anno: string; mese: string; stato: string; cliente: string }; folds: Record<string, boolean>; open: Set<string>; sizeSel: string; openSd: Set<number>; filter: string; aq: string;
 }
 export interface State { data: any; prev: any; ui: Ui; arch: any[] }
 
@@ -31,7 +31,7 @@ const hashTab = TABS.find(t => t[0] === location.hash.slice(1))?.[0];
 // All'avvio si parte sempre da un preventivo nuovo, sulla schermata Preventivi (elenco dell'archivio).
 export const S: State = {
   data: load(KEY_DATA) || defaultData(), prev: newPrev(), arch: load(KEY_ARCH) || [],
-  ui: { tab: hashTab || 'archivio', view: UI0.view || 'cat', folds: UI0.folds || {}, open: new Set(), sizeSel: '12', openSd: new Set(), filter: '', aq: '' },
+  ui: { tab: hashTab || 'archivio', view: UI0.view || 'cat', av: UI0.av || 'elenco', kf: { anno: '', mese: '', stato: '', cliente: '' }, folds: UI0.folds || {}, open: new Set(), sizeSel: '12', openSd: new Set(), filter: '', aq: '' },
 };
 
 // Risultato del calcolo sul preventivo aperto: si aggiorna a ogni commit().
@@ -41,7 +41,7 @@ export let R = compute(S.data, S.prev);
 let saveHook = () => {};
 export function setSaveHook(f: () => void) { saveHook = f; }
 export function save() { store(KEY_DATA, S.data); store(KEY_PREV, S.prev); saveHook(); }
-export function saveUi() { store(KEY_UI, { tab: S.ui.tab, view: S.ui.view, folds: S.ui.folds }); }
+export function saveUi() { store(KEY_UI, { tab: S.ui.tab, view: S.ui.view, av: S.ui.av, folds: S.ui.folds }); }
 
 let version = 0;
 const subs = new Set<() => void>();

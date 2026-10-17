@@ -69,6 +69,13 @@ export function archDel(id: string) {
   if (online()) delArch(id); else saveArch();
   if (S.prev._id === id) { delete S.prev._id; save(); }
 }
+// Stato e posizione si cambiano anche dall'archivio, senza aprire il preventivo.
+export function archPatch(id: string, f: (p: any) => void) {
+  const e = S.arch.find(a => a.id === id); if (!e) return;
+  normPrev(e.prev); f(e.prev); e.salvato = new Date().toISOString();
+  if (S.prev._id === id) { normPrev(S.prev); f(S.prev); save(); }
+  saveArch([e]);
+}
 export function archDl(id: string) {
   const e = S.arch.find(a => a.id === id);
   if (e) download(`preventivo_${fileName(e.nome)}.json`, JSON.stringify({ tipo: 'preventivo', nome: e.nome, prev: e.prev, data: e.dati }, null, 1));

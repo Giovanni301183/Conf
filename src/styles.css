@@ -270,3 +270,68 @@ table.arch .acts .btn{margin-left:4px}
 .user{display:flex;align-items:center;gap:8px;color:#9fb0b8;font-size:12px;white-space:nowrap}
 .user .dot{width:8px;height:8px;border-radius:50%;background:#6cc3a0}
 .user .dot.salvo{background:var(--gold)}.user .dot.errore{background:#e0766b}
+
+/* ---------- Cruscotto e mappa preventivi ---------- */
+.lrow{display:flex;gap:8px;align-items:center}.lrow>input{flex:1}
+.stag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:550;color:var(--ink2);white-space:nowrap}
+.stag i{font-style:normal;display:inline-grid;place-items:center;width:17px;height:17px;border-radius:50%;background:var(--sc);color:#fff;font-size:10px}
+select.ssel{padding:3px 8px;font-size:12.5px;border-left:4px solid var(--sc)}
+.kfilt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 16px}
+.kfilt input{width:240px}.kfilt .sp{flex:1}
+.chips{display:inline-flex;gap:4px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:#fff;border-radius:20px;padding:4px 11px 4px 5px;font:inherit;font-size:12.5px;cursor:pointer;display:inline-flex;gap:6px;align-items:center;color:var(--ink2)}
+.chip i{font-style:normal;display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--sc);color:#fff;font-size:10px}
+.chip:hover{border-color:var(--sc)}.chip.on{border-color:var(--sc);box-shadow:0 0 0 2px var(--sc) inset;color:var(--ink);font-weight:600}
+.ktiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:20px}
+.ktile{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;box-shadow:var(--sh)}
+.ktile small{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.ktile b{display:block;font-size:24px;font-weight:650;font-variant-numeric:tabular-nums;color:var(--ink);margin:2px 0;white-space:nowrap}
+.ktile span{font-size:12px;color:var(--muted)}
+.kgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}
+.kgrid .wide{grid-column:span 1}
+@media (max-width:1000px){.kgrid{grid-template-columns:minmax(0,1fr)}}
+.kc .hint{margin-bottom:12px}
+.mbars{display:flex;gap:8px;height:230px}
+.yax{display:flex;flex-direction:column;justify-content:space-between;font-size:11px;color:var(--muted);text-align:right;padding-bottom:20px;min-width:52px;font-variant-numeric:tabular-nums}
+.yax span{transform:translateY(-6px)}.yax span:last-child{transform:translateY(6px)}
+.plot{position:relative;flex:1;display:flex;gap:4px;align-items:stretch;border-bottom:1px solid var(--line);padding-bottom:20px}
+.plot .gl{position:absolute;left:0;right:0;border-top:1px dashed var(--line);margin-bottom:20px;pointer-events:none}
+.mcol{flex:1;border:0;background:none;padding:0;cursor:pointer;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;position:relative;border-radius:6px 6px 0 0;min-width:0}
+.mcol:hover{background:var(--soft)}
+.mcol .stack{width:min(70%,34px);display:flex;flex-direction:column;gap:2px;border-radius:4px 4px 0 0;overflow:hidden}
+.mcol .stack i{display:block;min-height:2px}
+.mcol small{position:absolute;bottom:-19px;font-size:11px;color:var(--muted)}
+.mcol.on small{color:var(--ink);font-weight:650}.mcol.dim .stack{opacity:.35}
+.klegend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink2);margin-top:12px;align-items:center}
+.klegend span>i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.hbar{display:grid;grid-template-columns:minmax(110px,38%) 1fr 74px;gap:10px;align-items:center;width:100%;border:0;background:none;font:inherit;text-align:left;padding:6px 6px;border-radius:8px;cursor:pointer;color:var(--ink2)}
+.hbar:hover:not(:disabled){background:var(--soft)}.hbar:disabled{cursor:default}
+.hbar .hl{display:flex;gap:6px;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:13px}
+.hbar em{font-style:normal;color:var(--muted);font-size:11.5px;margin-left:auto;font-variant-numeric:tabular-nums}
+.hbar .track{height:12px;background:var(--soft2);border-radius:0 4px 4px 0;overflow:hidden}
+.hbar .track i{display:block;height:100%;background:var(--acc2);border-radius:0 4px 4px 0}
+.hbar b{text-align:right;font-size:13px;font-variant-numeric:tabular-nums;color:var(--ink)}
+.hbar.on{background:var(--acc-soft)}.hbar.dim{opacity:.45}
+.scat{width:100%}.scat svg{display:block;overflow:visible}
+.scat line.g{stroke:var(--line);stroke-dasharray:3 3}.scat text.ax{font-size:11px;fill:var(--muted)}
+.scat .pt{cursor:pointer}.scat .pt:hover circle:last-child{stroke:var(--ink)}
+.ktip{position:fixed;z-index:50;pointer-events:none;background:var(--ink);color:#fff;border-radius:8px;padding:8px 10px;font-size:12px;min-width:170px;max-width:240px;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.ktip>b{display:block;margin-bottom:4px}
+.ktip .tr{display:flex;gap:8px;align-items:center}.ktip .tr span{color:#b9c6cc;flex:1}.ktip .tr b{font-variant-numeric:tabular-nums}
+.ktip .tr i{width:8px;height:8px;border-radius:2px}
+.mapwrap{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start}
+@media (max-width:1000px){.mapwrap{grid-template-columns:minmax(0,1fr)}}
+.mapcard{padding:0;overflow:hidden}
+.maphead{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding:12px 16px;font-size:13px;color:var(--ink2)}
+.maphead .klegend{margin:0}
+.mapmode{background:var(--gold);color:#fff;padding:8px 16px;font-size:13px;display:flex;gap:10px;align-items:center}
+.map{height:min(66vh,620px);min-height:380px;z-index:0}.map.aim{cursor:crosshair}
+.mapside{max-height:calc(min(66vh,620px) + 50px);overflow:auto;padding:18px}
+.mitem{display:flex;gap:6px;align-items:center;padding:8px 6px;border-bottom:1px solid var(--line);font-size:13px}
+.mitem .sp{flex:1}.mitem.on{background:var(--acc-soft);border-radius:8px}
+.lnk{border:0;background:none;font:inherit;text-align:left;padding:0;cursor:pointer;color:var(--ink);min-width:0}
+.lnk:hover b{color:var(--acc)}
+.mpop{font:13px/1.45 "Inter","Segoe UI",system-ui,sans-serif;min-width:200px}
+.mpop>div{color:#76818a;margin-bottom:6px}
+.mpop .mrow{display:flex;justify-content:space-between;gap:10px;color:#3b4852;margin:0}
+.mpop .btn{margin-top:8px;width:100%}

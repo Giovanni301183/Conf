@@ -1,11 +1,36 @@
 // Scheda Configura: commessa, modulo FV, righe tracker, componenti di impianto.
+import { useState } from 'react';
 import { DateInp, Fold, Inp, Sel, Seg, TabTools } from '../components/ui';
+import { geocode } from '../lib/geo';
+import { toast } from '../store/actions';
 import { unitCost } from '../domain/compute';
 import { eur, fDate, fL, fN } from '../domain/format';
-import { IMP, MIN_CUSC, OPT_LCUSC, OPT_LFOND, clone, defRiga, num } from '../domain/model';
+import { IMP, MIN_CUSC, OPT_LCUSC, OPT_LFOND, STATI, clone, defRiga, num } from '../domain/model';
 import { R, S, commit, save } from '../store/state';
 
 const done = () => { save(); commit(); };
+
+// Localita' dell'impianto: il testo resta quello scritto; "Trova" aggiunge le coordinate per la mappa.
+function Luogo() {
+  const lu = S.prev.luogo, [busy, setBusy] = useState(false), pos = lu.lat != null && lu.lng != null;
+  const trova = async () => {
+    setBusy(true);
+    try {
+      const r = await geocode(lu.nome);
+      if (r) { lu.lat = r.lat; lu.lng = r.lng; toast(`Trovato: ${r.nome}`); } else toast(`"${lu.nome}" non trovato: prova con comune e provincia`);
+    } catch (err) { toast('Ricerca della località non riuscita: ' + (err as Error).message); }
+    setBusy(false); done();
+  };
+  return (
+    <div className="f" style={{ gridColumn: 'span 2' }}>Località dell'impianto
+      <span className="lrow">
+        <Inp path="prev.luogo.nome" type="txt" ph="es. Foggia (FG)" />
+        <button className="btn s" disabled={busy || !lu.nome.trim()} onClick={trova}>{busy ? 'Cerco…' : pos ? 'Ritrova' : 'Trova sulla mappa'}</button>
+        {pos && <span className="muted small" title="Coordinate">{fN(lu.lat, 4)}, {fN(lu.lng, 4)} <button className="btn x" title="Togli le coordinate" onClick={() => { lu.lat = null; lu.lng = null; done(); }}>✕</button></span>}
+      </span>
+    </div>
+  );
+}
 
 export function Configura() {
   const P = S.prev, sizes = Object.keys(S.data.sizes).sort((a: any, b: any) => a - b);
@@ -23,6 +48,8 @@ export function Configura() {
           <label className="f">Cliente<Inp path="prev.cliente" type="txt" /></label>
           <label className="f">Riferimento commessa<Inp path="prev.rif" type="txt" /></label>
           <label className="f">Data<DateInp path="prev.data" /></label>
+          <label className="f">Stato<Sel path="prev.stato" opts={STATI.map(([k, l, , ic]) => [k, `${ic} ${l}`] as const)} /></label>
+          <Luogo />
           <label className="f" style={{ gridColumn: '1/-1' }}>Note<Inp path="prev.note" type="txt" /></label>
         </div>
       )}</Fold>

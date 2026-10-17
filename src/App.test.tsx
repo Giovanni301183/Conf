@@ -53,3 +53,17 @@ describe('interfaccia', () => {
     expect(montWorkbook().size).toBeGreaterThan(5000);
   });
 });
+
+describe('archivio: cruscotto e mappa', () => {
+  it.each(['kpi', 'mappa'])('vista %s si disegna', av => {
+    act(() => {
+      S.arch = [{ id: 'x1', nome: 'Prova', cliente: 'Cliente', rif: '', data: '2026-05-04', salvato: '2026-05-04T10:00:00Z', totale: 1000, prezzo: 1250, kwp: 50, nTracker: 2, righe: '2×12 Agri',
+        prev: { stato: 'inviato', luogo: { nome: 'Foggia', lat: 41.46, lng: 15.55 } } }];
+      S.ui.tab = 'archivio'; S.ui.av = av as any; commit();
+    });
+    const { container } = render(<App />);
+    expect(container.textContent).toContain('Prova');
+    if (av === 'kpi') expect(container.querySelector('.ktiles')!.textContent).toContain('Tasso di successo');
+    act(() => { S.ui.av = 'elenco'; S.arch = []; commit(); });
+  });
+});
