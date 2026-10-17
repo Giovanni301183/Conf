@@ -92,7 +92,7 @@ tr.tot td{font-weight:650;background:var(--soft2)!important;border-top:1px solid
 .tg{display:inline-block;width:20px;cursor:pointer;color:var(--acc);user-select:none;font-size:11px}
 .tree .lbl{white-space:normal;display:inline}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;background:var(--cc,var(--muted))}
-.cat-STRUTTURA{--cc:var(--c-mat)} .cat-ELETTROMECCANICO{--cc:var(--c-lav)} .cat-ELETTRONICO{--cc:var(--c-altro)} .cat-BULLONERIA{--cc:var(--c-zinc)} .cat-VOCI{--cc:var(--gold)}
+.cat-STRUTTURA{--cc:var(--c-mat)} .cat-ELETTROMECCANICO{--cc:var(--c-lav)} .cat-ELETTRONICO{--cc:var(--c-altro)} .cat-BULLONERIA{--cc:var(--c-zinc)} .cat-VOCI{--cc:var(--gold)} .cat-LAVORAZIONE{--cc:var(--c-lav)}
 .card.cat{border-top:3px solid var(--cc)}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 4px;padding:10px 12px;background:var(--soft);border-radius:10px;font-size:12.5px;color:var(--ink2)}
 .toolbar input{width:80px;padding:4px 7px}

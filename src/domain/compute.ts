@@ -1,5 +1,5 @@
 // Calcolo dei costi e albero di esplosione.
-import { CATS, EXTRA_VOCI, IMP, margFactor, num } from './model';
+import { CATS, EXTRA_VOCI, IMP, LAV_CAT, hasOwnMarg, margFactor, num } from './model';
 import { fL } from './format';
 /* ======================= CALCOLO ======================= */
 export function evalQ(expr,drv){
@@ -73,9 +73,11 @@ export function compute(data,prev){
   const steel=lines.filter(l=>l.cat==='STRUTTURA').reduce((s,l)=>s+l.peso,0);
   const totTracker=righe.reduce((s,r)=>s+r.tot,0);
   let prezzo=0; righe.forEach(r=>r.prezzo=0);
-  for(const l of lines){let f=margFactor(prev,l.cat);
-    if(f==null){warn.add(`Margine di "${l.cat}" non valido: con il margine sul prezzo deve essere sotto il 100 %`);f=1;}
-    l.prezzo=tot(l)*f; prezzo+=l.prezzo; if(typeof l.riga==='number')righe[l.riga].prezzo+=l.prezzo;}
+  const bad=c=>{warn.add(`Margine di "${c}" non valido: con il margine sul prezzo deve essere sotto il 100 %`);return 1;};
+  // La lavorazione ha un margine proprio (categoria LAVORAZIONE); se e' vuoto segue la categoria della riga.
+  const own=hasOwnMarg(prev,LAV_CAT), fL0=own?(margFactor(prev,LAV_CAT)??bad(LAV_CAT)):null;
+  for(const l of lines){const f=margFactor(prev,l.cat)??bad(l.cat), fl=fL0??f;
+    l.pLav=l.lav*fl; l.prezzo=(tot(l)-l.lav)*f+l.pLav; prezzo+=l.prezzo; if(typeof l.riga==='number')righe[l.riga].prezzo+=l.prezzo;}
   return {lines,righe,T,total:tot(T),prezzo,kwp,wp,nTracker,nModuli,steel,totTracker,warn:[...warn]};
 }
 

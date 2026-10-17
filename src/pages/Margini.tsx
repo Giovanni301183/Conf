@@ -2,14 +2,16 @@
 import { Fold, Inp, Seg, TabTools } from '../components/ui';
 import { tot } from '../domain/compute';
 import { eur, fN, fP } from '../domain/format';
-import { MCATS, normPrev, num } from '../domain/model';
+import { LAV_CAT, MCATS, normPrev, num } from '../domain/model';
 import { R, S } from '../store/state';
 
 export function Margini() {
   const P = normPrev(S.prev), M = P.marg, C = R.total, V = R.prezzo, mg = V - C, ric = M.modo === 'ricarico';
   const wpS = (x: number) => (R.kwp ? fN(x / (R.kwp * 1000), 4) : '–');
   const byCat: Record<string, { c: number; p: number }> = {};
-  for (const l of R.lines) { (byCat[l.cat] ??= { c: 0, p: 0 }); byCat[l.cat].c += tot(l); byCat[l.cat].p += l.prezzo; }
+  const add = (k: string, c: number, p: number) => { (byCat[k] ??= { c: 0, p: 0 }); byCat[k].c += c; byCat[k].p += p; };
+  // La lavorazione si conta a parte, nella sua categoria: le altre categorie mostrano il costo senza lavorazione.
+  for (const l of R.lines) { add(l.cat, tot(l) - l.lav, l.prezzo - l.pLav); if (l.lav) add(LAV_CAT, l.lav, l.pLav); }
   const own = MCATS.filter(c => M.cat[c] !== '' && M.cat[c] != null);
   const sum = (k: string) => R.lines.filter(l => l.riga === k).reduce((s, l) => s + l.prezzo, 0), pImp = sum('imp'), pEx = sum('extra');
   return (
@@ -27,14 +29,14 @@ export function Margini() {
       </>}</Fold>
 
       <Fold id="mg-cat" step={2} title="Margine per categoria" sum={own.length ? own.map(c => `${c.toLowerCase()} ${fP(num(M.cat[c]))}`).join(' · ') : 'Tutte le categorie usano il valore generale'}>{() => <>
-        <p className="hint">Lascia vuoto per usare il valore generale ({fP(num(M.gen))}). Serve per esempio a tenere un margine più alto sulla carpenteria e più basso sui componenti acquistati.</p>
+        <p className="hint">Lascia vuoto per usare il valore generale ({fP(num(M.gen))}). Serve per esempio a tenere un margine più alto sulla carpenteria e più basso sui componenti acquistati. La riga <b>LAVORAZIONE</b> raccoglie il costo di lavorazione di tutte le categorie: se la lasci vuota segue il margine della categoria di ogni pezzo.</p>
         <div className="wrap"><table><tbody>
           <tr><th>Categoria</th><th className="n">Costo €</th><th className="n" style={{ width: 130 }}>{ric ? 'Ricarico' : 'Margine'} %</th><th className="n">Margine €</th><th className="n">Prezzo €</th><th className="n">Margine sul prezzo</th></tr>
           {[...MCATS, 'NON TROVATO'].map(c => {
             const n = byCat[c] || { c: 0, p: 0 }; if (c === 'NON TROVATO' && !byCat[c]) return null;
             return (
               <tr key={c}><td className={`cat-${c.split(' ')[0]}`}><span className="dot" /><b>{c}</b></td><td className="n">{fN(n.c)}</td>
-                <td>{c === 'NON TROVATO' ? <span className="muted">generale</span> : <Inp path={`prev.marg.cat.${c}`} type="optnum" ph={String(num(M.gen)).replace('.', ',')} />}</td>
+                <td>{c === 'NON TROVATO' ? <span className="muted">generale</span> : <Inp path={`prev.marg.cat.${c}`} type="optnum" ph={c === LAV_CAT ? 'come categoria' : String(num(M.gen)).replace('.', ',')} />}</td>
                 <td className="n">{fN(n.p - n.c)}</td><td className="n"><b>{fN(n.p)}</b></td><td className="n muted">{n.p ? fP(((n.p - n.c) / n.p) * 100) : '–'}</td></tr>
             );
           })}
