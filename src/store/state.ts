@@ -17,7 +17,7 @@ export function unstore(k: string) {
   try { localStorage.removeItem(k); } catch { /* storage non disponibile */ }
 }
 
-export const TABS = [['archivio', 'Preventivi'], ['listino', 'Listino'], ['distinte', 'Distinte base'], ['config', 'Configura'], ['costi', 'Costi'],
+export const TABS = [['archivio', 'Home'], ['listino', 'Listino'], ['distinte', 'Distinte base'], ['config', 'Configura'], ['costi', 'Costi'],
   ['extra', 'Voci extra'], ['margini', 'Margini'], ['lavor', 'Distinta lavorazione'], ['mont', 'Montaggio']] as const;
 export type Tab = (typeof TABS)[number][0];
 
