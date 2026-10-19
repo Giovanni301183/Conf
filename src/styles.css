@@ -34,15 +34,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Inter","Segoe
 .kpi b{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--ink)}
 .kpi.main{background:var(--acc);border-color:var(--acc)}.kpi.main small{color:#cfe6e2}.kpi.main b{color:#fff;font-size:16px}
 .actions{display:flex;gap:6px;flex-wrap:wrap}
-@media (max-width:900px){
-  .app{grid-template-columns:minmax(0,1fr)}
-  .side{position:static;height:auto;flex-direction:row;align-items:center;gap:12px;padding:10px 16px;overflow-x:auto}
-  .brand{border:0;margin:0;padding:0}.brand h1 small{display:none}
-  .side nav{flex-direction:row;gap:2px}.ng{flex-direction:row}.ngt{display:none}
-  .side nav button span{white-space:nowrap}
-  .kpis{justify-content:flex-start}
-}
-main{padding:28px;max-width:1560px;margin:0 auto}
+main{padding:28px;max-width:1560px;margin:0 auto;width:100%;min-width:0}
+.btn.menu,.scrim{display:none}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:22px 24px;margin-bottom:20px;box-shadow:var(--sh)}
 .card h2{font-size:15.5px;font-weight:650;margin:0 0 6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--ink)}
 .card h2 .sp{flex:1}
@@ -50,6 +43,7 @@ main{padding:28px;max-width:1560px;margin:0 auto}
 .hint{color:var(--muted);font-size:13px;margin:0 0 16px;max-width:920px}
 code{background:var(--soft2);padding:1px 5px;border-radius:4px;font-size:12px;color:var(--ink2)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px 20px}
+.grid>*{min-width:0}
 .cols2{display:grid;grid-template-columns:3fr 2fr;gap:20px}
 .cols2>.card{margin-bottom:20px}
 @media (max-width:1000px){.cols2{grid-template-columns:1fr}}
@@ -364,4 +358,75 @@ table.arch td input{width:100%;max-width:260px}
 .pres{border-top:1px solid rgba(255,255,255,.08);margin-top:12px;padding-top:8px}
 .pres .pp{font-size:12.5px;color:#c3cfd4;padding:3px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dot.on{background:#3fb37f}
-@media (max-width:900px){.pres{display:none}}
+
+/* ---------- Responsive: laptop, tablet, telefono ---------- */
+@media (max-width:1280px){
+  .app{grid-template-columns:220px minmax(0,1fr)}
+  .top{padding:10px 20px;gap:12px}
+  main{padding:22px 20px}
+  .kpi{padding:4px 10px}
+}
+@media (max-width:1180px){
+  .top .cur{flex:1}
+  .kpis{order:3;flex-basis:100%;flex-wrap:nowrap;justify-content:flex-start}
+}
+/* Sotto i 900px la barra laterale diventa un menu a scomparsa aperto dal pulsante ☰ */
+@media (max-width:900px){
+  .app{display:block}
+  .side{position:fixed;left:0;top:0;bottom:0;height:auto;width:min(280px,84vw);z-index:40;transform:translateX(-100%);transition:transform .22s ease;box-shadow:none}
+  .side.open{transform:none;box-shadow:8px 0 32px rgba(0,0,0,.25)}
+  .side nav button{padding:10px}
+  .scrim{display:block;position:fixed;inset:0;background:rgba(20,28,33,.45);z-index:39;animation:fade .2s ease}
+  @keyframes fade{from{opacity:0}}
+  .btn.menu{display:grid;place-items:center;padding:7px 9px;flex:none}
+  .top{display:grid;grid-template-columns:auto minmax(0,1fr) auto;row-gap:8px}
+  .top .cur{min-width:0}
+  .kpis{grid-column:1/-1;grid-row:2;flex-wrap:nowrap;justify-content:flex-start;overflow-x:auto;scrollbar-width:none;margin:0 -20px;padding:0 20px}
+  .kpis::-webkit-scrollbar{display:none}
+  .kpi{flex:none}
+  .actions{flex-wrap:nowrap}
+}
+@media (max-width:700px){
+  .top{padding:8px 16px;column-gap:8px}
+  .kpis{margin:0 -16px;padding:0 16px}
+  .kpi small{font-size:9.5px}.kpi b,.kpi.main b{font-size:13.5px}
+  .top .cur small{display:none}
+  .curname{font-size:14px}.curname i{display:block;margin:0;font-size:11px}
+  .actions .btn{padding:6px 10px}
+  .lg{display:none}
+  main{padding:16px 12px}
+  .card{padding:16px 14px;margin-bottom:14px;border-radius:12px}
+  .card.head{padding:14px}
+  .headrow{gap:10px}
+  .headrow>div:first-child{flex:1 1 100%}
+  .headrow>.sp{display:none}
+  .headrow>input{flex:1 1 100%;width:auto!important}
+  .headrow>.btn{flex:1 1 auto}
+  .fh{padding:14px;gap:10px;min-height:0;flex-wrap:wrap}
+  .fh .ft{flex:1 1 0}.fh .sp{display:none}
+  .fh .fact{order:3;flex:1 1 100%}
+  .fb{padding:14px}
+  .step{width:28px;height:28px;font-size:13px}
+  .sfh{padding:10px 12px;flex-wrap:wrap}.sfh .fsum{margin:0;flex:1 1 100%}
+  .sfb{padding:8px}
+  .tabtools{margin:0 0 10px}
+  .grid,.grid.imps{grid-template-columns:repeat(auto-fill,minmax(min(140px,100%),1fr));gap:12px 14px}
+  .grid input,.grid select{width:100%}
+  .lrow{flex-wrap:wrap}.lrow>input{flex:1 1 100%}
+  .kfilt{padding:12px}.kfilt input{width:100%}.kfilt .sp{display:none}
+  .ktiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .ktile{padding:12px}.ktile b{font-size:19px}
+  .pills{grid-template-columns:minmax(0,1fr);padding:12px}
+  .hbar{grid-template-columns:minmax(80px,34%) 1fr 64px;gap:8px}
+  .mbars{height:200px}.yax{min-width:42px}
+  .map{min-height:320px;height:55vh}
+  .mapside{max-height:none;padding:14px}
+  .minibar{width:100px}
+  .toast{left:12px;right:12px;bottom:16px;transform:translateY(20px);text-align:center}
+  .toast.show{transform:none}
+  .login .card{padding:22px 18px}
+}
+/* Telefoni: campi a 16px, altrimenti iOS ingrandisce la pagina quando si tocca un campo */
+@media (max-width:700px) and (hover:none){
+  input,select,textarea{font-size:16px}
+}

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useToastState } from './components/ui';
 import { eur, fN } from './domain/format';
 import { R, S, TABS, commit, useStore, type Tab } from './store/state';
@@ -51,9 +51,13 @@ function Kpi({ label, value, cls = '' }: { label: string; value: string; cls?: s
 export default function App() {
   useStore();
   const { toast, node } = useToastState();
+  const [menu, setMenu] = useState(false);   // menu laterale a scomparsa (schermi stretti)
   useEffect(() => { setToast(toast); setCloudToast(toast); });
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); } };
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+      if (e.key === 'Escape') setMenu(false);
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -63,7 +67,8 @@ export default function App() {
   const dirty = isDirty();
   return (
     <div className="app">
-      <aside className="side">
+      {menu && <div className="scrim" onClick={() => setMenu(false)} />}
+      <aside className={`side ${menu ? 'open' : ''}`}>
         <div className="brand">
           <div className="logo">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10l9-4 9 4-9 4z" /><path d="M12 14v7M8 21h8" /></svg>
@@ -74,7 +79,7 @@ export default function App() {
           {GROUPS.filter(([, tabs]) => isAdmin() || !tabs.includes('utenti')).map(([g, tabs]) => (
             <div key={g || 'home'} className="ng">
               {g && <div className="ngt">{g}</div>}
-              {tabs.map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} onClick={() => goTab(k)}><Ico d={ICON[k]} /><span>{LABEL[k]}</span></button>)}
+              {tabs.map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span></button>)}
             </div>
           ))}
         </nav>
@@ -89,6 +94,9 @@ export default function App() {
       <div className="mainc">
         <header>
           <div className="top">
+            <button className="btn menu noprint" onClick={() => setMenu(true)} aria-label="Apri il menu" title="Menu">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+            </button>
             <div className="cur">
               <small>{LABEL[S.ui.tab]}</small>
               <span className={`curname ${dirty ? 'dirty' : ''}`} title={dirty ? 'Modifiche non salvate' : 'Salvato'}>
@@ -105,7 +113,7 @@ export default function App() {
             <div className="actions">
               <button className="btn" onClick={() => { newPreventivo(); commit(); }}>Nuovo</button>
               <button className="btn" onClick={save} title="Salva nell'archivio (Ctrl+S)">Salva</button>
-              <button className="btn p" onClick={printCosti}>Stampa / PDF</button>
+              <button className="btn p" onClick={printCosti} title="Stampa / PDF"><span className="lg">Stampa / </span>PDF</button>
             </div>
           </div>
         </header>
