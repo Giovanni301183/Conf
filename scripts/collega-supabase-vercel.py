@@ -68,7 +68,7 @@ def main():
         ('SUPABASE_SERVICE_ROLE_KEY', service, ['production', 'preview'], 'sensitive'),
     ]:
         call('POST', f"https://api.vercel.com/v10/projects/{pr['id']}/env{q}", vc, {'key': key, 'value': value, 'target': target, 'type': typ})
-        print('  ', key, '→', ', '.join(target))
+        print('  ', key, '->', ', '.join(target))
 
     print('4. .env.local')
     txt = open(ENV, encoding='utf-8').read()
