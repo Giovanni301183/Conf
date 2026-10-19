@@ -1,5 +1,5 @@
 // Archivio e listino condivisi su Supabase. Senza Supabase configurato tutto resta nel browser come prima.
-import type { Session } from '@supabase/supabase-js';
+import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { linkType, supabase } from '../lib/supabase';
 import { KEY_ARCH, KEY_DRAFT, S, commit, load, setSaveHook, store, unstore } from './state';
 
@@ -10,6 +10,8 @@ export const cloud = {
   session: null as Session | null,
   // Riga dell'elenco utenti di chi e' collegato: ruolo e attivazione.
   me: null as Utente | null,
+  // Chi ha l'app aperta in questo momento (presenza in tempo reale), un elemento per persona.
+  presenti: [] as { email: string; nome: string | null }[],
   sync: 'ok' as 'ok' | 'salvo' | 'errore',
   err: '',
   // Preventivi rimasti nell'archivio del browser e non ancora caricati sul server.
@@ -123,6 +125,25 @@ export async function invitaUtente(email: string, nome: string, ruolo: string): 
   } catch (err) { return { error: (err as Error).message }; }
 }
 
+// Presenza: ogni finestra aperta si annuncia sul canale; chiudendola (o uscendo) sparisce dall'elenco.
+let presenza: RealtimeChannel | null = null;
+function joinPresenza() {
+  const me = cloud.me; if (!me || presenza) return;
+  const ch = supabase!.channel('presenza', { config: { presence: { key: me.email } } });
+  ch.on('presence', { event: 'sync' }, () => {
+    const st = ch.presenceState<{ email: string; nome: string | null }>();
+    cloud.presenti = Object.values(st).map(v => v[0]).filter(Boolean).sort((a, b) => (a.nome || a.email).localeCompare(b.nome || b.email));
+    commit();
+  }).subscribe(s => { if (s === 'SUBSCRIBED') ch.track({ email: me.email, nome: me.nome }); });
+  presenza = ch;
+}
+function leavePresenza() { if (presenza) supabase!.removeChannel(presenza); presenza = null; cloud.presenti = []; }
+// Ultimo accesso per ogni email (solo per l'amministratore; null se la funzione sul database manca).
+export async function ultimiAccessi(): Promise<Record<string, string> | null> {
+  const { data, error } = await supabase!.rpc('ultimi_accessi');
+  return error || !data ? null : Object.fromEntries(data.map((r: any) => [r.email, r.ultimo_accesso]));
+}
+
 /* ---------- Accesso ---------- */
 async function loadAll() {
   cloud.fase = 'carico'; cloud.err = ''; commit();
@@ -131,6 +152,7 @@ async function loadAll() {
     await Promise.all([loadArch(), loadListino(true)]);
     if (S.prev._id && !S.arch.some(e => e.id === S.prev._id)) delete S.prev._id;
     cloud.fase = 'pronto';
+    joinPresenza();
   } catch (err) { cloud.fase = 'errore'; cloud.err = (err as Error).message; }
   commit();
 }
@@ -146,8 +168,8 @@ export function initCloud() {
     const prima = cloud.session?.user.id;
     cloud.session = session;
     if (ev === 'PASSWORD_RECOVERY' || (session && linkType && cloud.fase === 'avvio')) { cloud.fase = 'password'; commit(); return; }
-    if (!session) { cloud.fase = 'login'; commit(); return; }
-    if (session.user.id !== prima && cloud.fase !== 'password') setTimeout(loadAll);   // fuori dalla callback: evita blocchi del client
+    if (!session) { leavePresenza(); cloud.fase = 'login'; commit(); return; }
+    if (session.user.id !== prima && cloud.fase !== 'password') { leavePresenza(); setTimeout(loadAll); }   // fuori dalla callback: evita blocchi del client
   });
   window.addEventListener('focus', refresh);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
@@ -170,6 +192,7 @@ export async function setPassword(password: string) {
 }
 export async function logout() {
   if (cloud.sync === 'salvo' || (cloud.fase === 'pronto' && JSON.stringify(S.data) !== synced)) await pushListino();
+  leavePresenza();
   await supabase!.auth.signOut();
   S.arch = []; synced = ''; listinoTs = ''; cloud.me = null;
 }

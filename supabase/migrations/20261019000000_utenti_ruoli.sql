@@ -11,9 +11,11 @@ create table if not exists public.utenti (
   invitato_da text
 );
 
--- Chi ha gia' un account aziendale resta abilitato come utente; il primo amministratore e' indicato qui.
+-- Solo alla prima esecuzione (elenco vuoto) chi ha gia' un account aziendale diventa utente;
+-- rieseguendo lo script non si riabilita chi e' stato tolto. Il primo amministratore e' indicato qui.
 insert into public.utenti (email)
-  select lower(email) from auth.users where email ilike '%@terranovasrl.net'
+  select lower(email) from auth.users
+  where email ilike '%@terranovasrl.net' and not exists (select 1 from public.utenti)
   on conflict do nothing;
 insert into public.utenti (email, ruolo) values ('g.sorrentino@terranovasrl.net', 'admin')
   on conflict (email) do update set ruolo = 'admin', attivo = true;

@@ -1,15 +1,17 @@
 // Scheda Utenti (solo amministratore): invito di nuovi utenti, ruolo, attivazione, reset della password.
 import { useEffect, useState, type FormEvent } from 'react';
 import { toast } from '../store/actions';
-import { cloud, invitaUtente, isAdmin, listUtenti, online, patchUtente, resetPassword, type Utente } from '../store/remote';
+import { cloud, invitaUtente, isAdmin, listUtenti, online, patchUtente, resetPassword, ultimiAccessi, type Utente } from '../store/remote';
 
 const RUOLI = [['utente', 'Utente'], ['admin', 'Amministratore']] as const;
 const DOMINIO = '@terranovasrl.net';
+const fd = (iso: string) => new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 export function Utenti() {
   const [list, setList] = useState<Utente[] | null>(null), [err, setErr] = useState('');
   const [email, setEmail] = useState(''), [nome, setNome] = useState(''), [ruolo, setRuolo] = useState('utente'), [busy, setBusy] = useState(false);
-  const reload = () => listUtenti().then(setList, e => setErr((e as Error).message));
+  const [accessi, setAccessi] = useState<Record<string, string> | null>(null);
+  const reload = () => { listUtenti().then(setList, e => setErr((e as Error).message)); ultimiAccessi().then(setAccessi); };
   useEffect(() => { if (online() && isAdmin()) reload(); }, []);
 
   if (!online()) return (
@@ -53,7 +55,7 @@ export function Utenti() {
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}><div className="wrap" style={{ border: 0, borderRadius: 0 }}>
         {err ? <div className="empty">Impossibile leggere l'elenco utenti: {err}</div> : !list ? <div className="empty">Caricamento…</div> : (
           <table className="arch"><tbody>
-            <tr><th>Utente</th><th>Ruolo</th><th>Stato</th><th>Aggiunto</th><th></th></tr>
+            <tr><th>Utente</th><th>Ruolo</th><th>Stato</th><th>Accesso</th><th>Aggiunto</th><th></th></tr>
             {list.map(u => {
               const io = u.email === me;
               return (
@@ -63,6 +65,8 @@ export function Utenti() {
                   <td><select value={u.ruolo} disabled={io} title={io ? 'Non puoi cambiare il tuo ruolo' : ''} onChange={e => patch(u, { ruolo: e.target.value as Utente['ruolo'] }, `${u.email}: ruolo aggiornato`)}>
                     {RUOLI.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></td>
                   <td>{u.attivo ? <span className="tag on">Attivo</span> : <span className="tag">Disattivato</span>}</td>
+                  <td className="small">{cloud.presenti.some(p => p.email === u.email) ? <><span className="dot on" />online ora</>
+                    : <span className="muted">{!accessi ? '–' : accessi[u.email] ? 'ultimo: ' + fd(accessi[u.email]) : 'mai entrato'}</span>}</td>
                   <td className="small muted">{u.creato ? new Date(u.creato).toLocaleDateString('it-IT') : '–'}{u.invitato_da ? <div>da {u.invitato_da.split('@')[0]}</div> : null}</td>
                   <td className="acts">
                     <button className="btn s" onClick={async () => { const e = await resetPassword(u.email); toast(e ? 'Invio non riuscito: ' + e : `Email per la nuova password inviata a ${u.email}`); }}>Reset password</button>

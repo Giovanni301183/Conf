@@ -14,6 +14,7 @@ import { Lavorazione } from './pages/Lavorazione';
 import { Montaggio } from './pages/Montaggio';
 import { Accesso } from './pages/Accesso';
 import { Utenti } from './pages/Utenti';
+import { Presenza } from './components/Presenza';
 import { cloud, isAdmin, logout, setCloudToast } from './store/remote';
 
 const VIEWS: Record<Tab, () => React.ReactNode> = {
@@ -75,6 +76,7 @@ export default function App() {
             </div>
           ))}
         </nav>
+        <Presenza />
         {cloud.session && (
           <div className="user" title={cloud.sync === 'errore' ? 'Ultimo salvataggio sul server non riuscito' : cloud.sync === 'salvo' ? 'Salvataggio sul server…' : 'Dati sincronizzati con il server'}>
             <span className={`dot ${cloud.sync}`} /><span className="em" title={cloud.session.user.email}>{cloud.me?.nome || cloud.session.user.email}{cloud.me?.ruolo === 'admin' ? ' · admin' : ''}</span>
