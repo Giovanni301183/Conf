@@ -26,8 +26,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Inter","Segoe
 .mainc{min-width:0;display:flex;flex-direction:column}
 .mainc>header{background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:9}
 .top{display:flex;align-items:center;gap:18px;padding:12px 28px;flex-wrap:wrap;max-width:1560px;margin:0 auto;width:100%}
-.cur{display:flex;flex-direction:column;min-width:0}
-.cur small{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.top .cur{display:flex;flex-direction:column;min-width:0}
+.top .cur small{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
 .kpis{display:flex;gap:8px;flex-wrap:wrap;flex:1;justify-content:flex-end}
 .kpi{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:5px 13px}
 .kpi small{display:block;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em}
