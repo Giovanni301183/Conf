@@ -5,7 +5,7 @@ import { MIN_CUSC, clone, defaultData, newPrev, normPrev, num } from '../domain/
 import { download, fileName } from '../domain/format';
 import { AUTO } from '../domain/plan';
 import { KEY_ARCH, KEY_DRAFT, KEY_PREV, R, S, commit, getP, load, save, setP, store, unstore } from './state';
-import { delArch, online, pushArch } from './remote';
+import { delArch, isAdmin, online, pushArch } from './remote';
 
 /* ---------- Avvisi ---------- */
 let toastFn: (m: string) => void = () => {};
@@ -84,6 +84,7 @@ export function archRename(id: string) {
   if (saveArch([e])) toast(`Preventivo rinominato in "${nome}"`);
 }
 export function archDel(id: string) {
+  if (!isAdmin()) { toast("Solo l'amministratore può eliminare i preventivi"); return; }
   const e = S.arch.find(a => a.id === id); if (!e || !confirm(`Eliminare definitivamente "${e.nome}" dall'archivio?`)) return;
   S.arch = S.arch.filter(a => a.id !== id);
   if (online()) delArch(id); else saveArch();

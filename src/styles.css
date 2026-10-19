@@ -346,3 +346,5 @@ select.ssel{padding:3px 8px;font-size:12.5px;border-left:4px solid var(--sc)}
 .mpop>div{color:#76818a;margin-bottom:6px}
 .mpop .mrow{display:flex;justify-content:space-between;gap:10px;color:#3b4852;margin:0}
 .mpop .btn{margin-top:8px;width:100%}
+table.arch tr.off td{opacity:.55}
+table.arch td input{width:100%;max-width:260px}

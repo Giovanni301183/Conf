@@ -33,6 +33,14 @@ export function Accesso() {
     </Box>
   );
 
+  if (cloud.fase === 'negato') return (
+    <Box title="Account non abilitato">
+      <p className="err">{cloud.me ? `L'account ${cloud.me.email} è stato disattivato.` : `L'account ${cloud.session?.user.email ?? ''} non è nell'elenco degli utenti abilitati.`}</p>
+      <p className="hint">Chiedi all'amministratore di abilitarti dalla pagina Utenti.</p>
+      <div className="toolbar"><button className="btn p" onClick={() => { logout().then(commit); }}>Esci</button></div>
+    </Box>
+  );
+
   if (cloud.fase === 'password') return (
     <Box title={`Imposta la tua password · ${cloud.session?.user.email ?? ''}`}>
       <form onSubmit={run(() => (pw.length < 8 ? Promise.resolve('La password deve avere almeno 8 caratteri.') : pw !== pw2 ? Promise.resolve('Le due password non coincidono.') : setPassword(pw)))}>

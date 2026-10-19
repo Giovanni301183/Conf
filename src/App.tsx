@@ -13,18 +13,19 @@ import { Margini } from './pages/Margini';
 import { Lavorazione } from './pages/Lavorazione';
 import { Montaggio } from './pages/Montaggio';
 import { Accesso } from './pages/Accesso';
-import { cloud, logout, setCloudToast } from './store/remote';
+import { Utenti } from './pages/Utenti';
+import { cloud, isAdmin, logout, setCloudToast } from './store/remote';
 
 const VIEWS: Record<Tab, () => React.ReactNode> = {
   archivio: Preventivi, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
-  extra: Extra, margini: Margini, lavor: Lavorazione, mont: Montaggio,
+  extra: Extra, margini: Margini, lavor: Lavorazione, mont: Montaggio, utenti: Utenti,
 };
 const goTab = (t: Tab) => { S.ui.tab = t; window.scrollTo(0, 0); commit(); };
 const save = () => { (document.activeElement as HTMLElement | null)?.blur?.(); archSave(false); commit(); };
 
 // Barra laterale: schede raggruppate per fase di lavoro.
 const GROUPS: [string, Tab[]][] = [['', ['archivio']], ['Preventivo', ['config', 'costi', 'extra', 'margini']],
-  ['Produzione e cantiere', ['lavor', 'mont']], ['Dati di base', ['listino', 'distinte']]];
+  ['Produzione e cantiere', ['lavor', 'mont']], ['Dati di base', ['listino', 'distinte']], ['Amministrazione', ['utenti']]];
 const ICON: Record<Tab, string> = {
   archivio: 'M3 11l9-7 9 7M5 9.5V20h5v-6h4v6h5V9.5',
   config: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4',
@@ -35,6 +36,7 @@ const ICON: Record<Tab, string> = {
   mont: 'M3 20h18M5 20V10l7-6 7 6v10M9 20v-6h6v6',
   listino: 'M8 6h12M8 12h12M8 18h12M4 6h0M4 12h0M4 18h0',
   distinte: 'M4 4h16v16H4zM4 10h16M10 10v10',
+  utenti: 'M16 20v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 10a4 4 0 100-8 4 4 0 000 8zM22 20v-2a4 4 0 00-3-3.9M16 2.1a4 4 0 010 7.8',
 };
 const Ico = ({ d }: { d: string }) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>;
 const LABEL = Object.fromEntries(TABS) as Record<Tab, string>;
@@ -66,7 +68,7 @@ export default function App() {
           <h1>Preventivatore Tracker<small>Configuratore · tracker 1303</small></h1>
         </div>
         <nav>
-          {GROUPS.map(([g, tabs]) => (
+          {GROUPS.filter(([, tabs]) => isAdmin() || !tabs.includes('utenti')).map(([g, tabs]) => (
             <div key={g || 'home'} className="ng">
               {g && <div className="ngt">{g}</div>}
               {tabs.map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} onClick={() => goTab(k)}><Ico d={ICON[k]} /><span>{LABEL[k]}</span></button>)}
@@ -75,7 +77,7 @@ export default function App() {
         </nav>
         {cloud.session && (
           <div className="user" title={cloud.sync === 'errore' ? 'Ultimo salvataggio sul server non riuscito' : cloud.sync === 'salvo' ? 'Salvataggio sul server…' : 'Dati sincronizzati con il server'}>
-            <span className={`dot ${cloud.sync}`} /><span className="em">{cloud.session.user.email}</span>
+            <span className={`dot ${cloud.sync}`} /><span className="em" title={cloud.session.user.email}>{cloud.me?.nome || cloud.session.user.email}{cloud.me?.ruolo === 'admin' ? ' · admin' : ''}</span>
             <button className="btn s" onClick={() => { if (!isDirty() || confirm('Il preventivo aperto ha modifiche non salvate. Uscire comunque?')) logout().then(commit); }}>Esci</button>
           </div>
         )}

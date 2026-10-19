@@ -3,10 +3,13 @@ import type { Session } from '@supabase/supabase-js';
 import { linkType, supabase } from '../lib/supabase';
 import { KEY_ARCH, KEY_DRAFT, S, commit, load, setSaveHook, store, unstore } from './state';
 
-type Fase = 'locale' | 'avvio' | 'login' | 'password' | 'carico' | 'pronto' | 'errore';
+type Fase = 'locale' | 'avvio' | 'login' | 'password' | 'carico' | 'pronto' | 'negato' | 'errore';
+export interface Utente { email: string; nome: string | null; ruolo: 'admin' | 'utente'; attivo: boolean; creato?: string; invitato_da?: string | null }
 export const cloud = {
   fase: (supabase ? 'avvio' : 'locale') as Fase,
   session: null as Session | null,
+  // Riga dell'elenco utenti di chi e' collegato: ruolo e attivazione.
+  me: null as Utente | null,
   sync: 'ok' as 'ok' | 'salvo' | 'errore',
   err: '',
   // Preventivi rimasti nell'archivio del browser e non ancora caricati sul server.
@@ -92,10 +95,39 @@ setSaveHook(() => {
   clearTimeout(timer); timer = window.setTimeout(pushListino, 1200);
 });
 
+/* ---------- Utenti e ruoli ---------- */
+// Senza server (solo browser) non ci sono ruoli: chi usa l'app puo' fare tutto.
+export const isAdmin = () => !supabase || cloud.me?.ruolo === 'admin';
+async function loadMe() {
+  const email = cloud.session?.user.email?.toLowerCase() ?? '';
+  const { data, error } = await supabase!.from('utenti').select('*').eq('email', email).maybeSingle();
+  if (error) throw error;
+  cloud.me = data;
+  return !!data?.attivo;
+}
+export async function listUtenti(): Promise<Utente[]> {
+  const { data, error } = await supabase!.from('utenti').select('*').order('email');
+  if (error) throw error;
+  return data;
+}
+export async function patchUtente(email: string, patch: Partial<Utente>) {
+  const { error } = await supabase!.from('utenti').update(patch).eq('email', email);
+  return error ? (error.message.includes('amministratore attivo') ? 'Serve almeno un amministratore attivo.' : error.message) : '';
+}
+// L'invito passa dalla funzione /api/utenti, l'unica con la chiave segreta per creare account.
+export async function invitaUtente(email: string, nome: string, ruolo: string): Promise<{ error?: string; esistente?: boolean }> {
+  try {
+    const r = await fetch('/api/utenti', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify({ email, nome, ruolo }) });
+    const j = await r.json().catch(() => ({ error: `Risposta non valida dal server (${r.status})` }));
+    return r.ok ? j : { error: j.error || `Errore ${r.status}` };
+  } catch (err) { return { error: (err as Error).message }; }
+}
+
 /* ---------- Accesso ---------- */
 async function loadAll() {
   cloud.fase = 'carico'; cloud.err = ''; commit();
   try {
+    if (!(await loadMe())) { cloud.fase = 'negato'; commit(); return; }
     await Promise.all([loadArch(), loadListino(true)]);
     if (S.prev._id && !S.arch.some(e => e.id === S.prev._id)) delete S.prev._id;
     cloud.fase = 'pronto';
@@ -139,5 +171,5 @@ export async function setPassword(password: string) {
 export async function logout() {
   if (cloud.sync === 'salvo' || (cloud.fase === 'pronto' && JSON.stringify(S.data) !== synced)) await pushListino();
   await supabase!.auth.signOut();
-  S.arch = []; synced = ''; listinoTs = '';
+  S.arch = []; synced = ''; listinoTs = ''; cloud.me = null;
 }
