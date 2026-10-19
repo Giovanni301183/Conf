@@ -18,7 +18,7 @@ export function unstore(k: string) {
 }
 
 export const TABS = [['archivio', 'Home'], ['listino', 'Listino'], ['distinte', 'Distinte base'], ['config', 'Configura'], ['costi', 'Costi'],
-  ['extra', 'Voci extra'], ['margini', 'Margini'], ['lavor', 'Distinta lavorazione'], ['mont', 'Montaggio'], ['utenti', 'Utenti']] as const;
+  ['extra', 'Voci extra'], ['margini', 'Margini'], ['invia', 'Invia preventivo'], ['lavor', 'Distinta lavorazione'], ['mont', 'Montaggio'], ['utenti', 'Utenti']] as const;
 export type Tab = (typeof TABS)[number][0];
 
 export interface Ui {

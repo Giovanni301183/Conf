@@ -109,7 +109,10 @@ export function defRiga(){return {taglia:'12',n:1,tipo:'Agrivoltaico',prof:'IPE 
 export function newPrev(){return {cliente:'',rif:'',data:new Date().toISOString().slice(0,10),note:'',
   modulo:{marca:'',wp:600},righe:[{...defRiga(),n:0}],
   imp:{quadA:0,quadGen:0,box:0,piran:0,anem:0,termAria:0,termCont:0},extra:[],marg:defMarg(),gantt:defGantt(),mont:defMontPrev(),
-  stato:'bozza',luogo:defLuogo()};}
+  stato:'bozza',luogo:defLuogo(),offerta:defOfferta()};}
+// Dati dell'offerta da inviare (scheda Invia preventivo): intestazione, prezzi (pieno barrato, trasporto, posa), layout, dati di progetto.
+export function defOfferta(){return {nome:'',rev:'0',data:'',referente:'',pieno:'',trasporto:'',posa:'',posaNota:'',posaModo:'',
+  layout:'',layoutW:0,layoutH:0,layoutNome:'',dxf:null as null|Record<string,number>,prog:{} as Record<string,string>,inviata:''};}
 // Stato commerciale del preventivo: [chiave, etichetta, colore, simbolo]. Il colore non basta mai da solo: c'e' sempre etichetta e simbolo.
 export const STATI=[['bozza','Bozza','#8a969c','○'],['inviato','Inviato','#2f6fb0','➜'],['vinto','Vinto','#2e8b57','✓'],['perso','Perso','#c0453a','✕']] as const;
 export const statoOf=k=>STATI.find(s=>s[0]===k)||STATI[0];
@@ -123,7 +126,7 @@ export const LAV_CAT='LAVORAZIONE';
 export const MCATS=[...CATS,'VOCI EXTRA',LAV_CAT];
 export function hasOwnMarg(prev,cat){const v=prev.marg&&prev.marg.cat&&prev.marg.cat[cat];return !(v===''||v==null);}
 export function defMarg(){return {modo:'margine',gen:0,cat:Object.fromEntries(MCATS.map(c=>[c,'']))};}
-export function normPrev(p){if(p&&!p.stato)p.stato='bozza';if(p&&!p.luogo)p.luogo=defLuogo();if(p&&!p.marg)p.marg=defMarg();if(p&&!p.gantt)p.gantt=defGantt();if(p&&!p.mont)p.mont=defMontPrev();return p;}
+export function normPrev(p){if(p&&!p.offerta)p.offerta=defOfferta();if(p&&!p.stato)p.stato='bozza';if(p&&!p.luogo)p.luogo=defLuogo();if(p&&!p.marg)p.marg=defMarg();if(p&&!p.gantt)p.gantt=defGantt();if(p&&!p.mont)p.mont=defMontPrev();return p;}
 export function margPct(prev,cat){const M=prev.marg||defMarg(),v=M.cat&&M.cat[cat];return v===''||v==null?num(M.gen):num(v);}
 // Fattore prezzo/costo. Margine sul prezzo: P = C / (1 - m). Ricarico sul costo: P = C * (1 + r).
 export function margFactor(prev,cat){const p=margPct(prev,cat)/100;
