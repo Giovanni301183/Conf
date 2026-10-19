@@ -11,6 +11,8 @@ export const fDate = (d?: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exe
 export const pct = (a: number, b: number) => (b ? fN((a / b) * 100, 1) + ' %' : '–');
 export const fP = (x: number) => fN(x, 1) + ' %';
 export const vN = (v: unknown) => (v === '' || v == null ? '' : String(v).replace('.', ','));
+// Peso in kg: in tonnellate da 1 t in su, altrimenti in kg.
+export const fPeso = (kg: number) => (kg >= 1000 ? fN(kg / 1000, 2) + ' t' : fN(kg, 0) + ' kg');
 export const fileName = (s: string) => String(s).replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') || 'preventivo';
 
 export function download(name: string, data: string | Blob, type = 'application/json') {

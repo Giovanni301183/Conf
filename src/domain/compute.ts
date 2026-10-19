@@ -27,6 +27,8 @@ export function costLine(it,q,L,mz){
 export const tot=o=>o.mat+o.zinc+o.lav+o.acq+o.altro;
 export function rigaLabel(r,i){return `R${i+1} · ${r.taglia} mod · ${r.tipo} · ×${num(r.n)}`;}
 
+export const pesoZero=()=>Object.fromEntries(CATS.map(c=>[c,0])) as Record<string,number>;
+export const pesoTot=(p:Record<string,number>)=>CATS.reduce((s,c)=>s+(p[c]||0),0);
 export function compute(data,prev){
   const mz=num(data.params.maggZinc);
   const map=new Map<any,any>(data.listino.map(x=>[x.c,x]));
@@ -35,7 +37,7 @@ export function compute(data,prev){
   let nTracker=0, nModuli=0;
   const righe=prev.righe.map((r,i)=>{
     const sz=data.sizes[r.taglia]; const n=num(r.n);
-    const out={i,label:rigaLabel(r,i),n,moduli:0,tot:0};
+    const out:any={i,label:rigaLabel(r,i),n,moduli:0,tot:0,pesi:pesoZero()};
     if(!sz){warn.add(`Taglia ${r.taglia} non definita`);return out;}
     out.moduli=num(r.taglia)*n; nTracker+=n; nModuli+=out.moduli;
     const drv={MOT:num(sz.mot),CUSC:num(sz.cusc),OMEGA:num(sz.omega),PANN:num(r.taglia)};
@@ -69,7 +71,10 @@ export function compute(data,prev){
     lines.push({riga:'extra',rigaLabel:'VOCI EXTRA',gruppo:'VOCI EXTRA',cat:'VOCI EXTRA',sub:EXTRA_VOCI.find(x=>x[0]===(e.voce||'altro'))![1],code:'',desc:e.desc||'(senza descrizione)',L:'',q,qPer:q,...c});
   }
   const T={peso:0,mat:0,zinc:0,lav:0,acq:0,altro:0};
-  for(const l of lines){for(const k in T)T[k]+=l[k]; if(typeof l.riga==='number')righe[l.riga].tot+=tot(l);}
+  // Pesi per categoria (kg): totali e per riga tracker; le voci extra non pesano.
+  const pesi=pesoZero();
+  for(const l of lines){for(const k in T)T[k]+=l[k]; if(typeof l.riga==='number')righe[l.riga].tot+=tot(l);
+    if(l.cat in pesi){pesi[l.cat]+=l.peso; if(typeof l.riga==='number')righe[l.riga].pesi[l.cat]+=l.peso;}}
   const steel=lines.filter(l=>l.cat==='STRUTTURA').reduce((s,l)=>s+l.peso,0);
   const totTracker=righe.reduce((s,r)=>s+r.tot,0);
   let prezzo=0; righe.forEach(r=>r.prezzo=0);
@@ -78,7 +83,7 @@ export function compute(data,prev){
   const own=hasOwnMarg(prev,LAV_CAT), fL0=own?(margFactor(prev,LAV_CAT)??bad(LAV_CAT)):null;
   for(const l of lines){const f=margFactor(prev,l.cat)??bad(l.cat), fl=fL0??f;
     l.pLav=l.lav*fl; l.prezzo=(tot(l)-l.lav)*f+l.pLav; prezzo+=l.prezzo; if(typeof l.riga==='number')righe[l.riga].prezzo+=l.prezzo;}
-  return {lines,righe,T,total:tot(T),prezzo,kwp,wp,nTracker,nModuli,steel,totTracker,warn:[...warn]};
+  return {lines,righe,T,total:tot(T),prezzo,kwp,wp,nTracker,nModuli,steel,pesi,totTracker,warn:[...warn]};
 }
 
 /* ======================= ALBERO DI ESPLOSIONE ======================= */

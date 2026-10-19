@@ -39,6 +39,12 @@ describe('offerta', () => {
     expect(D.campi.costo_posa).toBe(fN(140000, 2));
     expect([D.campi.numero_offerta, D.campi.revisione]).toEqual(['2026/007', '1']);
     expect(D.paragrafi).toMatchObject({ prezzo_listino: null, modalita_posa: null, n_quadri_generali: null });
+    // Pesi per categoria: la somma per riga coincide con il totale, e lo struttura e' l'acciaio di sempre.
+    expect(R.pesi.STRUTTURA).toBeCloseTo(R.steel, 6);
+    const perRiga = R.righe.reduce((s: number, r: any) => s + Object.values(r.pesi as Record<string, number>).reduce((a, b) => a + b, 0), 0);
+    const imp = R.lines.filter((l: any) => l.riga === 'imp').reduce((s: number, l: any) => s + l.peso, 0);
+    expect(perRiga + imp).toBeCloseTo(Object.values(R.pesi as Record<string, number>).reduce((a, b) => a + b, 0), 6);
+    expect(D.campi.peso_bulloneria).toMatch(/ (kg|t)$/);
   });
 
   it('compila il modello senza lasciare segnaposto', async () => {
@@ -55,6 +61,9 @@ describe('offerta', () => {
     expect(testo).toContain('Calcolo strutturale depositato al Genio Civile');
     expect(testo).toContain('20 anni di garanzia');
     expect(testo).toContain('(esclusa trivellazione)');
+    expect(testo).toContain('PESI DELLAFORNITURA');
+    expect(testo).toMatch(/Struttura[\d.,]+ t/);
+    expect(testo).toMatch(/Totale[\d.,]+ t/);
     // Il layout va in un'immagine nuova collegata alla slide del layout.
     expect(Object.keys(out.files).some(n => /ppt\/media\/layout_\d+\.png$/.test(n))).toBe(true);
     const rels = (await Promise.all(Object.keys(out.files).filter(n => /slides\/_rels\/.+\.rels$/.test(n)).map(n => out.file(n)!.async('string')))).join('');

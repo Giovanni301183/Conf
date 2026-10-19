@@ -2,8 +2,9 @@
 // Nel modello i campi sono segnaposto {{nome}}; {{#lista}}…{{/lista}} in un paragrafo lo ripete per ogni elemento.
 // L'immagine chiamata IMG_LAYOUT viene sostituita dal layout dell'impianto; le altre slide restano come sono.
 import JSZip from 'jszip';
-import { fDate, fN } from './format';
-import { defOfferta, num } from './model';
+import { pesoTot } from './compute';
+import { fDate, fN, fPeso } from './format';
+import { CATS, defOfferta, num } from './model';
 
 /* ---------- Impostazioni condivise (nel listino, valgono per tutti i preventivi) ---------- */
 export const INCLUSI0 = ['Struttura metallica in acciaio S355 zincato a caldo', 'Cuscinetti, inclinometri programmati e finecorsa',
@@ -71,6 +72,8 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
     prezzo_offerta: euro(pStr), prezzo_listino: euro(pieno), costo_trasporto: euro(trasp), costo_posa: euro(posa),
     nota_posa: O.posaNota || '', modalita_posa: O.posaModo || '',
     prezzo_kwp: R.kwp ? fN(pStr / R.kwp, 0) : '–', peso_struttura_ton: fN(R.steel / 1000, 1), profilo_acciaio: profili ? profili + ' S355' : '',
+    // Pesi per categoria (slide Dati di progetto): {{peso_struttura}}, {{peso_bulloneria}}, … e {{peso_totale}}.
+    ...Object.fromEntries(CATS.map(c => ['peso_' + c.toLowerCase(), fPeso(R.pesi?.[c] || 0)])), peso_totale: fPeso(R.pesi ? pesoTot(R.pesi) : 0),
     anni_garanzia_struttura: String(cfg.garanzie.struttura), anni_garanzia_commerciali: String(cfg.garanzie.commerciali), anni_assistenza_gratuita: String(cfg.garanzie.assistenza),
     ...Object.fromEntries(PROGETTO.map(([k]) => [k, String(pr[k] ?? '').trim()])),
   };

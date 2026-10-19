@@ -1,9 +1,9 @@
 // Scheda Costi: riepilogo, costi per categoria e voce, esplosione ad albero.
 import type { ReactNode } from 'react';
 import { Fold, MiniBar, Seg, TabTools } from '../components/ui';
-import { VIEWS, addTo, buildTree, tot, zero } from '../domain/compute';
+import { VIEWS, addTo, buildTree, pesoTot, tot, zero } from '../domain/compute';
 import { exportCSV } from '../domain/excel';
-import { eur, fDate, fL, fN, fQ, pct } from '../domain/format';
+import { eur, fDate, fL, fN, fPeso, fQ, pct } from '../domain/format';
 import { CATS, COLS, num } from '../domain/model';
 import { R, S, commit } from '../store/state';
 
@@ -58,7 +58,10 @@ export function Costi() {
         <div className="meta">
           <div>N° preventivo<b>{P.num || '–'}</b></div><div>Cliente<b>{P.cliente || '–'}</b></div><div>Commessa<b>{P.rif || '–'}</b></div>
           <div>Data<b>{fDate(P.data)}</b></div><div>Modulo<b>{P.modulo.marca || '–'} · {fN(R.wp, 0)} Wp</b></div>
-          <div>Acciaio<b>{fN(R.steel / 1000, 2)} t</b></div>
+        </div>
+        <div className="meta">
+          {CATS.map(c => <div key={c}>Peso {c.toLowerCase()}<b>{fPeso(R.pesi[c])}</b></div>)}
+          <div>Peso totale<b>{fPeso(pesoTot(R.pesi))}</b></div>
         </div>
         <div className="wrap"><table><tbody>
           <tr><th>Riga</th><th>Configurazione</th><th className="n">N.</th><th className="n">kWp</th><th className="n">€ / tracker</th><th className="n">Totale €</th></tr>
@@ -69,6 +72,16 @@ export function Costi() {
           <tr><td></td><td>Componenti di impianto (quadri, centralina meteo)</td><td colSpan={3}></td><td className="n">{fN(sImp)}</td></tr>
           {sEx ? <tr><td></td><td>Voci extra</td><td colSpan={3}></td><td className="n">{fN(sEx)}</td></tr> : null}
           <tr className="tot"><td colSpan={2}>TOTALE · {fN(R.nModuli, 0)} moduli</td><td className="n">{fN(R.nTracker, 0)}</td><td className="n">{fN(R.kwp, 2)}</td><td></td><td className="n">{fN(total)}</td></tr>
+        </tbody></table></div>
+        <h3>Pesi per categoria (kg)</h3>
+        <div className="wrap"><table><tbody>
+          <tr><th>Riga</th>{CATS.map(c => <th key={c} className="n">{c.charAt(0) + c.slice(1).toLowerCase()}</th>)}<th className="n">Totale</th><th className="n">Per tracker</th></tr>
+          {P.righe.map((r, i) => { const rr = R.righe[i], t = pesoTot(rr.pesi); return (
+            <tr key={i}><td><span className="rid">R{i + 1}</span> <span className="muted small">{fN(rr.n, 0)} × {r.taglia} moduli</span></td>
+              {CATS.map(c => <td key={c} className="n">{fN(rr.pesi[c], 1)}</td>)}<td className="n"><b>{fN(t, 1)}</b></td><td className="n">{rr.n ? fN(t / rr.n, 1) : '–'}</td></tr>); })}
+          {(() => { const imp = R.lines.filter(l => l.riga === 'imp'); if (!imp.length) return null; const pi = Object.fromEntries(CATS.map(c => [c, imp.filter(l => l.cat === c).reduce((s, l) => s + l.peso, 0)]));
+            return <tr><td>Componenti di impianto</td>{CATS.map(c => <td key={c} className="n">{fN(pi[c], 1)}</td>)}<td className="n"><b>{fN(pesoTot(pi), 1)}</b></td><td></td></tr>; })()}
+          <tr className="tot"><td>TOTALE</td>{CATS.map(c => <td key={c} className="n">{fN(R.pesi[c], 1)}</td>)}<td className="n">{fN(pesoTot(R.pesi), 1)}</td><td></td></tr>
         </tbody></table></div>
       </>}</Fold>
 

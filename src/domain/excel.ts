@@ -1,9 +1,9 @@
 // Excel (.xlsx) senza librerie e CSV.
 import { S, R } from '../store/state';
-import { num } from './model';
-import { tot, unitCost } from './compute';
+import { CATS, num } from './model';
+import { pesoTot, tot, unitCost } from './compute';
 import { LAV_T, FASI, buildGantt, buildLavor, buildMont, dDate, dNum, holidays, isWork, opt, rigaCfg } from './plan';
-import { download, fDate, fN, fileName } from './format';
+import { download, fDate, fN, fPeso, fileName } from './format';
 /* ---------- Excel (.xlsx) senza librerie: XML di Office + archivio zip non compresso ---------- */
 export const xe=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]!)).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'');
 export function xlStyles(){
@@ -109,7 +109,7 @@ export function lavorWorkbook(){
   // Foglio 1 · Commessa
   const s1:any={name:'Commessa',cols:[22,16,16,12,12,12,14,14,12,12],...top('DISTINTA DI LAVORAZIONE',10),portrait:false,footer};
   const info=[['N° preventivo',P.num||'–'],['Cliente',P.cliente||'–'],['Commessa',P.rif||'–'],['Data preventivo',fDate(P.data)],['Modulo FV',`${P.modulo.marca||'–'} · ${fN(R.wp,0)} Wp`],
-    ['Potenza impianto',`${fN(R.kwp,2)} kWp`],['Tracker',`${fN(R.nTracker,0)} (${fN(R.nModuli,0)} moduli)`],['Acciaio struttura',`${fN(R.steel/1000,2)} t`],['Note',P.note||'–']];
+    ['Potenza impianto',`${fN(R.kwp,2)} kWp`],['Tracker',`${fN(R.nTracker,0)} (${fN(R.nModuli,0)} moduli)`],...CATS.map(c=>[`Peso ${c.toLowerCase()}`,fPeso(R.pesi[c])]),['Peso totale',fPeso(pesoTot(R.pesi))],['Note',P.note||'–']];
   for(const [l,v] of info){s1.rows.push({c:[{v:l,s:S_.lab},{v,s:S_.val}]});const r=s1.rows.length;s1.merges.push(`B${r}:J${r}`);}
   s1.rows.push({c:[]},{h:20,c:[{v:'Configurazione tracker',s:S_.sec}]});
   s1.rows.push(hdr(['Riga','Taglia','Tipo','Pilastri','Asse mm','Omega mm','Fondazione m','Cuscinetto m','Motore m','N. tracker'],[6,7,8,9],[]));
