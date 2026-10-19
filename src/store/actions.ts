@@ -63,6 +63,15 @@ export function archDup(id: string) {
   const c = clone(e); c.id = 'p' + Date.now().toString(36); c.nome = e.nome + ' (copia)'; c.salvato = new Date().toISOString(); c.prev._id = c.id; c.prev._nome = c.nome;
   S.arch.unshift(c); saveArch([c]);
 }
+// Rinomina senza aprire il preventivo; se e' quello aperto il nome cambia anche li', senza segnarlo come modificato.
+export function archRename(id: string) {
+  const e = S.arch.find(a => a.id === id); if (!e) return;
+  const nome = prompt('Nuovo nome del preventivo:', e.nome)?.trim();
+  if (!nome || nome === e.nome) return;
+  e.nome = nome; e.prev._nome = nome; e.salvato = new Date().toISOString();
+  if (S.prev._id === id) { S.prev._nome = nome; save(); }
+  if (saveArch([e])) toast(`Preventivo rinominato in "${nome}"`);
+}
 export function archDel(id: string) {
   const e = S.arch.find(a => a.id === id); if (!e || !confirm(`Eliminare definitivamente "${e.nome}" dall'archivio?`)) return;
   S.arch = S.arch.filter(a => a.id !== id);

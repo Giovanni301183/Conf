@@ -6,7 +6,7 @@ import { Mappa } from './Mappa';
 import { eur, fDate, fN } from '../domain/format';
 import { KEY_DRAFT, S, commit, load } from '../store/state';
 import { cloud, uploadLocali } from '../store/remote';
-import { archDel, archDl, archDup, archExp, archOpen, archSave, draftDel, draftOpen, isDirty, newPreventivo, pickFile, prevName, righeTxt } from '../store/actions';
+import { archDel, archDl, archDup, archExp, archOpen, archRename, archSave, draftDel, draftOpen, isDirty, newPreventivo, pickFile, prevName, righeTxt } from '../store/actions';
 
 const fd = (iso: string) => { const d = new Date(iso); return isNaN(+d) ? '–' : d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }); };
 const run = (f: () => void) => () => { f(); commit(); };
@@ -63,6 +63,7 @@ export function Preventivi() {
                   <td className="acts">
                     <button className="btn s p" onClick={run(() => archOpen(e.id))}>Apri</button>
                     <button className="btn s" onClick={run(() => archDup(e.id))} title="Duplica">Duplica</button>
+                    <button className="btn s" onClick={run(() => archRename(e.id))} title="Cambia il nome del preventivo">Rinomina</button>
                     <button className="btn s" onClick={() => archDl(e.id)} title="Scarica come file">Scarica</button>
                     <button className="btn x" onClick={run(() => archDel(e.id))} title="Elimina">✕</button>
                   </td>
