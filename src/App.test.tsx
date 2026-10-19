@@ -67,3 +67,13 @@ describe('archivio: cruscotto e mappa', () => {
     act(() => { S.ui.av = 'elenco'; S.arch = []; commit(); });
   });
 });
+
+describe('progressivo dei preventivi', () => {
+  it('numera per anno e riparte da 001', async () => {
+    const { nextNum } = await import('./store/actions');
+    const arch: any[] = [{ prev: { num: '2026/007' } }, { prev: { num: '2026/012' } }, { prev: { num: '2025/040' } }, { prev: { num: 'XYZ' } }, { prev: {} }];
+    expect(nextNum({ data: '2026-10-19' }, arch)).toBe('2026/013');
+    expect(nextNum({ data: '2025-03-01' }, arch)).toBe('2025/041');
+    expect(nextNum({ data: '2027-01-02' }, arch)).toBe('2027/001');
+  });
+});

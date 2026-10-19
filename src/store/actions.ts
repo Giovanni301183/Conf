@@ -27,6 +27,13 @@ export function curEntry() { return S.prev._id ? S.arch.find(a => a.id === S.pre
 export function isBlank(p) { return !p._id && snap({ ...p, data: '' }) === snap({ ...newPrev(), data: '' }); }
 export function isDirty() { const e = curEntry(); return e ? snap(e.prev) !== snap(S.prev) : !isBlank(S.prev); }
 export function prevName(p) { return p._nome || [p.cliente, p.rif].filter(Boolean).join(' · ') || 'Preventivo senza nome'; }
+// Progressivo del preventivo "AAAA/NNN": l'anno e' quello della data del preventivo, il numero riparte ogni anno.
+export function nextNum(p, arch = S.arch) {
+  const y = /^\d{4}/.test(p.data || '') ? p.data.slice(0, 4) : String(new Date().getFullYear());
+  const max = arch.reduce((m, e) => { const r = /^(\d{4})\/(\d+)$/.exec((e.prev?.num || '').trim()); return r && r[1] === y ? Math.max(m, +r[2]) : m; }, 0);
+  return `${y}/${String(max + 1).padStart(3, '0')}`;
+}
+const numUsed = (num: string, id: string) => !!num && S.arch.some(a => a.id !== id && (a.prev?.num || '').trim() === num.trim());
 export function righeTxt(p) { return p.righe.map(r => `${num(r.n)}×${r.taglia} ${r.tipo === 'Basso' ? 'Basso' : 'Agri'}`).join(', '); }
 // Con Supabase le voci cambiate vanno al server (archivio condiviso); senza, l'archivio resta nel browser.
 function saveArch(changed: any[] = []) {
@@ -40,12 +47,15 @@ export function archSave(asNew: boolean) {
   let nome = old && !asNew ? old.nome : prompt('Nome del preventivo:', asNew && old ? old.nome + ' (copia)' : prevName(P));
   if (nome == null) return; nome = nome.trim() || prevName(P);
   const id = old && !asNew ? old.id : 'p' + Date.now().toString(36);
+  // Il numero si assegna al primo salvataggio; "Salva come nuovo" prende sempre un numero nuovo.
+  if (!(P.num || '').trim() || (asNew && old && P.num === old.prev?.num)) P.num = nextNum(P);
   P._id = id; P._nome = nome;
   const e = { id, nome, cliente: P.cliente, rif: P.rif, data: P.data, salvato: new Date().toISOString(),
     totale: R.total, prezzo: R.prezzo, kwp: R.kwp, nTracker: R.nTracker, righe: righeTxt(P), prev: clone(P), dati: clone(S.data) };
   const i = S.arch.findIndex(a => a.id === id);
   if (i >= 0) S.arch[i] = e; else S.arch.unshift(e);
-  if (saveArch([e])) toast(i >= 0 ? `Preventivo "${nome}" aggiornato` : `Preventivo "${nome}" salvato nell'archivio`);
+  if (saveArch([e])) toast((i >= 0 ? `Preventivo "${nome}" aggiornato` : `Preventivo N° ${P.num} "${nome}" salvato nell'archivio`)
+    + (numUsed(P.num, id) ? ` · attenzione: il N° ${P.num} è già usato da un altro preventivo` : ''));
   save();
 }
 export function archOpen(id: string) {
@@ -61,6 +71,7 @@ export function archOpen(id: string) {
 export function archDup(id: string) {
   const e = S.arch.find(a => a.id === id); if (!e) return;
   const c = clone(e); c.id = 'p' + Date.now().toString(36); c.nome = e.nome + ' (copia)'; c.salvato = new Date().toISOString(); c.prev._id = c.id; c.prev._nome = c.nome;
+  c.prev.num = nextNum(c.prev);
   S.arch.unshift(c); saveArch([c]);
 }
 // Rinomina senza aprire il preventivo; se e' quello aperto il nome cambia anche li', senza segnarlo come modificato.
@@ -96,6 +107,7 @@ function archImport(j) {
   let n = 0; const added: any[] = [];
   const add = (prev, dati, nome) => {
     const id = 'p' + Date.now().toString(36) + n++; const p = clone(prev); p._id = id; p._nome = nome || prevName(p);
+    if (!(p.num || '').trim() || numUsed(p.num, id)) p.num = nextNum(p);
     const r = compute(dati || S.data, p);
     S.arch.unshift({ id, nome: p._nome, cliente: p.cliente, rif: p.rif, data: p.data, salvato: new Date().toISOString(), totale: r.total, prezzo: r.prezzo, kwp: r.kwp, nTracker: r.nTracker, righe: righeTxt(p), prev: p, dati: clone(dati || S.data) });
     added.push(S.arch[0]);

@@ -56,7 +56,7 @@ export function Preventivi() {
               const cur = S.prev._id === e.id;
               return (
                 <tr key={e.id} className={cur ? 'cur' : ''}>
-                  <td><b>{e.nome}</b>{cur && <> <span className="tag on">aperto{isDirty() ? ' · modificato' : ''}</span></>}<div className="muted small">{e.cliente || '–'}</div></td>
+                  <td><b>{e.nome}</b>{cur && <> <span className="tag on">aperto{isDirty() ? ' · modificato' : ''}</span></>}<div className="muted small">{e.prev?.num ? <>N° {e.prev.num} · </> : null}{e.cliente || '–'}</div></td>
                   <td>{e.rif || '–'}<div className="muted small">{fDate(e.data)}</div></td>
                   <td><StatoSel id={e.id} k={eStato(e)} /></td><td className="small">{e.righe}</td><td className="n">{fN(e.kwp, 2)}</td><td className="n">{eur(e.totale)}</td><td className="n"><b>{e.prezzo != null ? eur(e.prezzo) : '–'}</b></td>
                   <td className="small muted">{fd(e.salvato)}{e.autore ? <div>{e.autore.split('@')[0]}</div> : null}</td>

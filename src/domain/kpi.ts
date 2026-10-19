@@ -13,7 +13,7 @@ export const eAnno = (e: any) => eData(e).slice(0, 4);
 export const eMese = (e: any) => num(eData(e).slice(5, 7)) - 1;
 export const eCliente = (e: any) => (e.cliente || '').trim() || '(senza cliente)';
 
-export function testo(e: any) { return [e.nome, e.cliente, e.rif, e.righe, eLuogo(e).nome].join(' ').toLowerCase(); }
+export function testo(e: any) { return [e.nome, e.prev?.num, e.cliente, e.rif, e.righe, eLuogo(e).nome].join(' ').toLowerCase(); }
 
 /** Applica ricerca e filtri. `salta` esclude un filtro: un grafico non si filtra da solo, cosi' resta cliccabile. */
 export function filtra(arch: any[], q: string, f: KFiltro, salta: keyof KFiltro | '' = '') {

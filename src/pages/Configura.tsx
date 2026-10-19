@@ -34,7 +34,7 @@ function Luogo() {
 
 export function Configura() {
   const P = S.prev, sizes = Object.keys(S.data.sizes).sort((a: any, b: any) => a - b);
-  const comm = [P.cliente, P.rif].filter(Boolean).join(' · ');
+  const comm = [P.num && 'N° ' + P.num, P.cliente, P.rif].filter(Boolean).join(' · ');
   const rsum = P.righe.map((r, i) => `R${i + 1}: ${num(r.n)} × ${r.taglia} mod ${r.tipo}`).join(' · ');
   const map = new Map<string, any>(S.data.listino.map(x => [x.c, x]));
   const nImp = IMP.reduce((s, [k]) => s + num(P.imp[k]), 0);
@@ -45,6 +45,7 @@ export function Configura() {
       <TabTools />
       <Fold id="cf-comm" step={1} title="Commessa" sum={(comm || 'Da compilare') + ' · ' + fDate(P.data)}>{() => (
         <div className="grid">
+          <label className="f">N° preventivo<Inp path="prev.num" type="txt" ph="assegnato al salvataggio" /></label>
           <label className="f">Cliente<Inp path="prev.cliente" type="txt" /></label>
           <label className="f">Riferimento commessa<Inp path="prev.rif" type="txt" /></label>
           <label className="f">Data<DateInp path="prev.data" /></label>

@@ -108,7 +108,7 @@ export function lavorWorkbook(){
 
   // Foglio 1 · Commessa
   const s1:any={name:'Commessa',cols:[22,16,16,12,12,12,14,14,12,12],...top('DISTINTA DI LAVORAZIONE',10),portrait:false,footer};
-  const info=[['Cliente',P.cliente||'–'],['Commessa',P.rif||'–'],['Data preventivo',fDate(P.data)],['Modulo FV',`${P.modulo.marca||'–'} · ${fN(R.wp,0)} Wp`],
+  const info=[['N° preventivo',P.num||'–'],['Cliente',P.cliente||'–'],['Commessa',P.rif||'–'],['Data preventivo',fDate(P.data)],['Modulo FV',`${P.modulo.marca||'–'} · ${fN(R.wp,0)} Wp`],
     ['Potenza impianto',`${fN(R.kwp,2)} kWp`],['Tracker',`${fN(R.nTracker,0)} (${fN(R.nModuli,0)} moduli)`],['Acciaio struttura',`${fN(R.steel/1000,2)} t`],['Note',P.note||'–']];
   for(const [l,v] of info){s1.rows.push({c:[{v:l,s:S_.lab},{v,s:S_.val}]});const r=s1.rows.length;s1.merges.push(`B${r}:J${r}`);}
   s1.rows.push({c:[]},{h:20,c:[{v:'Configurazione tracker',s:S_.sec}]});

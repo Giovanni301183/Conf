@@ -56,7 +56,7 @@ export function Costi() {
       <Fold id="co-riep" step={1} title="Riepilogo preventivo" sum={<><b>{eur(total)}</b> · {fN(R.kwp, 2)} kWp · {R.kwp ? fN(total / (R.kwp * 1000), 4) : '–'} €/Wp</>}
         act={<button className="btn noprint" onClick={exportCSV}>Esporta CSV</button>}>{() => <>
         <div className="meta">
-          <div>Cliente<b>{P.cliente || '–'}</b></div><div>Commessa<b>{P.rif || '–'}</b></div>
+          <div>N° preventivo<b>{P.num || '–'}</b></div><div>Cliente<b>{P.cliente || '–'}</b></div><div>Commessa<b>{P.rif || '–'}</b></div>
           <div>Data<b>{fDate(P.data)}</b></div><div>Modulo<b>{P.modulo.marca || '–'} · {fN(R.wp, 0)} Wp</b></div>
           <div>Acciaio<b>{fN(R.steel / 1000, 2)} t</b></div>
         </div>
