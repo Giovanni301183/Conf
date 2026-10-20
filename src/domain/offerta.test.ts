@@ -72,7 +72,9 @@ describe('offerta', () => {
 
   it('senza trasporto, posa e numero: diciture al posto dei prezzi', async () => {
     const P = prev(); P.extra = []; P.num = '';
-    const { testo } = await compila(P, 0, false);
+    const { testo, xml } = await compila(P, 0, false);
+    // Senza layout la slide resta vuota: niente immagine di esempio.
+    expect(xml).not.toMatch(/name="IMG_LAYOUT"|descr="\{\{LAYOUT\}\}"/);
     expect(testo).toContain('Escluso');
     expect(testo).toContain('Non inclusa');
     expect(testo).toContain('Offerta n. – rev. 1');

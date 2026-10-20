@@ -245,7 +245,7 @@ export function Modulo() {
             {L.dxf ? <button type="button" className="sec" onClick={usaDxf}>Usa i tracker del DXF</button> : null}
             <button type="button" className="sec" onClick={() => cambia({ layout: false })}>Togli</button>
           </div>
-        </> : <p className="muted">Nessun layout: nella slide resterà l'immagine di esempio.</p>}
+        </> : <p className="muted">Nessun layout: la slide del layout resterà vuota.</p>}
         <label className="file">{L ? 'Cambia file' : 'Carica DXF o foto'}<input type="file" accept=".dxf,image/*" onChange={e => { const x = e.target.files?.[0]; if (x) caricaLayout(x); e.target.value = ''; }} /></label>
       </section>
 
@@ -259,7 +259,7 @@ export function Modulo() {
             <dt>Potenza</dt><dd>{prev.offerta.potenza}</dd>
             <dt>Tracker</dt><dd>{prev.offerta.tracker.join(' · ')}</dd>
             {prev.offerta.prezzi.map((p: any) => <Fragment key={p.label}><dt>{p.label}</dt><dd>{p.strike ? <s>{p.strike}</s> : null} {p.value}{p.nota ? <small> · {p.nota}</small> : null}</dd></Fragment>)}
-            <dt>Layout</dt><dd>{prev.offerta.layout || 'immagine di esempio'}</dd>
+            <dt>Layout</dt><dd>{prev.offerta.layout || 'nessuno (slide vuota)'}</dd>
           </dl>
           {prev.avvisi.length ? <div className="avv">{prev.avvisi.map((a: string, i: number) => <p key={i}>⚠️ {a}</p>)}</div> : null}
           <p className="muted">Costo {eur(prev.costo)} · €/Wp {prev.kwp ? fN(prev.prezzo / (prev.kwp * 1000), 4) : '–'}</p>

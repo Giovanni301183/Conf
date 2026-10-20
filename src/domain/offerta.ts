@@ -100,7 +100,7 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
   if (!righe.length) avvisi.push('Nessun tracker nel preventivo.');
   if (!(R.prezzo > 0)) avvisi.push('Il prezzo di vendita è zero.');
   if (R.total > 0 && R.prezzo - R.total < 0.5) avvisi.push("Margine 0 %: nell'offerta il prezzo di vendita è uguale al costo. Imposta il margine qui sotto (Prezzi) o nella scheda Margini.");
-  if (!O.layout) avvisi.push('Nessun layout caricato: nella slide del layout resterà l\'immagine di esempio del modello.');
+  if (!O.layout) avvisi.push('Nessun layout caricato: la slide del layout resterà vuota, senza disegno.');
   if (vuoti.length) avvisi.push(`Slide "Dati di progetto": ${vuoti.length} campi vuoti (${vuoti.join(', ')}), compariranno come «–».`);
   if (O.dxf) {
     const diff = [...new Set([...Object.keys(O.dxf), ...righe.map(r => r.taglia)])]
@@ -161,6 +161,8 @@ async function compila(modello: ArrayBuffer | Uint8Array, D: DatiOfferta, layout
     }
     // Layout: l'immagine IMG_LAYOUT (o con descrizione {{LAYOUT}}) prende il disegno, adattato alle sue proporzioni.
     const pm = /<p:pic>(?:(?!<p:pic>)[\s\S])*?(?:name="IMG_LAYOUT"|descr="\{\{LAYOUT\}\}")[\s\S]*?<\/p:pic>/.exec(x);
+    // Senza DXF ne' foto la slide resta vuota: via l'immagine di esempio del modello.
+    if (pm && !layout) x = x.replace(pm[0], '');
     if (pm && layout) {
       let pic = pm[0];
       const rid = /r:embed="([^"]+)"/.exec(pic)![1];
