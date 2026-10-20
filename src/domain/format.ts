@@ -1,5 +1,5 @@
 // Formati numerici e date all'italiana.
-import { num } from './model';
+import { num } from './model.js';
 
 // useGrouping 'always': separa le migliaia anche a 4 cifre (1.548,40).
 const GRP = { useGrouping: 'always' } as unknown as Intl.NumberFormatOptions;

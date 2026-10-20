@@ -1,6 +1,6 @@
 // Calcolo dei costi e albero di esplosione.
-import { CATS, EXTRA_VOCI, IMP, LAV_CAT, ZINC_CAT, hasOwnMarg, margFactor, num } from './model';
-import { fL } from './format';
+import { CATS, EXTRA_VOCI, IMP, LAV_CAT, ZINC_CAT, hasOwnMarg, margFactor, num } from './model.js';
+import { fL } from './format.js';
 /* ======================= CALCOLO ======================= */
 export function evalQ(expr,drv){
   let tot=0;

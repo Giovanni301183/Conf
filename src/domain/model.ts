@@ -126,6 +126,12 @@ export const LAV_CAT='LAVORAZIONE', ZINC_CAT='ZINCATURA';
 export const MCATS=[CATS[0],ZINC_CAT,...CATS.slice(1),'VOCI EXTRA',LAV_CAT];
 export function hasOwnMarg(prev,cat){const v=prev.marg&&prev.marg.cat&&prev.marg.cat[cat];return !(v===''||v==null);}
 export function defMarg(){return {modo:'margine',gen:0,cat:Object.fromEntries(MCATS.map(c=>[c,'']))};}
+// Progressivo del preventivo "AAAA/NNN": l'anno e' quello della data del preventivo, il numero riparte ogni anno. arch = voci con prev.num.
+export function numSucc(p,arch){
+  const y=/^\d{4}/.test(p.data||'')?p.data.slice(0,4):String(new Date().getFullYear());
+  const max=arch.reduce((m,e)=>{const r=/^(\d{4})\/(\d+)$/.exec((e.prev?.num||'').trim());return r&&r[1]===y?Math.max(m,+r[2]):m;},0);
+  return `${y}/${String(max+1).padStart(3,'0')}`;}
+export function righeTxt(p){return p.righe.map(r=>`${num(r.n)}×${r.taglia} ${r.tipo==='Basso'?'Basso':'Agri'}`).join(', ');}
 export function normPrev(p){if(p&&!p.offerta)p.offerta=defOfferta();if(p&&!p.stato)p.stato='bozza';if(p&&!p.luogo)p.luogo=defLuogo();if(p&&!p.marg)p.marg=defMarg();if(p&&!p.gantt)p.gantt=defGantt();if(p&&!p.mont)p.mont=defMontPrev();return p;}
 export function margPct(prev,cat){const M=prev.marg||defMarg(),v=M.cat&&M.cat[cat];return v===''||v==null?num(M.gen):num(v);}
 // Fattore prezzo/costo. Margine sul prezzo: P = C / (1 - m). Ricarico sul costo: P = C * (1 + r).

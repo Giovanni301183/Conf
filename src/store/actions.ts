@@ -1,7 +1,7 @@
 // Azioni dell'app: archivio preventivi, frecce dei campi numerici, tendine, stampa, file.
 import { flushSync } from 'react-dom';
 import { compute } from '../domain/compute';
-import { MIN_CUSC, clone, defaultData, newPrev, normPrev, num } from '../domain/model';
+import { MIN_CUSC, clone, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../domain/model';
 import { download, fileName } from '../domain/format';
 import { AUTO } from '../domain/plan';
 import { KEY_ARCH, KEY_DRAFT, KEY_PREV, R, S, commit, getP, load, save, setP, store, unstore } from './state';
@@ -27,14 +27,9 @@ export function curEntry() { return S.prev._id ? S.arch.find(a => a.id === S.pre
 export function isBlank(p) { return !p._id && snap({ ...p, data: '' }) === snap({ ...newPrev(), data: '' }); }
 export function isDirty() { const e = curEntry(); return e ? snap(e.prev) !== snap(S.prev) : !isBlank(S.prev); }
 export function prevName(p) { return p._nome || [p.cliente, p.rif].filter(Boolean).join(' · ') || 'Preventivo senza nome'; }
-// Progressivo del preventivo "AAAA/NNN": l'anno e' quello della data del preventivo, il numero riparte ogni anno.
-export function nextNum(p, arch = S.arch) {
-  const y = /^\d{4}/.test(p.data || '') ? p.data.slice(0, 4) : String(new Date().getFullYear());
-  const max = arch.reduce((m, e) => { const r = /^(\d{4})\/(\d+)$/.exec((e.prev?.num || '').trim()); return r && r[1] === y ? Math.max(m, +r[2]) : m; }, 0);
-  return `${y}/${String(max + 1).padStart(3, '0')}`;
-}
+export const nextNum = (p, arch = S.arch) => numSucc(p, arch);
 const numUsed = (num: string, id: string) => !!num && S.arch.some(a => a.id !== id && (a.prev?.num || '').trim() === num.trim());
-export function righeTxt(p) { return p.righe.map(r => `${num(r.n)}×${r.taglia} ${r.tipo === 'Basso' ? 'Basso' : 'Agri'}`).join(', '); }
+export { righeTxt };
 // Con Supabase le voci cambiate vanno al server (archivio condiviso); senza, l'archivio resta nel browser.
 function saveArch(changed: any[] = []) {
   if (online()) { pushArch(changed); return true; }

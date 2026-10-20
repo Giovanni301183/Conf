@@ -71,6 +71,7 @@ SYSTEM = """=Sei l'assistente dell'agenda di Terranova (strutture tracker per im
 Oggi è {{ $now.setZone('Europe/Rome').setLocale('it').toFormat('cccc d LLLL yyyy') }} ({{ $now.setZone('Europe/Rome').toFormat('yyyy-MM-dd') }}), ore {{ $now.setZone('Europe/Rome').toFormat('HH:mm') }}.
 
 Cosa fai: registri urgenze, cose da fare, promemoria, scadenze e appuntamenti; leggi l'agenda; segni le voci fatte; le assegni ai colleghi.
+Fai anche preventivi: li crei o li modifichi con prepara_preventivo e mandi l'offerta PowerPoint in chat privata (da inoltrare al cliente).
 
 Regole:
 - Se il messaggio segnala un problema o dice "urgente", crea una voce di genere "urgenza" (per oggi, salvo data diversa). Titolo breve e chiaro (es. "Mancano bulloni in cantiere: preparare il materiale"); i dettagli vanno nella nota.
@@ -83,6 +84,10 @@ Regole:
 - I messaggi che iniziano con [vocale] sono la trascrizione di un messaggio vocale: possono contenere errori di trascrizione (nomi, numeri). Prima di salvare, ripeti in una riga cosa hai capito; se un nome di commessa o un numero è dubbio, chiedi conferma.
 - Urgenze e voci assegnate vengono annunciate da sole nel gruppo: non devi farlo tu.
 - Comandi del menu del bot: /oggi = agenda di oggi; /settimana = prossimi 7 giorni; /mie = solo le mie voci; /urgente <testo> = registra un'urgenza; /aiuto o /start = spiega in poche righe cosa puoi fare e come collegare l'account (/collega CODICE, codice dal pulsante Telegram nell'app).
+- Preventivi: servono il cliente e le righe tracker (numero, taglia in moduli tra 12, 18, 20, 22, 36, 40, tipo agrivoltaico o basso). Facoltativi: riferimento o nome impianto, località, referente, potenza del modulo in W (di solito 600), modello del modulo, margine generale in %, margini per categoria (STRUTTURA, ZINCATURA, ELETTROMECCANICO, ELETTRONICO, BULLONERIA, VOCI EXTRA, LAVORAZIONE), trasporto e posa in opera in € (prezzi che vanno tali e quali nell'offerta), quadri di campo e quadri generali. Se manca il margine chiedilo: senza margine il prezzo è uguale al costo. Prima di creare ripeti in una riga cosa hai capito e chiedi conferma.
+- Per cambiare un preventivo già fatto (es. "metti il margine al 20 %") usa prepara_preventivo con il suo id e solo i campi da cambiare. Per rimandare l'offerta di un preventivo dell'archivio così com'è usa invia_offerta (id da cerca_commesse).
+- Il listino non si modifica da qui: se te lo chiedono, rispondi che si cambia nell'app (scheda Listino).
+- Dopo un preventivo riporta il riepilogo dello strumento (testo), gli avvisi importanti e se l'offerta è arrivata in privato. Costi e margini solo a chi li ha chiesti: non scriverli mai nel gruppo, lì dì solo che l'offerta è in privato.
 - Rispondi breve, testo semplice senza Markdown. Dopo aver registrato qualcosa, riassumi cosa hai salvato."""
 
 # ---------- Flusso 1: chat ----------
@@ -141,6 +146,25 @@ chat = [
          + ', categoria: ' + fa('categoria', 'Facoltativa: STRUTTURA, BULLONERIA, ELETTROMECCANICO, ELETTRONICO', 'string', '')
          + ', preventivo_id: ' + fa('preventivo_id', 'id del preventivo o commessa preso da cerca_commesse, vuoto se nessuno', 'string', '')
          + ', assegnata_a: ' + fa('assegnata_a', 'email del collega presa da colleghi, vuoto se nessuno', 'string', '') + ' }'),
+    tool('prepara_preventivo', [1760, 860], "Crea un preventivo nell'archivio (o cambia quello con l'id indicato), lo calcola con il listino e manda l'offerta PowerPoint nella chat privata di chi scrive. Restituisce id, numero, riepilogo (testo), avvisi ed esito dell'offerta.",
+         "Object.fromEntries(Object.entries({ azione: 'preventivo', telegram_id: " + TID
+         + ', id: ' + fa('id', 'Solo per cambiare un preventivo esistente: il suo id; vuoto per uno nuovo', 'string', '')
+         + ', cliente: ' + fa('cliente', 'Nome del cliente (obbligatorio per uno nuovo)', 'string', '')
+         + ', rif: ' + fa('rif', 'Riferimento o nome dell impianto, facoltativo', 'string', '')
+         + ', righe: ' + fa('righe', 'Righe tracker come JSON, es. [{"n":40,"taglia":36,"tipo":"agrivoltaico"},{"n":10,"taglia":20,"tipo":"basso"}]; vuoto se invariate', 'string', '')
+         + ', margine: ' + fa('margine', 'Margine generale in %, es. 18; vuoto se non detto', 'string', '')
+         + ', margini: ' + fa('margini', 'Margini per categoria come JSON, es. {"STRUTTURA":25,"ZINCATURA":10}; vuoto se non detti', 'string', '')
+         + ', trasporto: ' + fa('trasporto', 'Prezzo del trasporto in euro per l offerta, 0 = escluso; vuoto se non detto', 'string', '')
+         + ', posa: ' + fa('posa', 'Prezzo della posa in opera in euro, 0 = non inclusa; vuoto se non detto', 'string', '')
+         + ', wp: ' + fa('wp', 'Potenza del modulo in W, es. 600; vuoto se non detta', 'string', '')
+         + ', modulo: ' + fa('modulo', 'Marca e modello del modulo, facoltativo', 'string', '')
+         + ', localita: ' + fa('localita', 'Località dell impianto, facoltativa', 'string', '')
+         + ', referente: ' + fa('referente', 'Referente del cliente, facoltativo', 'string', '')
+         + ', quadri_campo: ' + fa('quadri_campo', 'Numero di quadri di campo, facoltativo', 'string', '')
+         + ', quadri_generali: ' + fa('quadri_generali', 'Numero di quadri generali, facoltativo', 'string', '')
+         + " }).filter(([, v]) => v !== '' && v != null))"),
+    tool('invia_offerta', [1880, 860], "Manda nella chat privata di chi scrive l'offerta PowerPoint di un preventivo dell'archivio, così com'è salvato (id da cerca_commesse).",
+         "{ azione: 'offerta', telegram_id: " + TID + ', id: ' + fa('id', 'id del preventivo') + ' }'),
     tool('modifica_voce', [1520, 860], 'Agisce su una voce esistente (id da leggi_agenda o crea_voce). azione: prendi (me ne occupo io), risolvi (fatta), aggiorna (cambia i campi indicati), elimina.',
          'Object.fromEntries(Object.entries({ azione: ' + fa('azione', 'Una tra: prendi, risolvi, aggiorna, elimina')
          + ', telegram_id: ' + TID + ', id: ' + fa('id', 'id della voce')
@@ -164,7 +188,7 @@ chat_conn = {
     'Modello': {'ai_languageModel': [[{'node': 'Assistente', 'type': 'ai_languageModel', 'index': 0}]]},
     'Memoria': {'ai_memory': [[{'node': 'Assistente', 'type': 'ai_memory', 'index': 0}]]},
     **{t: {'ai_tool': [[{'node': 'Assistente', 'type': 'ai_tool', 'index': 0}]]}
-       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account']},
+       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account', 'prepara_preventivo', 'invia_offerta']},
 }
 
 # ---------- Flusso 2: avvisi e riepilogo ----------

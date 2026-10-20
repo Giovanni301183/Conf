@@ -2,9 +2,9 @@
 // Nel modello i campi sono segnaposto {{nome}}; {{#lista}}…{{/lista}} in un paragrafo lo ripete per ogni elemento.
 // L'immagine chiamata IMG_LAYOUT viene sostituita dal layout dell'impianto; le altre slide restano come sono.
 import JSZip from 'jszip';
-import { pesoTot } from './compute';
-import { fDate, fN, fPeso } from './format';
-import { CATS, defOfferta, num } from './model';
+import { pesoTot } from './compute.js';
+import { fDate, fN, fPeso } from './format.js';
+import { CATS, defOfferta, num } from './model.js';
 
 /* ---------- Impostazioni condivise (nel listino, valgono per tutti i preventivi) ---------- */
 export const INCLUSI0 = ['Struttura metallica in acciaio S355 zincato a caldo', 'Cuscinetti, inclinometri programmati e finecorsa',
@@ -129,7 +129,15 @@ function paraText(p: string, text: string) {
   return `<a:p>${pPr}<a:r>${rPr}<a:t>${esc(text)}</a:t></a:r></a:p>`;
 }
 
-export async function compilaPptx(modello: ArrayBuffer, D: DatiOfferta, layout?: { png: Uint8Array; w: number; h: number }) {
+const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+export const compilaPptx = async (modello: ArrayBuffer, D: DatiOfferta, layout?: Layout) =>
+  (await compila(modello, D, layout)).generateAsync({ type: 'blob', mimeType: PPTX, compression: 'DEFLATE' });
+// Stesso file in byte, per il server (la funzione che lo manda su Telegram).
+export const compilaPptxBytes = async (modello: ArrayBuffer | Uint8Array, D: DatiOfferta, layout?: Layout) =>
+  (await compila(modello, D, layout)).generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+
+type Layout = { png: Uint8Array; w: number; h: number };
+async function compila(modello: ArrayBuffer | Uint8Array, D: DatiOfferta, layout?: Layout) {
   const zip = await JSZip.loadAsync(modello);
   const slides = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n));
   for (const n of slides) {
@@ -173,7 +181,7 @@ export async function compilaPptx(modello: ArrayBuffer, D: DatiOfferta, layout?:
   // Il tipo .png deve essere dichiarato (di solito c'e' gia').
   const ct = await zip.file('[Content_Types].xml')!.async('string');
   if (!/Extension="png"/i.test(ct)) zip.file('[Content_Types].xml', ct.replace(/(<Types[^>]*>)/, '$1<Default Extension="png" ContentType="image/png"/>'));
-  return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', compression: 'DEFLATE' });
+  return zip;
 }
 
 export const dataUrlBytes = (u: string) => { const b = atob(u.split(',')[1] || ''); const a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; };
