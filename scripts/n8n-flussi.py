@@ -1,0 +1,188 @@
+"""Genera i due flussi n8n dell'agenda su Telegram (da importare in n8n: Workflows → Import from file).
+
+  n8n/agenda-chat-telegram.json      chat con l'assistente, pulsanti "Me ne occupo"/"Risolto", /collega e /id
+  n8n/agenda-avvisi-riepilogo.json   avviso nel gruppo delle voci nuove (dal database) e riepilogo del mattino
+
+Uso:  python scripts/n8n-flussi.py [indirizzo dell'app]
+      (predefinito: anteprima del branch calendario; per la produzione: https://conf-five.vercel.app)
+Segreti e token non stanno qui: si inseriscono in n8n (credenziali e nodo "Impostazioni").
+"""
+import json, os, sys, uuid
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE = (sys.argv[1] if len(sys.argv) > 1 else 'https://conf-git-calendario-giovanne.vercel.app').rstrip('/')
+# L'anteprima Vercel e' protetta: n8n entra con il codice "Protection Bypass for Automation". In produzione non serve.
+API = BASE + '/api/agenda' + ('' if 'conf-five' in BASE else '?x-vercel-protection-bypass=INSERISCI_CODICE_BYPASS')
+
+U = lambda: str(uuid.uuid4())
+URL = "={{ $('Impostazioni').item.json.url }}"
+AUTH = {'authentication': 'genericCredentialType', 'genericAuthType': 'httpHeaderAuth'}
+CRED = {'httpHeaderAuth': {'id': '', 'name': 'Agenda - segreto'}}
+TG = {'telegramApi': {'id': '', 'name': 'Telegram Agenda'}}
+TID = "$('Telegram Trigger').item.json.message.from.id"
+
+
+def node(name, typ, ver, pos, params, creds=None):
+    n = {'parameters': params, 'id': U(), 'name': name, 'type': typ, 'typeVersion': ver, 'position': pos}
+    if creds: n['credentials'] = creds
+    return n
+
+
+def cond(expr):
+    """Nodo IF: vero quando l'espressione e' vera."""
+    return {'conditions': {'options': {'caseSensitive': True, 'leftValue': '', 'typeValidation': 'loose'},
+            'conditions': [{'id': U(), 'leftValue': '={{ ' + expr + ' }}', 'rightValue': '',
+                            'operator': {'type': 'boolean', 'operation': 'true', 'singleValue': True}}],
+            'combinator': 'and'}, 'options': {}}
+
+
+def http(name, pos, body, url=URL):
+    return node(name, 'n8n-nodes-base.httpRequest', 4.2, pos, {'method': 'POST', 'url': url, **AUTH, 'sendBody': True, 'specifyBody': 'json',
+                'jsonBody': '={{ JSON.stringify(' + body + ') }}', 'options': {}}, CRED)
+
+
+def send(name, pos, chat, text, extra=None):
+    return node(name, 'n8n-nodes-base.telegram', 1.2, pos, {'chatId': '={{ ' + chat + ' }}', 'text': '={{ ' + text + ' }}',
+                'additionalFields': {'appendAttribution': False, **(extra or {})}}, TG)
+
+
+def tool(name, pos, desc, body):
+    return node(name, 'n8n-nodes-base.httpRequestTool', 4.2, pos, {'toolDescription': desc, 'method': 'POST', 'url': URL, **AUTH,
+                'sendBody': True, 'specifyBody': 'json', 'jsonBody': '={{ JSON.stringify(' + body + ') }}', 'options': {}}, CRED)
+
+
+def fa(k, d, t='string', default=None):
+    """Parametro che sceglie l'assistente ($fromAI)."""
+    return f"$fromAI('{k}', `{d}`, '{t}'" + (f', {json.dumps(default)}' if default is not None else '') + ')'
+
+
+def impostazioni(name, pos):
+    return node(name, 'n8n-nodes-base.set', 3.4, pos, {'assignments': {'assignments': [
+        {'id': U(), 'name': 'url', 'type': 'string', 'value': API},
+        {'id': U(), 'name': 'gruppo', 'type': 'string', 'value': 'INSERISCI_ID_GRUPPO'}]}, 'includeOtherFields': True, 'options': {}})
+
+
+def to(*names, i=0):
+    return [{'node': n, 'type': 'main', 'index': i} for n in names]
+
+
+SYSTEM = """=Sei l'assistente dell'agenda di Terranova (strutture tracker per impianti fotovoltaici). Parli in italiano con un collega su Telegram.
+Oggi è {{ $now.setZone('Europe/Rome').setLocale('it').toFormat('cccc d LLLL yyyy') }} ({{ $now.setZone('Europe/Rome').toFormat('yyyy-MM-dd') }}), ore {{ $now.setZone('Europe/Rome').toFormat('HH:mm') }}.
+
+Cosa fai: registri urgenze, cose da fare, promemoria, scadenze e appuntamenti; leggi l'agenda; segni le voci fatte; le assegni ai colleghi.
+
+Regole:
+- Se il messaggio segnala un problema o dice "urgente", crea una voce di genere "urgenza" (per oggi, salvo data diversa). Titolo breve e chiaro (es. "Mancano bulloni in cantiere: preparare il materiale"); i dettagli vanno nella nota.
+- Se cita una commessa, un cliente, un numero di preventivo o un luogo, usa cerca_commesse e collega la voce con preventivo_id. Commessa = preventivo vinto: preferisci quelle. Se ci sono più risultati plausibili chiedi quale, elencando nome e numero. Se non trovi niente, chiedi o crea senza collegamento dicendolo.
+- Categoria (facoltativa): bulloni, viti, dadi, rondelle → BULLONERIA; profili, pali, acciaio, carpenteria → STRUTTURA; motori, attuatori, cuscinetti → ELETTROMECCANICO; quadri, centraline, sensori, cavi → ELETTRONICO.
+- Per assegnare a qualcuno usa colleghi e passa la sua email. "Me ne occupo io" = assegnata a chi scrive (usa chi_sono).
+- Date relative ("domani", "lunedì", "fra una settimana") → AAAA-MM-GG. Ora → HH:MM. Senza data per una voce non urgente, chiedi.
+- Non inventare mai id: prendili dagli strumenti. Prima di eliminare chiedi conferma.
+- Se uno strumento risponde ok:false, spiega il problema in parole semplici. Se l'account non è collegato, spiega come collegarlo.
+- Urgenze e voci assegnate vengono annunciate da sole nel gruppo: non devi farlo tu.
+- Rispondi breve, testo semplice senza Markdown. Dopo aver registrato qualcosa, riassumi cosa hai salvato."""
+
+# ---------- Flusso 1: chat ----------
+chat = [
+    node('Telegram Trigger', 'n8n-nodes-base.telegramTrigger', 1.2, [0, 300], {'updates': ['message', 'callback_query'], 'additionalFields': {}}, TG),
+    impostazioni('Impostazioni', [220, 300]),
+    node('È un pulsante?', 'n8n-nodes-base.if', 2.2, [440, 300], cond('!!$json.callback_query')),
+    # Pulsanti sotto gli avvisi del gruppo: "prendi:<id>" e "risolvi:<id>".
+    http('Pulsante → app', [680, 120], "{ azione: $json.callback_query.data.split(':')[0], id: $json.callback_query.data.split(':')[1], telegram_id: $json.callback_query.from.id }"),
+    node('Risposta al pulsante', 'n8n-nodes-base.telegram', 1.2, [900, 120], {'resource': 'callback', 'queryId': "={{ $('Telegram Trigger').item.json.callback_query.id }}",
+         'additionalFields': {'text': '={{ ($json.ok ? $json.testo : $json.errore).slice(0, 190) }}', 'show_alert': '={{ !$json.ok }}'}}, TG),
+    node('Andato a buon fine?', 'n8n-nodes-base.if', 2.2, [1120, 120], cond("$('Pulsante → app').item.json.ok")),
+    send('Avvisa nel gruppo', [1340, 120], "$('Telegram Trigger').item.json.callback_query.message.chat.id", "$('Pulsante → app').item.json.testo",
+         {'reply_to_message_id': "={{ $('Telegram Trigger').item.json.callback_query.message.message_id }}"}),
+    # Messaggi: /id (per sapere l'id del gruppo), /collega CODICE, il resto all'assistente.
+    node('È /collega o /id?', 'n8n-nodes-base.if', 2.2, [680, 440], cond("/^\\/(collega|id)\\b/i.test($json.message?.text || '')")),
+    node('Quale comando?', 'n8n-nodes-base.if', 2.2, [900, 360], cond('/^\\/id\\b/i.test($json.message.text)')),
+    send('Rispondi id', [1120, 280], '$json.message.chat.id', "'Id di questa chat: ' + $json.message.chat.id"),
+    http('Collega → app', [1120, 440], "{ azione: 'collega', telegram_id: $json.message.from.id, codice: ($json.message.text.split(/\\s+/)[1] || '') }"),
+    send('Rispondi collega', [1340, 440], "$('Telegram Trigger').item.json.message.chat.id", "$json.ok ? $json.testo : '⚠️ ' + $json.errore"),
+    node('Assistente', '@n8n/n8n-nodes-langchain.agent', 1.7, [900, 620], {'promptType': 'define',
+         'text': "={{ $('Telegram Trigger').item.json.message.text || '(messaggio senza testo: chiedi di scriverlo a parole)' }}",
+         'options': {'systemMessage': SYSTEM}}),
+    send('Rispondi', [1340, 620], "$('Telegram Trigger').item.json.message.chat.id", '$json.output'),
+    # Modello: si cambia qui (OpenAI, Anthropic, ...). Il resto del flusso non dipende dal modello.
+    node('Modello', '@n8n/n8n-nodes-langchain.lmChatOpenAi', 1.2, [640, 860], {'model': {'__rl': True, 'value': 'gpt-4o-mini', 'mode': 'list'}, 'options': {}},
+         {'openAiApi': {'id': '', 'name': 'OpenAI'}}),
+    node('Memoria', '@n8n/n8n-nodes-langchain.memoryBufferWindow', 1.3, [780, 860], {'sessionIdType': 'customKey',
+         'sessionKey': "={{ $('Telegram Trigger').item.json.message.chat.id }}", 'contextWindowLength': 12}),
+    tool('chi_sono', [920, 860], "Chi sta scrivendo (email, nome, ruolo) e la data di oggi. Usalo per 'me ne occupo io'.",
+         "{ azione: 'chi_sono', telegram_id: " + TID + ' }'),
+    tool('cerca_commesse', [1040, 860], 'Cerca preventivi e commesse (preventivi vinti) per nome, cliente, numero, riferimento o luogo. Restituisce id, nome, numero, stato.',
+         "{ azione: 'commesse', telegram_id: " + TID + ', cerca: ' + fa('cerca', 'Parole da cercare, es. Ripo oppure 2026/014', 'string', '') + ' }'),
+    tool('colleghi', [1160, 860], 'Elenco dei colleghi attivi (email e nome), per assegnare una voce.',
+         "{ azione: 'colleghi', telegram_id: " + TID + ' }'),
+    tool('leggi_agenda', [1280, 860], "Legge l'agenda: voci tra due date comprese, piu' urgenze aperte e voci rimaste indietro. Ogni voce ha un id.",
+         "{ azione: 'agenda', telegram_id: " + TID + ', da: ' + fa('da', 'Data iniziale AAAA-MM-GG (vuoto = oggi)', 'string', '')
+         + ', a: ' + fa('a', 'Data finale AAAA-MM-GG (vuoto = 7 giorni dopo)', 'string', '')
+         + ', solo_mie: ' + fa('solo_mie', 'true per le sole voci create da me o assegnate a me', 'boolean', False) + ' }'),
+    tool('crea_voce', [1400, 860], 'Crea una voce in agenda: urgenza, cosa da fare, promemoria, scadenza o appuntamento.',
+         "{ azione: 'crea', telegram_id: " + TID
+         + ', genere: ' + fa('genere', 'Uno tra: urgenza, attivita (cosa da fare), promemoria, scadenza, appuntamento')
+         + ', titolo: ' + fa('titolo', 'Descrizione breve, massimo 200 caratteri')
+         + ', giorno: ' + fa('giorno', 'Data AAAA-MM-GG; vuoto solo per le urgenze (= oggi)', 'string', '')
+         + ', ora: ' + fa('ora', 'Ora HH:MM, vuoto se non indicata', 'string', '')
+         + ', nota: ' + fa('nota', 'Dettagli facoltativi', 'string', '')
+         + ', categoria: ' + fa('categoria', 'Facoltativa: STRUTTURA, BULLONERIA, ELETTROMECCANICO, ELETTRONICO', 'string', '')
+         + ', preventivo_id: ' + fa('preventivo_id', 'id del preventivo o commessa preso da cerca_commesse, vuoto se nessuno', 'string', '')
+         + ', assegnata_a: ' + fa('assegnata_a', 'email del collega presa da colleghi, vuoto se nessuno', 'string', '') + ' }'),
+    tool('modifica_voce', [1520, 860], 'Agisce su una voce esistente (id da leggi_agenda o crea_voce). azione: prendi (me ne occupo io), risolvi (fatta), aggiorna (cambia i campi indicati), elimina.',
+         'Object.fromEntries(Object.entries({ azione: ' + fa('azione', 'Una tra: prendi, risolvi, aggiorna, elimina')
+         + ', telegram_id: ' + TID + ', id: ' + fa('id', 'id della voce')
+         + ', titolo: ' + fa('titolo', 'Solo per aggiorna: nuovo titolo, vuoto se invariato', 'string', '')
+         + ', giorno: ' + fa('giorno', 'Solo per aggiorna: nuova data AAAA-MM-GG, vuoto se invariata', 'string', '')
+         + ', ora: ' + fa('ora', 'Solo per aggiorna: nuova ora HH:MM, vuoto se invariata', 'string', '')
+         + ', nota: ' + fa('nota', 'Solo per aggiorna: nuova nota, vuoto se invariata', 'string', '')
+         + ', assegnata_a: ' + fa('assegnata_a', "Solo per aggiorna: email del nuovo assegnatario, vuoto se invariato", 'string', '')
+         + " }).filter(([, v]) => v !== '' && v != null))"),
+]
+chat_conn = {
+    'Telegram Trigger': {'main': [to('Impostazioni')]}, 'Impostazioni': {'main': [to('È un pulsante?')]},
+    'È un pulsante?': {'main': [to('Pulsante → app'), to('È /collega o /id?')]},
+    'Pulsante → app': {'main': [to('Risposta al pulsante')]}, 'Risposta al pulsante': {'main': [to('Andato a buon fine?')]},
+    'Andato a buon fine?': {'main': [to('Avvisa nel gruppo'), []]},
+    'È /collega o /id?': {'main': [to('Quale comando?'), to('Assistente')]},
+    'Quale comando?': {'main': [to('Rispondi id'), to('Collega → app')]},
+    'Collega → app': {'main': [to('Rispondi collega')]}, 'Assistente': {'main': [to('Rispondi')]},
+    'Modello': {'ai_languageModel': [[{'node': 'Assistente', 'type': 'ai_languageModel', 'index': 0}]]},
+    'Memoria': {'ai_memory': [[{'node': 'Assistente', 'type': 'ai_memory', 'index': 0}]]},
+    **{t: {'ai_tool': [[{'node': 'Assistente', 'type': 'ai_tool', 'index': 0}]]}
+       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce']},
+}
+
+# ---------- Flusso 2: avvisi e riepilogo ----------
+avvisi = [
+    # Database Webhook di Supabase sulla tabella scadenze (Insert), con l'intestazione x-agenda-secret.
+    node('Voce nuova (Supabase)', 'n8n-nodes-base.webhook', 2, [0, 200], {'httpMethod': 'POST', 'path': 'agenda-avvisi', 'authentication': 'headerAuth', 'options': {}}, CRED),
+    node('È un inserimento?', 'n8n-nodes-base.if', 2.2, [220, 200], cond("$json.body.type === 'INSERT' && !!$json.body.record?.id")),
+    impostazioni('Impostazioni', [440, 200]),
+    http('Annuncio → app', [660, 200], "{ azione: 'annuncio', id: $('Voce nuova (Supabase)').item.json.body.record.id }"),
+    node('Da annunciare?', 'n8n-nodes-base.if', 2.2, [880, 200], cond('$json.ok && $json.invia')),
+    node('Annuncia nel gruppo', 'n8n-nodes-base.telegram', 1.2, [1100, 200], {'chatId': "={{ $('Impostazioni').item.json.gruppo }}", 'text': '={{ $json.testo }}',
+         'replyMarkup': 'inlineKeyboard', 'inlineKeyboard': {'rows': [{'row': {'buttons': [
+             {'text': '🙋 Me ne occupo', 'additionalFields': {'callback_data': '=prendi:{{ $json.id }}'}},
+             {'text': '✅ Risolto', 'additionalFields': {'callback_data': '=risolvi:{{ $json.id }}'}}]}}]},
+         'additionalFields': {'appendAttribution': False}}, TG),
+    node('Ogni mattina lun-ven 8:00', 'n8n-nodes-base.scheduleTrigger', 1.2, [0, 520], {'rule': {'interval': [{'field': 'cronExpression', 'expression': '0 8 * * 1-5'}]}}),
+    impostazioni('Impostazioni riepilogo', [220, 520]),
+    http('Riepilogo → app', [440, 520], "{ azione: 'riepilogo' }", url="={{ $('Impostazioni riepilogo').item.json.url }}"),
+    send('Riepilogo nel gruppo', [660, 520], "$('Impostazioni riepilogo').item.json.gruppo", "$json.ok ? $json.testo : '⚠️ Riepilogo non disponibile: ' + $json.errore"),
+]
+avvisi_conn = {
+    'Voce nuova (Supabase)': {'main': [to('È un inserimento?')]}, 'È un inserimento?': {'main': [to('Impostazioni'), []]},
+    'Impostazioni': {'main': [to('Annuncio → app')]}, 'Annuncio → app': {'main': [to('Da annunciare?')]},
+    'Da annunciare?': {'main': [to('Annuncia nel gruppo'), []]},
+    'Ogni mattina lun-ven 8:00': {'main': [to('Impostazioni riepilogo')]}, 'Impostazioni riepilogo': {'main': [to('Riepilogo → app')]},
+    'Riepilogo → app': {'main': [to('Riepilogo nel gruppo')]},
+}
+
+SETTINGS = {'executionOrder': 'v1', 'timezone': 'Europe/Rome'}
+os.makedirs(os.path.join(ROOT, 'n8n'), exist_ok=True)
+for nome, nodi, conn, file in [('Agenda - Chat Telegram', chat, chat_conn, 'agenda-chat-telegram.json'),
+                               ('Agenda - Avvisi e riepilogo', avvisi, avvisi_conn, 'agenda-avvisi-riepilogo.json')]:
+    with open(os.path.join(ROOT, 'n8n', file), 'w', encoding='utf-8') as f:
+        json.dump({'name': nome, 'nodes': nodi, 'connections': conn, 'settings': SETTINGS, 'pinData': {}}, f, ensure_ascii=False, indent=1)
+    print('Scritto n8n/' + file)

@@ -2,7 +2,7 @@
 // inserite a mano, dettaglio del giorno scelto. Si nasconde e si rimette con un pulsante (scelta ricordata in questo browser);
 // nascosto restano gli allarmi in breve.
 import { useState } from 'react';
-import { GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, mia, oraBreve, perGiorno, voci, type Genere, type Scadenza, type Voce } from '../domain/calendario';
+import { CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, mia, oraBreve, perGiorno, voci, type Genere, type Scadenza, type Voce } from '../domain/calendario';
 import { Fold } from '../components/ui';
 import { StatoSel } from './Cruscotto';
 import { eStato } from '../domain/kpi';
@@ -31,7 +31,7 @@ const togli = async (s: Scadenza) => {
 // Voci visibili: con "Le mie" solo quelle create da me o assegnate a me.
 const vociVisibili = () => { const vv = voci(S.arch, S.scad), me = mioEmail(); return S.ui.calMie && me ? vv.filter(v => mia(v, me)) : vv; };
 /** Voci scadute e non fatte, per il numerino sulla voce Home del menu. */
-export const nScadute = () => allarmi(vociVisibili(), dToday()).scadute.length;
+export const nScadute = () => { const a = allarmi(vociVisibili(), dToday()); return a.urgenze.length + a.scadute.length; };
 
 function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean }) {
   const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s);
@@ -40,7 +40,7 @@ function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?
       {s ? <input type="checkbox" checked={s.fatto} disabled={!spunta} onChange={() => segna(s)} title={spunta ? 'Fatto' : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
       <div className="vt">
         <b>{ora && <span className="vora">{ora}</span>}{v.titolo}</b>
-        <small>{l}{data ? <> · {dFmt(v.giorno)} ({quando(v.giorno, oggi, daFare(v) && !s?.fatto)})</> : null}{v.sotto ? ' · ' + v.sotto : ''}
+        <small>{l}{s?.categoria ? ' · ' + s.categoria.toLowerCase() : ''}{data ? <> · {dFmt(v.giorno)} ({quando(v.giorno, oggi, daFare(v) && !s?.fatto)})</> : null}{v.sotto ? ' · ' + v.sotto : ''}
           {s?.assegnata_a ? ' · per ' + nomeDi(s.assegnata_a) : ''}{s?.creato_da ? ' · da ' + nomeDi(s.creato_da) : ''}{s?.origine === 'telegram' ? ' (Telegram)' : ''}</small>
         {s?.nota ? <span className="muted small">{s.nota}</span> : null}
         {v.tipo === 'richiamo' ? <span className="muted small">Offerta inviata da {RICHIAMO}+ giorni senza risposta: quando il cliente risponde, cambia lo stato.</span> : null}
@@ -54,11 +54,12 @@ function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?
 
 /** Riquadro degli allarmi: voci superate, in arrivo nei prossimi giorni, commesse senza data di avvio. */
 export function Allarmi({ compatto = false }: { compatto?: boolean }) {
-  const oggi = dToday(), { scadute, prossime } = allarmi(vociVisibili(), oggi), np = daPianificare(S.arch);
-  const tutte = [...scadute, ...prossime], vis = compatto ? tutte.slice(0, 4) : tutte;
+  const oggi = dToday(), { urgenze, scadute, prossime } = allarmi(vociVisibili(), oggi), np = daPianificare(S.arch);
+  const tutte = [...urgenze, ...scadute, ...prossime], vis = compatto ? tutte.slice(0, 4) : tutte;
   return (
     <div className="card calarm">
       <h2>Allarmi
+        {urgenze.length > 0 && <span className="tag alate">🔴 {urgenze.length} urgenz{urgenze.length === 1 ? 'a' : 'e'}</span>}
         {scadute.length > 0 && <span className="tag alate">{scadute.length} scadut{scadute.length === 1 ? 'a' : 'e'}</span>}
         <span className="tag asoon">{prossime.length} nei prossimi {PREAVVISO} giorni</span>
         {S.ui.calMie && <span className="tag">solo le mie</span>}
@@ -74,11 +75,12 @@ export function Allarmi({ compatto = false }: { compatto?: boolean }) {
   );
 }
 
-type Bozza = { id?: string; genere: Genere; giorno: string; ora: string; titolo: string; nota: string; preventivo_id: string; assegnata_a: string };
-const bozzaDa = (s: Scadenza): Bozza => ({ id: s.id, genere: s.genere || 'attivita', giorno: s.giorno, ora: oraBreve(s), titolo: s.titolo, nota: s.nota || '', preventivo_id: s.preventivo_id || '', assegnata_a: s.assegnata_a || '' });
+type Bozza = { id?: string; genere: Genere; categoria: string; giorno: string; ora: string; titolo: string; nota: string; preventivo_id: string; assegnata_a: string };
+const bozzaDa = (s: Scadenza): Bozza => ({ id: s.id, genere: s.genere || 'attivita', categoria: s.categoria || '', giorno: s.giorno, ora: oraBreve(s), titolo: s.titolo, nota: s.nota || '', preventivo_id: s.preventivo_id || '', assegnata_a: s.assegnata_a || '' });
 const ESEMPI: Record<Genere, string> = {
   attivita: 'es. Rifare il computo bulloneria', promemoria: 'es. Richiamare il cliente per il preventivo',
   scadenza: 'es. Consegna documentazione collaudo', appuntamento: 'es. Sopralluogo in cantiere',
+  urgenza: 'es. Mancano bulloni in cantiere: preparare il materiale',
 };
 function Modulo({ b, set, chiudi }: { b: Bozza; set: (b: Bozza) => void; chiudi: () => void }) {
   const [busy, setBusy] = useState(false);
@@ -101,10 +103,13 @@ function Modulo({ b, set, chiudi }: { b: Bozza; set: (b: Bozza) => void; chiudi:
         {vinti.length > 0 && <optgroup label="Commesse (vinte)">{vinti.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}</optgroup>}
         {altri.length > 0 && <optgroup label="Preventivi">{altri.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}</optgroup>}
       </select></label>
+      <label className="f">Categoria (facoltativa)<select value={b.categoria} onChange={e => set({ ...b, categoria: e.target.value })}>
+        <option value="">— nessuna —</option>{CATEGORIE.map(c => <option key={c} value={c}>{c[0] + c.slice(1).toLowerCase()}</option>)}
+      </select></label>
       {cloud.colleghi.length > 0 ? <label className="f">Per chi (facoltativo)<select value={b.assegnata_a} onChange={e => set({ ...b, assegnata_a: e.target.value })}>
         <option value="">— chiunque —</option>
         {cloud.colleghi.map(u => <option key={u.email} value={u.email}>{u.nome || u.email}{u.email === mioEmail() ? ' (io)' : ''}</option>)}
-      </select></label> : <span />}
+      </select></label> : null}
       <label className="f wide">Nota (facoltativa)<input value={b.nota} onChange={e => set({ ...b, nota: e.target.value })} /></label>
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
         <button className="btn p" disabled={busy || !b.titolo.trim() || !b.giorno} onClick={salva}>{b.id ? 'Salva modifiche' : 'Aggiungi'}</button>
@@ -141,7 +146,7 @@ function Agenda({ vv, oggi, sel, setSel, onEdit }: { vv: Voce[]; oggi: number; s
   const { arretrate, avanti } = agenda(vv, oggi), byDay = [...perGiorno(avanti)];
   return (
     <div className="cagenda">
-      {arretrate.length > 0 && <div className="agiorno late"><h3>Rimaste indietro</h3>{arretrate.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} />)}</div>}
+      {arretrate.length > 0 && <div className="agiorno late"><h3>Urgenze e voci rimaste indietro</h3>{arretrate.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} />)}</div>}
       {byDay.length ? byDay.map(([g, vs]) => (
         <div key={g} className={`agiorno${g === sel ? ' on' : ''}`}>
           <h3><button onClick={() => setSel(g)}>{giornoNome(g)}</button>{g === oggi && <span className="tag on">oggi</span>}</h3>
@@ -159,7 +164,7 @@ export function Calendario() {
   const [bozza, setBozza] = useState<Bozza | null>(null);
   const vv = vociVisibili(), byDay = perGiorno(vv), mese = S.ui.calV === 'mese';
   const sposta = (d: number) => { const x = new Date(Date.UTC(ym.y, ym.m + d, 1)); setYm({ y: x.getUTCFullYear(), m: x.getUTCMonth() }); };
-  const nuova = (g = sel) => setBozza({ genere: 'attivita', giorno: isoDay(g), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '' });
+  const nuova = (g = sel) => setBozza({ genere: 'attivita', categoria: '', giorno: isoDay(g), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '' });
   const modifica = (s: Scadenza) => { setSel(Date.UTC(+s.giorno.slice(0, 4), +s.giorno.slice(5, 7) - 1, +s.giorno.slice(8, 10)) / DAY); setBozza(bozzaDa(s)); };
   const vista = (k: 'mese' | 'agenda') => { S.ui.calV = k; commit(); };
   const delGiorno = byDay.get(sel) || [];
@@ -215,7 +220,7 @@ export function AgendaPreventivo() {
     <p className="hint" style={{ margin: 0 }}>Le voci in agenda si legano a un preventivo salvato nell'archivio.</p>}</Fold>;
   const vv = voci(S.arch, S.scad).filter(v => v.prevId === id), aperte = vv.filter(v => daFare(v) && !v.s?.fatto && v.giorno >= oggi - 365);
   const tardi = aperte.filter(v => v.giorno < oggi).length;
-  const nuova = () => setBozza({ genere: 'promemoria', giorno: isoDay(oggi), ora: '', titolo: '', nota: '', preventivo_id: id, assegnata_a: '' });
+  const nuova = () => setBozza({ genere: 'promemoria', categoria: '', giorno: isoDay(oggi), ora: '', titolo: '', nota: '', preventivo_id: id, assegnata_a: '' });
   return (
     <Fold id="cf-agenda" title="Agenda" sum={vv.length ? `${aperte.length} da fare${tardi ? ` · ${tardi} scadut${tardi === 1 ? 'a' : 'e'}` : ''} · ${vv.length} voc${vv.length === 1 ? 'e' : 'i'} in tutto` : 'Nessuna voce: aggiungi un promemoria'}
       act={!bozza && <button className="btn s p" onClick={nuova}>+ Promemoria</button>}>{() => <>

@@ -56,4 +56,12 @@ describe('calendario', () => {
     const vv = voci([], [sc('x', '2026-08-01', { fatto: true }), sc('y', '2026-08-01'), sc('z', '2026-10-01', { fatto: true })], oggi);
     expect(vv.map(x => x.s!.id)).toEqual(['y', 'z']);
   });
+  it("urgenze: in cima finche' non sono risolte, qualunque data", () => {
+    const oggi = dNum('2026-10-20')!;
+    const vv = voci([], [sc('u1', '2026-10-10', { genere: 'urgenza' }), sc('u2', '2026-10-25', { genere: 'urgenza' }), sc('u3', '2026-10-19', { genere: 'urgenza', fatto: true }), sc('n', '2026-10-21')], oggi);
+    const a = allarmi(vv, oggi);
+    expect(a.urgenze.map(v => v.s!.id)).toEqual(['u1', 'u2']);
+    expect(a.scadute).toEqual([]); expect(a.prossime.map(v => v.s!.id)).toEqual(['n']);
+    expect(agenda(vv, oggi).arretrate.map(v => v.s!.id)).toEqual(['u1', 'u2']);
+  });
 });

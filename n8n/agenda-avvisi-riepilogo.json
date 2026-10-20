@@ -1,0 +1,391 @@
+{
+ "name": "Agenda - Avvisi e riepilogo",
+ "nodes": [
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "agenda-avvisi",
+    "authentication": "headerAuth",
+    "options": {}
+   },
+   "id": "df669d90-b0a2-42d6-ba0a-54266c475321",
+   "name": "Voce nuova (Supabase)",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    200
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Agenda - segreto"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "conditions": [
+      {
+       "id": "e7b3e050-ba3d-4dcf-8ab4-0debdf53af7a",
+       "leftValue": "={{ $json.body.type === 'INSERT' && !!$json.body.record?.id }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "id": "b1381cb4-fa72-4a2c-a392-1e53af91ff6e",
+   "name": "È un inserimento?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    220,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "assignments": {
+     "assignments": [
+      {
+       "id": "b9c4b69c-e656-49d5-b8c0-d1b436095a7d",
+       "name": "url",
+       "type": "string",
+       "value": "https://conf-git-calendario-giovanne.vercel.app/api/agenda?x-vercel-protection-bypass=INSERISCI_CODICE_BYPASS"
+      },
+      {
+       "id": "b44be739-6e4b-471d-a15d-c0b8ad125c12",
+       "name": "gruppo",
+       "type": "string",
+       "value": "INSERISCI_ID_GRUPPO"
+      }
+     ]
+    },
+    "includeOtherFields": true,
+    "options": {}
+   },
+   "id": "99fb1b08-c609-4af7-a482-6c6ab290f315",
+   "name": "Impostazioni",
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    440,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('Impostazioni').item.json.url }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ azione: 'annuncio', id: $('Voce nuova (Supabase)').item.json.body.record.id }) }}",
+    "options": {}
+   },
+   "id": "8d81589a-cf36-4f64-b1db-372bcc2c8653",
+   "name": "Annuncio → app",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    660,
+    200
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Agenda - segreto"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "conditions": [
+      {
+       "id": "7b9e5d12-cd9c-4277-aff4-4b45836490c7",
+       "leftValue": "={{ $json.ok && $json.invia }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "id": "922a0111-34ec-428c-ab92-2f945b186776",
+   "name": "Da annunciare?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    880,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "chatId": "={{ $('Impostazioni').item.json.gruppo }}",
+    "text": "={{ $json.testo }}",
+    "replyMarkup": "inlineKeyboard",
+    "inlineKeyboard": {
+     "rows": [
+      {
+       "row": {
+        "buttons": [
+         {
+          "text": "🙋 Me ne occupo",
+          "additionalFields": {
+           "callback_data": "=prendi:{{ $json.id }}"
+          }
+         },
+         {
+          "text": "✅ Risolto",
+          "additionalFields": {
+           "callback_data": "=risolvi:{{ $json.id }}"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    "additionalFields": {
+     "appendAttribution": false
+    }
+   },
+   "id": "39abf163-20ff-4fe0-9b39-7b6139b9bfcd",
+   "name": "Annuncia nel gruppo",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    1100,
+    200
+   ],
+   "credentials": {
+    "telegramApi": {
+     "id": "",
+     "name": "Telegram Agenda"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "0 8 * * 1-5"
+      }
+     ]
+    }
+   },
+   "id": "edb83c57-3285-464e-943c-fe75a1a9449b",
+   "name": "Ogni mattina lun-ven 8:00",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    520
+   ]
+  },
+  {
+   "parameters": {
+    "assignments": {
+     "assignments": [
+      {
+       "id": "7d2a7938-331c-47ab-886c-53abc56d2485",
+       "name": "url",
+       "type": "string",
+       "value": "https://conf-git-calendario-giovanne.vercel.app/api/agenda?x-vercel-protection-bypass=INSERISCI_CODICE_BYPASS"
+      },
+      {
+       "id": "6e08ac72-ca79-43cd-855e-4d2ec6171236",
+       "name": "gruppo",
+       "type": "string",
+       "value": "INSERISCI_ID_GRUPPO"
+      }
+     ]
+    },
+    "includeOtherFields": true,
+    "options": {}
+   },
+   "id": "9bc3ee48-41f9-434e-9ae9-1cde2f9a2d83",
+   "name": "Impostazioni riepilogo",
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    220,
+    520
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('Impostazioni riepilogo').item.json.url }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ azione: 'riepilogo' }) }}",
+    "options": {}
+   },
+   "id": "abb593b0-de14-47a4-8be5-132504843419",
+   "name": "Riepilogo → app",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    440,
+    520
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Agenda - segreto"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "chatId": "={{ $('Impostazioni riepilogo').item.json.gruppo }}",
+    "text": "={{ $json.ok ? $json.testo : '⚠️ Riepilogo non disponibile: ' + $json.errore }}",
+    "additionalFields": {
+     "appendAttribution": false
+    }
+   },
+   "id": "a4eabb61-8151-4133-bece-5aefe2d1e9b4",
+   "name": "Riepilogo nel gruppo",
+   "type": "n8n-nodes-base.telegram",
+   "typeVersion": 1.2,
+   "position": [
+    660,
+    520
+   ],
+   "credentials": {
+    "telegramApi": {
+     "id": "",
+     "name": "Telegram Agenda"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Voce nuova (Supabase)": {
+   "main": [
+    [
+     {
+      "node": "È un inserimento?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "È un inserimento?": {
+   "main": [
+    [
+     {
+      "node": "Impostazioni",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    []
+   ]
+  },
+  "Impostazioni": {
+   "main": [
+    [
+     {
+      "node": "Annuncio → app",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Annuncio → app": {
+   "main": [
+    [
+     {
+      "node": "Da annunciare?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Da annunciare?": {
+   "main": [
+    [
+     {
+      "node": "Annuncia nel gruppo",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    []
+   ]
+  },
+  "Ogni mattina lun-ven 8:00": {
+   "main": [
+    [
+     {
+      "node": "Impostazioni riepilogo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Impostazioni riepilogo": {
+   "main": [
+    [
+     {
+      "node": "Riepilogo → app",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Riepilogo → app": {
+   "main": [
+    [
+     {
+      "node": "Riepilogo nel gruppo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "Europe/Rome"
+ },
+ "pinData": {}
+}

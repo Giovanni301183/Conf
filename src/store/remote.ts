@@ -5,7 +5,7 @@ import type { Scadenza } from '../domain/calendario';
 import { KEY_ARCH, KEY_DRAFT, KEY_SCAD, S, commit, load, setSaveHook, store, unstore } from './state';
 
 type Fase = 'locale' | 'avvio' | 'login' | 'password' | 'carico' | 'pronto' | 'negato' | 'errore';
-export interface Utente { email: string; nome: string | null; ruolo: 'admin' | 'utente'; attivo: boolean; creato?: string; invitato_da?: string | null }
+export interface Utente { email: string; nome: string | null; ruolo: 'admin' | 'utente'; attivo: boolean; creato?: string; invitato_da?: string | null; telegram_id?: number | null }
 export const cloud = {
   fase: (supabase ? 'avvio' : 'locale') as Fase,
   session: null as Session | null,
@@ -151,7 +151,7 @@ export async function ultimiAccessi(): Promise<Record<string, string> | null> {
 
 /* ---------- Scadenze del calendario ---------- */
 // Senza server le scadenze restano nel browser; con il server si rileggono a ogni modifica, anche dei colleghi.
-const SCAD_COLS = 'id, giorno, ora, genere, titolo, nota, preventivo_id, assegnata_a, fatto, origine, creato_da, creato';
+const SCAD_COLS = 'id, giorno, ora, genere, categoria, titolo, nota, preventivo_id, assegnata_a, fatto, origine, creato_da, creato';
 export const mioEmail = () => cloud.session?.user.email?.toLowerCase() ?? '';
 export const puoModificare = (s: Scadenza) => isAdmin() || s.creato_da === mioEmail();
 // Chi ha la voce assegnata puo' solo segnarla come fatta (lo garantisce anche il database).
@@ -163,7 +163,7 @@ async function loadScadenze() {
   cloud.scadErr = ''; S.scad = data;
 }
 export async function salvaScadenza(s: Partial<Scadenza>): Promise<string> {
-  const v = { giorno: s.giorno, ora: s.ora || null, genere: s.genere || 'attivita', titolo: (s.titolo || '').trim(), nota: s.nota?.trim() || null,
+  const v = { giorno: s.giorno, ora: s.ora || null, genere: s.genere || 'attivita', categoria: s.categoria || null, titolo: (s.titolo || '').trim(), nota: s.nota?.trim() || null,
     preventivo_id: s.preventivo_id || null, assegnata_a: s.assegnata_a || null, fatto: !!s.fatto };
   if (!v.titolo || !v.giorno) return 'Servono titolo e data.';
   if (!supabase) {
@@ -194,6 +194,19 @@ function joinScadenze() {
   scadCh = supabase!.channel('scadenze').on('postgres_changes', { event: '*', schema: 'public', table: 'scadenze' }, async () => { await loadScadenze(); commit(); }).subscribe();
 }
 function leaveScadenze() { if (scadCh) supabase!.removeChannel(scadCh); scadCh = null; }
+
+/* ---------- Telegram ---------- */
+// Codice di 6 cifre (valido 10 minuti) da scrivere al bot come "/collega 123456"; lo abbina /api/agenda.
+export async function codiceTelegram(): Promise<{ codice?: string; error?: string }> {
+  const { data, error } = await supabase!.rpc('codice_telegram');
+  return error ? { error: /codice_telegram/.test(error.message) ? "Al database manca l'aggiornamento per Telegram (migrazione 20261021000000_telegram.sql)." : error.message } : { codice: data };
+}
+export async function scollegaTelegram() {
+  const { error } = await supabase!.rpc('scollega_telegram');
+  if (!error) await loadMe();
+  return error ? error.message : '';
+}
+export async function ricaricaMe() { await loadMe().catch(() => {}); }
 
 /* ---------- Accesso ---------- */
 async function loadAll() {

@@ -7,9 +7,9 @@ import { eStato } from './kpi';
 import { clone, normPrev } from './model';
 import { AUTO, buildGantt, buildLavor, buildMontGantt, dNum, dToday, montDrv } from './plan';
 
-export type Genere = 'attivita' | 'promemoria' | 'scadenza' | 'appuntamento';
+export type Genere = 'attivita' | 'promemoria' | 'scadenza' | 'appuntamento' | 'urgenza';
 export interface Scadenza {
-  id: string; giorno: string; ora: string | null; genere: Genere; titolo: string; nota: string | null; preventivo_id: string | null;
+  id: string; giorno: string; ora: string | null; genere: Genere; categoria?: string | null; titolo: string; nota: string | null; preventivo_id: string | null;
   assegnata_a: string | null; fatto: boolean; origine: 'app' | 'telegram'; creato_da: string; creato: string;
 }
 export type Tipo = 'prod' | 'prodFine' | 'mont' | 'richiamo' | 'man';
@@ -22,8 +22,11 @@ export const TIPI: Record<Tipo, [string, string]> = {
 // Voci a mano: [etichetta, colore]
 export const GENERI: Record<Genere, [string, string]> = {
   attivita: ['Da fare', 'var(--acc)'], promemoria: ['Promemoria', 'var(--gold)'],
-  scadenza: ['Scadenza', 'var(--c-altro)'], appuntamento: ['Appuntamento', '#2f6fb0'],
+  scadenza: ['Scadenza', 'var(--c-altro)'], appuntamento: ['Appuntamento', '#2f6fb0'], urgenza: ['Urgenza', 'var(--bad)'],
 };
+// Categoria facoltativa (come le categorie del listino), utile soprattutto per le urgenze.
+export const CATEGORIE = ['STRUTTURA', 'BULLONERIA', 'ELETTROMECCANICO', 'ELETTRONICO'];
+export const urgente = (v: Voce) => v.s?.genere === 'urgenza' && !v.s.fatto;
 /** Etichetta e colore di una voce: per le voci a mano conta il genere. */
 export const aspetto = (v: Voce): [string, string] => (v.s ? GENERI[v.s.genere] || GENERI.attivita : TIPI[v.tipo]);
 export const oraBreve = (s?: Scadenza) => (s?.ora ? s.ora.slice(0, 5) : '');
@@ -86,10 +89,12 @@ export function voci(arch: any[], sc: Scadenza[], oggi = dToday()): Voce[] {
     .sort((a, b) => a.giorno - b.giorno || a.tipo.localeCompare(b.tipo) || (oraBreve(a.s) || '99').localeCompare(oraBreve(b.s) || '99') || a.titolo.localeCompare(b.titolo));
 }
 
-/** Scadute: voci a mano non fatte e richiami con data passata. In arrivo: da oggi a oggi + PREAVVISO (le voci fatte no). */
+/** Urgenze aperte (qualunque data, finche' non sono risolte). Scadute: voci a mano non fatte e richiami con data passata.
+ *  In arrivo: da oggi a oggi + PREAVVISO. Le voci fatte no; un'urgenza compare solo tra le urgenze. */
 export function allarmi(vv: Voce[], oggi: number) {
-  const aperta = (v: Voce) => !v.s?.fatto;
+  const aperta = (v: Voce) => !v.s?.fatto && !urgente(v);
   return {
+    urgenze: vv.filter(urgente),
     scadute: vv.filter(v => daFare(v) && aperta(v) && v.giorno < oggi),
     prossime: vv.filter(v => aperta(v) && v.giorno >= oggi && v.giorno <= oggi + PREAVVISO),
   };
@@ -97,7 +102,8 @@ export function allarmi(vv: Voce[], oggi: number) {
 
 /** Agenda: le voci aperte rimaste indietro, poi tutto quello che c'e' da oggi per i prossimi giorni. */
 export function agenda(vv: Voce[], oggi: number, giorni = 30) {
-  return { arretrate: allarmi(vv, oggi).scadute, avanti: vv.filter(v => v.giorno >= oggi && v.giorno <= oggi + giorni) };
+  const al = allarmi(vv, oggi);
+  return { arretrate: [...al.urgenze, ...al.scadute], avanti: vv.filter(v => v.giorno >= oggi && v.giorno <= oggi + giorni) };
 }
 
 export const perGiorno = (vv: Voce[]) => {
