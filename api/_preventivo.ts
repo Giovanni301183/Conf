@@ -1,6 +1,8 @@
 // Preventivo da Telegram (azioni "preventivo" e "offerta" di /api/agenda; il trattino basso tiene questo file fuori dalle route di Vercel).
 // "preventivo" crea un preventivo nell'archivio, o ne cambia uno esistente, con i campi detti all'assistente; lo calcola e manda l'offerta.
 // "offerta" rimanda l'offerta PowerPoint di un preventivo gia' salvato, cosi' com'e'.
+// "layout" mette nel preventivo il DXF o l'immagine mandati al bot (file_id di Telegram); anche "preventivo" accetta file_id.
+// Da un DXF si contano i tracker: un preventivo nuovo senza righe le prende da li' (agrivoltaico).
 // Il listino non si tocca mai da qui: un preventivo nuovo usa quello condiviso, uno esistente il listino salvato con lui.
 // L'offerta arriva nella chat privata con il bot (mai nel gruppo: ci sono i prezzi), con TELEGRAM_BOT_TOKEN su Vercel.
 import { readFile } from 'node:fs/promises';
@@ -9,7 +11,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { compute } from '../src/domain/compute.js';
 import { eur, fN, fP, fileName } from '../src/domain/format.js';
 import { MCATS, MIN_CUSC, clone, defRiga, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../src/domain/model.js';
-import { compilaPptxBytes, dataUrlBytes, datiOfferta, offPrev } from '../src/domain/offerta.js';
+import { compilaPptxBytes, datiOfferta, layoutImg, offPrev } from '../src/domain/offerta.js';
+import { layoutDaTelegram } from './_layout.js';
 
 type Db = SupabaseClient;
 const fail = (errore: string) => ({ ok: false, errore });
@@ -88,8 +91,8 @@ async function inviaOfferta(P: any, R: any, data: any, chat: number): Promise<{ 
   const avvisi = D.avvisi.filter(a => !/salvalo per assegnarlo/.test(a));
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return { errore: "Sul server manca TELEGRAM_BOT_TOKEN (Vercel → Settings → Environment Variables): l'offerta non si può mandare.", avvisi };
-  const O = P.offerta, lay = O.layout ? { png: dataUrlBytes(O.layout), w: O.layoutW, h: O.layoutH } : undefined;
-  const bytes = await compilaPptxBytes(await modello(), D, lay);
+  const O = P.offerta;
+  const bytes = await compilaPptxBytes(await modello(), D, layoutImg(O));
   const nome = `Offerta_${P.num ? fileName(P.num) + '_' : ''}${fileName(P.cliente || P._nome || 'cliente')}${O.rev && O.rev !== '0' ? '_rev' + fileName(O.rev) : ''}.pptx`;
   const fd = new FormData();
   fd.append('chat_id', String(chat));
@@ -115,12 +118,25 @@ export async function preventivoBot(db: Db, b: any, email: string, chat: number,
     const { data: l } = await db.from('listino').select('dati').maybeSingle();
     data = l?.dati || defaultData();
   }
-  if (b.azione === 'offerta') {
-    if (nuovo) return fail('Per mandare un\'offerta serve l\'id del preventivo (da cerca_commesse).');
-  } else {
+  if (b.azione !== 'preventivo' && nuovo)
+    return fail(`Per ${b.azione === 'layout' ? 'mettere il layout' : "mandare un'offerta"} serve l'id del preventivo (da cerca_commesse).`);
+  if (b.azione === 'layout' && vuoto(b.file_id)) return fail('Manca il file: mandami il DXF (come file) o una foto del layout.');
+  let daDxf = '';
+  if (b.azione !== 'offerta') {
     if (nuovo) { P = newPrev(); P.data = oggi; P.righe = []; }
     const errore = applica(P, b, data);
     if (errore) return fail(errore);
+    if (!vuoto(b.file_id)) {
+      const token = process.env.TELEGRAM_BOT_TOKEN;
+      if (!token) return fail('Sul server manca TELEGRAM_BOT_TOKEN: non posso scaricare il file da Telegram.');
+      try { Object.assign(offPrev(P), await layoutDaTelegram(token, String(b.file_id), String(b.file_nome ?? ''))); }
+      catch (e) { return fail('Layout non caricato: ' + (e as Error).message); }
+      const T = P.offerta.dxf as Record<string, number> | null;
+      if (T && !P.righe.length) {
+        P.righe = Object.entries(T).filter(([t]) => data.sizes[t]).map(([taglia, n]) => ({ ...defRiga(), taglia, n }));
+        daDxf = 'Righe tracker prese dal DXF (agrivoltaico): ' + righeTxt(P) + '. Falle confermare.';
+      }
+    }
     if (!P.righe.some((r: any) => num(r.n) > 0)) return fail('Mancano i tracker: dimmi quanti, di che taglia (moduli) e se agrivoltaico o basso.');
     if (nuovo && !P.cliente) return fail('Manca il cliente.');
   }
@@ -141,8 +157,8 @@ export async function preventivoBot(db: Db, b: any, email: string, chat: number,
   }
 
   const testo = riepilogo(P, R);
-  if (b.invia === false || b.invia === 'false') return { ok: true, id: P._id, numero: P.num, nuovo, testo, offerta: 'non richiesta' };
+  if (b.invia === false || b.invia === 'false') return { ok: true, id: P._id, numero: P.num, nuovo, testo, avvisi: daDxf ? [daDxf] : [], offerta: 'non richiesta' };
   const inv = await inviaOfferta(P, R, data, chat);
-  return { ok: true, id: P._id, numero: P.num, nuovo, testo, avvisi: inv.avvisi,
+  return { ok: true, id: P._id, numero: P.num, nuovo, testo, avvisi: daDxf ? [daDxf, ...inv.avvisi] : inv.avvisi,
     offerta: inv.errore ? `non inviata: ${inv.errore}` : 'inviata nella chat privata con il bot' };
 }

@@ -2,7 +2,7 @@
 // n8n chiama POST /api/agenda con l'intestazione x-agenda-secret (variabile AGENDA_SECRET su Vercel) e un JSON
 //   { azione, telegram_id, ...campi }
 // Azioni: collega, chi_sono, commesse, colleghi, agenda, crea, aggiorna, prendi, risolvi, elimina (per un collega abbinato);
-//         preventivo, offerta (preventivo creato o cambiato da Telegram e offerta PowerPoint in chat privata: vedi _preventivo.ts);
+//         preventivo, offerta, layout (preventivo creato o cambiato da Telegram e offerta PowerPoint in chat privata: vedi _preventivo.ts);
 //         riepilogo, annuncio (del sistema: riepilogo del mattino e avviso nel gruppo di una voce nuova).
 // Regole come nell'app: crea chiunque; modifica ed elimina l'autore o un amministratore; chi ha la voce assegnata la segna fatta;
 // un'urgenza o una voce senza assegnatario la puo' prendere chiunque.
@@ -170,7 +170,7 @@ export async function esegui(db: Db, b: any, adesso = new Date()): Promise<Recor
 
   if (az === 'chi_sono') return { ok: true, email: io.email, nome: io.nome, ruolo: io.ruolo, oggi, giorno_settimana: giornoIt(oggi) };
 
-  if (az === 'preventivo' || az === 'offerta') return preventivoBot(db, b, io.email, tid, oggi);
+  if (az === 'preventivo' || az === 'offerta' || az === 'layout') return preventivoBot(db, b, io.email, tid, oggi);
 
   if (az === 'colleghi') {
     const { data } = await db.from('utenti').select('email, nome').eq('attivo', true).order('nome');

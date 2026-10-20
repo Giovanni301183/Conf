@@ -20,7 +20,7 @@ function prev() {
 async function compila(P: any, montTot = 0, layout = true) {
   const D0 = defaultData(), D = datiOfferta(P, compute(D0, P), D0, montTot);
   const buf = readFileSync('public/offerta/modello-offerta.pptx');
-  const blob = await compilaPptx(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer, D, layout ? { png: PNG, w: 4, h: 3 } : undefined);
+  const blob = await compilaPptx(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer, D, layout ? { img: PNG, w: 4, h: 3 } : undefined);
   const out = await JSZip.loadAsync(await blob.arrayBuffer());
   const xml = (await Promise.all(Object.keys(out.files).filter(n => /slides\/slide\d+\.xml$/.test(n)).map(n => out.file(n)!.async('string')))).join('');
   return { D, xml, out, testo: xml.replace(/<[^>]+>/g, '') };

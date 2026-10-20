@@ -21,6 +21,10 @@ CRED = {'httpHeaderAuth': {'id': '', 'name': 'Agenda - segreto'}}
 TG = {'telegramApi': {'id': '', 'name': 'Telegram Agenda'}}
 TID = "$('Telegram Trigger').item.json.message.from.id"
 CMD = "String($json.message?.text || '').trim().split(' ')[0].split('@')[0].toLowerCase()"
+# File o foto allegati al messaggio: l'assistente ne vede nome e file_id, il file lo scarica l'app (azione layout).
+MSG = "$('Telegram Trigger').item.json.message"
+ALLEGATO = ("(" + MSG + ".document ? ' [allegato: file \"' + " + MSG + ".document.file_name + '\", file_id=' + " + MSG + ".document.file_id + ']'"
+            " : " + MSG + ".photo ? ' [allegato: foto, file_id=' + " + MSG + ".photo[" + MSG + ".photo.length - 1].file_id + ']' : '')")
 
 
 def node(name, typ, ver, pos, params, creds=None):
@@ -86,6 +90,7 @@ Regole:
 - Comandi del menu del bot: /oggi = agenda di oggi; /settimana = prossimi 7 giorni; /mie = solo le mie voci; /urgente <testo> = registra un'urgenza; /aiuto o /start = spiega in poche righe cosa puoi fare e come collegare l'account (/collega CODICE, codice dal pulsante Telegram nell'app).
 - Preventivi: servono il cliente e le righe tracker (numero, taglia in moduli tra 12, 18, 20, 22, 36, 40, tipo agrivoltaico o basso). Facoltativi: riferimento o nome impianto, località, referente, potenza del modulo in W (di solito 600), modello del modulo, margine generale in %, margini per categoria (STRUTTURA, ZINCATURA, ELETTROMECCANICO, ELETTRONICO, BULLONERIA, VOCI EXTRA, LAVORAZIONE), trasporto e posa in opera in € (prezzi che vanno tali e quali nell'offerta), quadri di campo e quadri generali. Se manca il margine chiedilo: senza margine il prezzo è uguale al costo. Prima di creare ripeti in una riga cosa hai capito e chiedi conferma.
 - Per cambiare un preventivo già fatto (es. "metti il margine al 20 %") usa prepara_preventivo con il suo id e solo i campi da cambiare. Per rimandare l'offerta di un preventivo dell'archivio così com'è usa invia_offerta (id da cerca_commesse).
+- Layout: se un messaggio ha [allegato: …] è un file o una foto mandati al bot. Se è il layout dell'impianto, mettilo nel preventivo giusto con carica_layout (file_id e nome dall'allegato; se il preventivo non è chiaro chiedi quale, cercandolo con cerca_commesse). Per un preventivo nuovo passa file_id e file_nome a prepara_preventivo: da un DXF i tracker si contano da soli, falli confermare. Il DXF va mandato come file, non come foto. Nell'immagine fatta dal DXF le scritte non compaiono. L'allegato resta valido anche nei messaggi dopo.
 - Il listino non si modifica da qui: se te lo chiedono, rispondi che si cambia nell'app (scheda Listino).
 - Dopo un preventivo riporta il riepilogo dello strumento (testo), gli avvisi importanti e se l'offerta è arrivata in privato. Costi e margini solo a chi li ha chiesti: non scriverli mai nel gruppo, lì dì solo che l'offerta è in privato.
 - Rispondi breve, testo semplice senza Markdown. Dopo aver registrato qualcosa, riassumi cosa hai salvato."""
@@ -116,7 +121,7 @@ chat = [
     node('Trascrivi', '@n8n/n8n-nodes-langchain.openAi', 1.8, [800, 760], {'resource': 'audio', 'operation': 'transcribe', 'options': {'language': 'it'}},
          {'openAiApi': {'id': '', 'name': 'OpenAI'}}),
     node('Assistente', '@n8n/n8n-nodes-langchain.agent', 1.7, [900, 620], {'promptType': 'define',
-         'text': "={{ $json.text ? '[vocale] ' + $json.text : ($('Telegram Trigger').item.json.message.text || '(messaggio senza testo: chiedi di scriverlo a parole o con un vocale)') }}",
+         'text': "={{ $json.text ? '[vocale] ' + $json.text : ((" + MSG + ".text || " + MSG + ".caption || '') + " + ALLEGATO + ") || '(messaggio senza testo: chiedi di scriverlo a parole o con un vocale)' }}",
          'options': {'systemMessage': SYSTEM}}),
     send('Rispondi', [1340, 620], "$('Telegram Trigger').item.json.message.chat.id", '$json.output'),
     # Modello: si cambia qui (OpenAI, Anthropic, ...). Il resto del flusso non dipende dal modello.
@@ -162,6 +167,12 @@ chat = [
          + ', referente: ' + fa('referente', 'Referente del cliente, facoltativo', 'string', '')
          + ', quadri_campo: ' + fa('quadri_campo', 'Numero di quadri di campo, facoltativo', 'string', '')
          + ', quadri_generali: ' + fa('quadri_generali', 'Numero di quadri generali, facoltativo', 'string', '')
+         + ', file_id: ' + fa('file_id', 'file_id di un allegato con il layout (DXF o foto), facoltativo', 'string', '')
+         + ', file_nome: ' + fa('file_nome', 'Nome del file allegato, es. impianto.dxf; vuoto per una foto', 'string', '')
+         + " }).filter(([, v]) => v !== '' && v != null))"),
+    tool('carica_layout', [2000, 860], "Mette nel preventivo (id da cerca_commesse o da prepara_preventivo) il layout mandato al bot: DXF o foto, dal file_id dell'allegato. Poi rimanda l'offerta aggiornata in privato.",
+         "Object.fromEntries(Object.entries({ azione: 'layout', telegram_id: " + TID + ', id: ' + fa('id', 'id del preventivo')
+         + ', file_id: ' + fa('file_id', "file_id dell'allegato") + ', file_nome: ' + fa('file_nome', 'Nome del file allegato; vuoto per una foto', 'string', '')
          + " }).filter(([, v]) => v !== '' && v != null))"),
     tool('invia_offerta', [1880, 860], "Manda nella chat privata di chi scrive l'offerta PowerPoint di un preventivo dell'archivio, così com'è salvato (id da cerca_commesse).",
          "{ azione: 'offerta', telegram_id: " + TID + ', id: ' + fa('id', 'id del preventivo') + ' }'),
@@ -188,7 +199,7 @@ chat_conn = {
     'Modello': {'ai_languageModel': [[{'node': 'Assistente', 'type': 'ai_languageModel', 'index': 0}]]},
     'Memoria': {'ai_memory': [[{'node': 'Assistente', 'type': 'ai_memory', 'index': 0}]]},
     **{t: {'ai_tool': [[{'node': 'Assistente', 'type': 'ai_tool', 'index': 0}]]}
-       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account', 'prepara_preventivo', 'invia_offerta']},
+       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account', 'prepara_preventivo', 'invia_offerta', 'carica_layout']},
 }
 
 # ---------- Flusso 2: avvisi e riepilogo ----------

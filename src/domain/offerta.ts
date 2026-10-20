@@ -136,7 +136,11 @@ export const compilaPptx = async (modello: ArrayBuffer, D: DatiOfferta, layout?:
 export const compilaPptxBytes = async (modello: ArrayBuffer | Uint8Array, D: DatiOfferta, layout?: Layout) =>
   (await compila(modello, D, layout)).generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
 
-type Layout = { png: Uint8Array; w: number; h: number };
+// Immagine del layout: PNG (disegno del DXF o immagine caricata nell'app) o JPG (foto mandata al bot).
+type Layout = { img: Uint8Array; w: number; h: number; ext?: 'png' | 'jpeg' };
+/** Layout salvato nel preventivo (data URL in prev.offerta.layout), pronto per il PowerPoint; undefined se non c'e'. */
+export const layoutImg = (O: any): Layout | undefined =>
+  O.layout ? { img: dataUrlBytes(O.layout), w: O.layoutW, h: O.layoutH, ext: /^data:image\/jpe?g/i.test(O.layout) ? 'jpeg' : 'png' } : undefined;
 async function compila(modello: ArrayBuffer | Uint8Array, D: DatiOfferta, layout?: Layout) {
   const zip = await JSZip.loadAsync(modello);
   const slides = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n));
@@ -163,9 +167,9 @@ async function compila(modello: ArrayBuffer | Uint8Array, D: DatiOfferta, layout
       const relsN = n.replace('slides/', 'slides/_rels/') + '.rels', rels = await zip.file(relsN)!.async('string');
       const rel = new RegExp(`<Relationship\\b[^>]*\\bId="${reEsc(rid)}"[^>]*/>`).exec(rels)?.[0];
       if (rel) {
-        // File nuovo in .png: l'immagine del modello potrebbe servire anche altrove o avere un altro formato.
-        const media = `layout_${n.match(/slide(\d+)/)![1]}.png`;
-        zip.file('ppt/media/' + media, layout.png);
+        // File nuovo: l'immagine del modello potrebbe servire anche altrove o avere un altro formato.
+        const media = `layout_${n.match(/slide(\d+)/)![1]}.${layout.ext || 'png'}`;
+        zip.file('ppt/media/' + media, layout.img);
         zip.file(relsN, rels.replace(rel, rel.replace(/Target="[^"]*"/, `Target="../media/${media}"`)));
         const o = /<a:off x="(\d+)" y="(\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/.exec(pic)!;
         const [bx, by, bw, bh] = [+o[1], +o[2], +o[3], +o[4]], ar = layout.w / layout.h;
@@ -178,9 +182,10 @@ async function compila(modello: ArrayBuffer | Uint8Array, D: DatiOfferta, layout
     x = tokens(x, D.campi);
     if (x !== orig) zip.file(n, x);
   }
-  // Il tipo .png deve essere dichiarato (di solito c'e' gia').
+  // Il tipo dell'immagine deve essere dichiarato (il .png di solito c'e' gia').
+  const ext = layout?.ext || 'png';
   const ct = await zip.file('[Content_Types].xml')!.async('string');
-  if (!/Extension="png"/i.test(ct)) zip.file('[Content_Types].xml', ct.replace(/(<Types[^>]*>)/, '$1<Default Extension="png" ContentType="image/png"/>'));
+  if (!new RegExp(`Extension="${ext}"`, 'i').test(ct)) zip.file('[Content_Types].xml', ct.replace(/(<Types[^>]*>)/, `$1<Default Extension="${ext}" ContentType="image/${ext}"/>`));
   return zip;
 }
 

@@ -4,7 +4,7 @@ import { DateInp, Fold, Inp, TabTools } from '../components/ui';
 import { eur, fP } from '../domain/format';
 import { disegna, immagineInPng, leggiDxf } from '../domain/dxf';
 import { fDate, fN, fileName, download } from '../domain/format';
-import { GARANZIE0, INCLUSI0, PROGETTO, compilaPptx, dataUrlBytes, datiOfferta, offCfg, offPrev } from '../domain/offerta';
+import { GARANZIE0, INCLUSI0, PROGETTO, compilaPptx, datiOfferta, layoutImg, offCfg, offPrev } from '../domain/offerta';
 import { buildMont } from '../domain/plan';
 import { R, S, commit, save } from '../store/state';
 import { archPatch, archSave, isDirty, toast } from '../store/actions';
@@ -43,8 +43,7 @@ export function Invia() {
     setBusy(true);
     try {
       const r = await fetch(MODELLO); if (!r.ok) throw new Error(`modello non trovato (${r.status})`);
-      const lay = O.layout ? { png: dataUrlBytes(O.layout), w: O.layoutW, h: O.layoutH } : undefined;
-      const blob = await compilaPptx(await r.arrayBuffer(), D, lay);
+      const blob = await compilaPptx(await r.arrayBuffer(), D, layoutImg(O));
       download(`Offerta_${P.num ? fileName(P.num) + '_' : ''}${fileName(P.cliente || P._nome || 'cliente')}${O.rev && O.rev !== '0' ? '_rev' + fileName(O.rev) : ''}.pptx`, blob);
     } catch (err) { toast('Offerta non generata: ' + (err as Error).message); }
     setBusy(false);
