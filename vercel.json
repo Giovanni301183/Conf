@@ -1,5 +1,6 @@
 {
   "functions": {
-    "api/agenda.ts": { "includeFiles": "public/offerta/modello-offerta.pptx" }
+    "api/agenda.ts": { "includeFiles": "public/offerta/modello-offerta.pptx" },
+    "api/modulo.ts": { "includeFiles": "public/offerta/modello-offerta.pptx" }
   }
 }

@@ -2,6 +2,7 @@
 // n8n chiama POST /api/agenda con l'intestazione x-agenda-secret (variabile AGENDA_SECRET su Vercel) e un JSON
 //   { azione, telegram_id, ...campi }
 // Azioni: collega, chi_sono, commesse, colleghi, agenda, crea, aggiorna, prendi, risolvi, elimina (per un collega abbinato);
+//         modulo (pulsante in chat privata che apre il modulo del preventivo, pagina modulo.html: vedi modulo.ts);
 //         preventivo, offerta, layout (preventivo creato o cambiato da Telegram e offerta PowerPoint in chat privata: vedi _preventivo.ts);
 //         riepilogo, annuncio (del sistema: riepilogo del mattino e avviso nel gruppo di una voce nuova).
 // Regole come nell'app: crea chiunque; modifica ed elimina l'autore o un amministratore; chi ha la voce assegnata la segna fatta;
@@ -127,7 +128,25 @@ async function contesto(db: Db): Promise<Ctx> {
 }
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-export async function esegui(db: Db, b: any, adesso = new Date()): Promise<Record<string, unknown>> {
+/** Manda in chat privata il pulsante che apre il modulo del preventivo dentro Telegram (mini app). origine = indirizzo dell'app. */
+async function apriModulo(b: any, chat: number, origine: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return fail('Sul server manca TELEGRAM_BOT_TOKEN: non posso mandare il modulo.');
+  const q = new URLSearchParams(), cliente = String(b.cliente ?? '').trim().slice(0, 120), id = String(b.id ?? '').trim();
+  if (cliente) q.set('cliente', cliente);
+  if (id) q.set('id', id);
+  // L'anteprima Vercel e' protetta: il link porta il codice di bypass, che lascia anche il cookie per la pagina e le sue chiamate.
+  const by = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  if (process.env.VERCEL_ENV === 'preview' && by) { q.set('x-vercel-protection-bypass', by); q.set('x-vercel-set-bypass-cookie', 'samesitenone'); }
+  const testo = id ? '📝 Apri il modulo per correggere il preventivo, poi premi Anteprima e Crea e invia.'
+    : `📝 Preventivo${cliente ? ' per ' + cliente : ''}: compila il modulo, controlla l'anteprima e premi Crea e invia.`;
+  const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chat_id: chat, text: testo, reply_markup: { inline_keyboard: [[{ text: '📝 Compila preventivo', web_app: { url: `${origine}/modulo.html?${q}` } }]] } }) });
+  if (!r.ok) return fail(r.status === 403 ? 'Non posso scriverti in privato: apri la chat con il bot e premi Avvia, poi riprova.' : 'Telegram non ha accettato il messaggio con il modulo.');
+  return { ok: true, testo: 'Ti ho mandato in privato il pulsante «Compila preventivo».' };
+}
+
+export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''): Promise<Record<string, unknown>> {
   const oggi = oggiISO(adesso), az = String(b.azione || '');
 
   // --- Azioni del sistema (senza utente) ---
@@ -170,6 +189,7 @@ export async function esegui(db: Db, b: any, adesso = new Date()): Promise<Recor
 
   if (az === 'chi_sono') return { ok: true, email: io.email, nome: io.nome, ruolo: io.ruolo, oggi, giorno_settimana: giornoIt(oggi) };
 
+  if (az === 'modulo') return apriModulo(b, tid, origine);
   if (az === 'preventivo' || az === 'offerta' || az === 'layout') return preventivoBot(db, b, io.email, tid, oggi);
 
   if (az === 'colleghi') {
@@ -245,5 +265,5 @@ export async function POST(req: Request) {
   if (!url || !key) return json(500, { ok: false, errore: 'Sul server manca SUPABASE_SERVICE_ROLE_KEY.' });
   const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   const b = await req.json().catch(() => ({}));
-  try { return json(200, await esegui(db, b)); } catch (e) { return json(200, fail((e as Error).message)); }
+  try { return json(200, await esegui(db, b, new Date(), new URL(req.url).origin)); } catch (e) { return json(200, fail((e as Error).message)); }
 }

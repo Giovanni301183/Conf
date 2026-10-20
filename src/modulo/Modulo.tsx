@@ -1,0 +1,224 @@
+// Modulo del preventivo dentro Telegram: l'operatore scrive i dati, guarda l'anteprima (calcolo e testi dell'offerta) e solo dopo
+// crea il preventivo e riceve il PowerPoint in chat. Ogni modifica annulla l'anteprima: si invia sempre quello che si e' visto.
+// Il server (api/modulo.ts) riconosce il collega dai dati firmati di Telegram e fa calcolo e offerta come l'app.
+import { Fragment, useEffect, useState } from 'react';
+import { disegna, leggiDxf } from '../domain/dxf';
+import { eur, fL, fN } from '../domain/format';
+
+const tg: any = (window as any).Telegram?.WebApp;
+const parametri = new URLSearchParams(location.search);
+
+type Riga = { n: string; taglia: string; tipo: string; prof: string; asse: string; omega: string; lFond: number; lCusc: number };
+type Layout = { url: string; w: number; h: number; nome: string; dxf: Record<string, number> | null };
+type Campi = {
+  cliente: string; rif: string; localita: string; referente: string; rev: string; wp: string; modulo: string; righe: Riga[];
+  quadri_campo: string; quadri_generali: string; margine: string; margini: Record<string, string>;
+  trasporto: string; posa: string; pieno: string; layout: Layout | null | false;
+};
+const rigaNuova = (taglia = '36'): Riga => ({ n: '', taglia, tipo: 'Agrivoltaico', prof: 'IPE 140', asse: '2,5', omega: '2,0', lFond: 3, lCusc: 2.3 });
+const vuoti = (): Campi => ({ cliente: parametri.get('cliente') || '', rif: '', localita: '', referente: '', rev: '0', wp: '600', modulo: '', righe: [rigaNuova()],
+  quadri_campo: '', quadri_generali: '', margine: '', margini: {}, trasporto: '', posa: '', pieno: '', layout: null });
+
+async function chiama(azione: string, campi: unknown = {}) {
+  const r = await fetch('/api/modulo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ initData: tg?.initData || '', azione, campi }) });
+  return r.json().catch(() => ({ ok: false, errore: `Errore del server (${r.status})` }));
+}
+
+// Foto: ridotta nel telefono e salvata in JPG (un PNG di una foto peserebbe troppo). Il DXF si disegna come nell'app, scritte comprese.
+function fotoInJpg(f: File, max = 1800): Promise<Layout> {
+  return new Promise((ok, ko) => {
+    const img = new Image(), u = URL.createObjectURL(f);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height)), W = Math.round(img.width * k), H = Math.round(img.height * k);
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const g = cv.getContext('2d')!; g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.drawImage(img, 0, 0, W, H);
+      URL.revokeObjectURL(u); ok({ url: cv.toDataURL('image/jpeg', 0.85), w: W, h: H, nome: f.name, dxf: null });
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); ko(new Error('immagine non leggibile')); };
+    img.src = u;
+  });
+}
+
+function Seg({ v, opts, set }: { v: string; opts: readonly (readonly [string, string])[]; set: (x: string) => void }) {
+  return <div className="seg">{opts.map(([k, l]) => <button key={k} type="button" className={v === k ? 'on' : ''} onClick={() => set(k)}>{l}</button>)}</div>;
+}
+function Campo({ label, children, nota }: { label: string; children: React.ReactNode; nota?: string }) {
+  return <label className="campo"><span>{label}</span>{children}{nota ? <small>{nota}</small> : null}</label>;
+}
+
+export function Modulo() {
+  const [f, setF] = useState<Campi>(vuoti);
+  const [cfg, setCfg] = useState<any>(null);
+  const [errore, setErrore] = useState('');
+  const [prev, setPrev] = useState<any>(null);       // anteprima valida per i campi attuali
+  const [busy, setBusy] = useState('');
+  const [fatto, setFatto] = useState<any>(null);     // esito dell'ultimo "Crea e invia": da li' in poi si corregge lo stesso preventivo
+  const [esito, setEsito] = useState(false);
+  const [catAperte, setCatAperte] = useState(false);
+  const id = fatto?.id || parametri.get('id') || '';
+
+  useEffect(() => {
+    tg?.ready(); tg?.expand();
+    if (!tg?.initData) { setErrore('Questo modulo si apre da Telegram, con il pulsante «Compila preventivo» che manda il bot.'); return; }
+    chiama('dati', { id }).then(r => {
+      if (!r.ok) { setErrore(r.errore); return; }
+      setCfg(r);
+      if (r.prev) setF({ ...vuoti(), ...r.prev, margini: r.prev.margini || {} });
+      else setF(x => ({ ...x, righe: [rigaNuova(r.taglie.includes('36') ? '36' : r.taglie[0])] }));
+    }).catch(() => setErrore('Server non raggiungibile: riprova tra poco.'));
+  }, []);
+
+  const cambia = (p: Partial<Campi>) => { setF(x => ({ ...x, ...p })); setPrev(null); };
+  const cambiaRiga = (i: number, p: Partial<Riga>) => cambia({ righe: f.righe.map((r, j) => {
+    if (j !== i) return r;
+    const n = { ...r, ...p }, min = cfg?.opzioni.minCusc[n.tipo] ?? 2.3;
+    if (n.lCusc < min) n.lCusc = min;
+    return n;
+  }) });
+
+  async function caricaLayout(file: File) {
+    try {
+      if (/\.dxf$/i.test(file.name)) {
+        const L = leggiDxf(await file.text()), img = disegna(L);
+        const dxf = Object.keys(L.tracker).length ? L.tracker : null;
+        cambia({ layout: { url: img.url, w: img.w, h: img.h, nome: file.name, dxf } });
+      } else cambia({ layout: await fotoInJpg(file) });
+    } catch (e) { tg?.showAlert?.('File non leggibile: ' + (e as Error).message); }
+  }
+  const usaDxf = () => {
+    const T = f.layout && f.layout.dxf; if (!T) return;
+    cambia({ righe: Object.entries(T).filter(([t]) => cfg.taglie.includes(t)).map(([t, n]) => ({ ...rigaNuova(t), n: String(n) })) });
+  };
+
+  async function esegui(azione: 'anteprima' | 'crea') {
+    setBusy(azione);
+    const r = await chiama(azione, { ...f, id: id || undefined }).catch(() => ({ ok: false, errore: 'Server non raggiungibile.' }));
+    setBusy('');
+    if (!r.ok) { tg?.HapticFeedback?.notificationOccurred('error'); tg?.showAlert ? tg.showAlert(r.errore) : alert(r.errore); return; }
+    if (azione === 'anteprima') { setPrev(r); setTimeout(() => document.getElementById('anteprima')?.scrollIntoView({ behavior: 'smooth' }), 50); }
+    else { tg?.HapticFeedback?.notificationOccurred('success'); setFatto(r); setEsito(true); setPrev(null); window.scrollTo({ top: 0 }); }
+  }
+
+  if (errore) return <main><h1>Compila preventivo</h1><p className="err">{errore}</p></main>;
+  if (!cfg) return <main><p className="muted">Carico…</p></main>;
+  if (fatto && esito) return (
+    <main>
+      <h1>✅ Preventivo N° {fatto.numero}</h1>
+      <p>{fatto.offerta === 'inviata nella chat privata con il bot' ? "L'offerta PowerPoint è nella chat con il bot: da lì la inoltri al cliente." : 'Offerta ' + fatto.offerta}</p>
+      <pre className="riep">{fatto.testo}</pre>
+      <p className="muted">Il preventivo è nell'archivio dell'app. Puoi correggerlo qui e rimandare l'offerta.</p>
+      <div className="azioni"><button className="sec" onClick={() => setEsito(false)}>Correggi</button><button onClick={() => tg?.close()}>Chiudi</button></div>
+    </main>
+  );
+
+  const L = f.layout || null, o = cfg.opzioni;
+  return (
+    <main>
+      <h1>{id ? `Preventivo N° ${fatto?.numero || cfg.numero || '–'}` : 'Nuovo preventivo'}</h1>
+
+      <section>
+        <h2>Commessa</h2>
+        <Campo label="Cliente *"><input value={f.cliente} onChange={e => cambia({ cliente: e.target.value })} /></Campo>
+        <Campo label="Nome impianto" nota="Titolo della copertina e della slide Layout: breve. Vuoto = nome del cliente.">
+          <input value={f.rif} maxLength={60} onChange={e => cambia({ rif: e.target.value })} placeholder={f.cliente} /></Campo>
+        <div className="due">
+          <Campo label="Località"><input value={f.localita} onChange={e => cambia({ localita: e.target.value })} /></Campo>
+          <Campo label="Referente"><input value={f.referente} onChange={e => cambia({ referente: e.target.value })} /></Campo>
+        </div>
+        <div className="due">
+          <Campo label="Pannello (W)"><input inputMode="numeric" value={f.wp} onChange={e => cambia({ wp: e.target.value })} /></Campo>
+          <Campo label="Modello pannello"><input value={f.modulo} onChange={e => cambia({ modulo: e.target.value })} /></Campo>
+        </div>
+      </section>
+
+      <section>
+        <h2>Tracker</h2>
+        {f.righe.map((r, i) => {
+          const lc = o.lCusc.filter((x: number) => x >= o.minCusc[r.tipo] - 1e-9);
+          return (
+            <div className="riga" key={i}>
+              <div className="rtesta"><b>Riga {i + 1}</b>{f.righe.length > 1 ? <button type="button" className="x" onClick={() => cambia({ righe: f.righe.filter((_, j) => j !== i) })}>Togli</button> : null}</div>
+              <div className="due">
+                <Campo label="N° tracker"><input inputMode="numeric" value={r.n} onChange={e => cambiaRiga(i, { n: e.target.value })} /></Campo>
+                <Campo label="Taglia (moduli)"><select value={r.taglia} onChange={e => cambiaRiga(i, { taglia: e.target.value })}>{cfg.taglie.map((t: string) => <option key={t}>{t}</option>)}</select></Campo>
+              </div>
+              <Campo label="Tipo"><Seg v={r.tipo} opts={[['Agrivoltaico', 'Agrivoltaico'], ['Basso', 'Basso']]} set={v => cambiaRiga(i, { tipo: v })} /></Campo>
+              <div className="due">
+                <Campo label="Profilo pilastro"><Seg v={r.prof} opts={o.prof} set={v => cambiaRiga(i, { prof: v })} /></Campo>
+                <Campo label="Asse"><Seg v={r.asse} opts={o.asse} set={v => cambiaRiga(i, { asse: v })} /></Campo>
+              </div>
+              <div className="due">
+                <Campo label="Omega"><Seg v={r.omega} opts={o.omega} set={v => cambiaRiga(i, { omega: v })} /></Campo>
+                {r.tipo === 'Basso' ? <Campo label="Fondazione"><span className="muted fisso">pilastro unico</span></Campo>
+                  : <Campo label="Fondazione"><select value={r.lFond} onChange={e => cambiaRiga(i, { lFond: +e.target.value })}>{o.lFond.map((x: number) => <option key={x} value={x}>{fL(x)} m</option>)}</select></Campo>}
+              </div>
+              <Campo label="Pilastro cuscinetto" nota={`Motore = cuscinetto − 0,08 m (${fL(r.lCusc - 0.08)} m)`}>
+                <select value={r.lCusc} onChange={e => cambiaRiga(i, { lCusc: +e.target.value })}>{lc.map((x: number) => <option key={x} value={x}>{fL(x)} m</option>)}</select></Campo>
+            </div>
+          );
+        })}
+        <button type="button" className="sec" onClick={() => cambia({ righe: [...f.righe, rigaNuova(f.righe.at(-1)?.taglia)] })}>+ Aggiungi riga</button>
+        <div className="due">
+          <Campo label="Quadri di campo"><input inputMode="numeric" value={f.quadri_campo} onChange={e => cambia({ quadri_campo: e.target.value })} placeholder="0" /></Campo>
+          <Campo label="Quadri generali"><input inputMode="numeric" value={f.quadri_generali} onChange={e => cambia({ quadri_generali: e.target.value })} placeholder="0" /></Campo>
+        </div>
+      </section>
+
+      <section>
+        <h2>Margini</h2>
+        <Campo label="Margine generale (%) *" nota="Margine sul prezzo: costo 100 €, margine 20 % → prezzo 125 €."><input inputMode="decimal" value={f.margine} onChange={e => cambia({ margine: e.target.value })} /></Campo>
+        <button type="button" className="link" onClick={() => setCatAperte(!catAperte)}>{catAperte ? '▾' : '▸'} Margini per categoria (zincatura, struttura…)</button>
+        {catAperte ? <div className="due">{cfg.categorie.map((c: string) => (
+          <Campo key={c} label={c.charAt(0) + c.slice(1).toLowerCase()}><input inputMode="decimal" value={f.margini[c] ?? ''} placeholder={c === 'LAVORAZIONE' || c === 'ZINCATURA' ? 'come categoria' : 'generale'}
+            onChange={e => cambia({ margini: { ...f.margini, [c]: e.target.value } })} /></Campo>))}</div> : null}
+      </section>
+
+      <section>
+        <h2>Prezzi nell'offerta</h2>
+        <div className="due">
+          <Campo label="Trasporto (€)" nota="0 = escluso"><input inputMode="decimal" value={f.trasporto} onChange={e => cambia({ trasporto: e.target.value })} placeholder="escluso" /></Campo>
+          <Campo label="Posa in opera (€)" nota="0 = non inclusa"><input inputMode="decimal" value={f.posa} onChange={e => cambia({ posa: e.target.value })} placeholder="non inclusa" /></Campo>
+        </div>
+        <div className="due">
+          <Campo label="Prezzo pieno barrato (€)" nota="Facoltativo"><input inputMode="decimal" value={f.pieno} onChange={e => cambia({ pieno: e.target.value })} /></Campo>
+          <Campo label="Revisione"><input value={f.rev} onChange={e => cambia({ rev: e.target.value })} /></Campo>
+        </div>
+      </section>
+
+      <section>
+        <h2>Layout</h2>
+        {L ? <>
+          <img className="lay" src={L.url} alt="Layout" />
+          <p className="muted">{L.nome}{L.dxf ? ' · nel DXF: ' + Object.entries(L.dxf).map(([t, n]) => `${n}×${t}`).join(', ') : ''}</p>
+          <div className="azioni">
+            {L.dxf ? <button type="button" className="sec" onClick={usaDxf}>Usa i tracker del DXF</button> : null}
+            <button type="button" className="sec" onClick={() => cambia({ layout: false })}>Togli</button>
+          </div>
+        </> : <p className="muted">Nessun layout: nella slide resterà l'immagine di esempio.</p>}
+        <label className="file">{L ? 'Cambia file' : 'Carica DXF o foto'}<input type="file" accept=".dxf,image/*" onChange={e => { const x = e.target.files?.[0]; if (x) caricaLayout(x); e.target.value = ''; }} /></label>
+      </section>
+
+      {prev ? (
+        <section id="anteprima" className="prev">
+          <h2>Anteprima</h2>
+          <pre className="riep">{prev.testo}</pre>
+          <h3>Nell'offerta</h3>
+          <dl>
+            <dt>Titolo</dt><dd>{prev.offerta.titolo || '–'}</dd>
+            <dt>Potenza</dt><dd>{prev.offerta.potenza}</dd>
+            <dt>Tracker</dt><dd>{prev.offerta.tracker.join(' · ')}</dd>
+            {prev.offerta.prezzi.map((p: any) => <Fragment key={p.label}><dt>{p.label}</dt><dd>{p.strike ? <s>{p.strike}</s> : null} {p.value}{p.nota ? <small> · {p.nota}</small> : null}</dd></Fragment>)}
+            <dt>Layout</dt><dd>{prev.offerta.layout || 'immagine di esempio'}</dd>
+          </dl>
+          {prev.avvisi.length ? <div className="avv">{prev.avvisi.map((a: string, i: number) => <p key={i}>⚠️ {a}</p>)}</div> : null}
+          <p className="muted">Costo {eur(prev.costo)} · €/Wp {prev.kwp ? fN(prev.prezzo / (prev.kwp * 1000), 4) : '–'}</p>
+        </section>
+      ) : null}
+
+      <div className="barra">
+        {prev ? <button disabled={!!busy} onClick={() => esegui('crea')}>{busy === 'crea' ? "Creo l'offerta…" : id ? "Salva e rimanda l'offerta" : 'Crea e invia'}</button>
+          : <button disabled={!!busy} onClick={() => esegui('anteprima')}>{busy === 'anteprima' ? 'Calcolo…' : 'Anteprima'}</button>}
+      </div>
+    </main>
+  );
+}

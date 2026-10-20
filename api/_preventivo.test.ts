@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applica, preventivoBot } from './_preventivo';
+import { createHmac } from 'node:crypto';
+import { anteprima, applica, preventivoBot } from './_preventivo';
+import { verificaInitData } from './modulo';
 import { dimensioni, rasterizza } from './_layout';
 import { leggiDxf } from '../src/domain/dxf';
 import JSZip from 'jszip';
@@ -106,5 +108,46 @@ describe('layout mandato al bot', () => {
     const { db } = finto();
     expect(await preventivoBot(db, { azione: 'layout', file_id: 'F' }, 'a@x', 1, '2026-10-20')).toMatchObject({ ok: false, errore: expect.stringMatching(/id del preventivo/) });
     expect(await preventivoBot(db, { azione: 'layout', id: 'pvecchio' }, 'a@x', 1, '2026-10-20')).toMatchObject({ ok: false, errore: expect.stringMatching(/Manca il file/) });
+  });
+});
+
+describe('dati tecnici e riferimento', () => {
+  it('profilo, asse, omega, fondazione e cuscinetto vanno nella riga e nel calcolo', () => {
+    const d = defaultData(), P: any = newPrev(), Q: any = newPrev();
+    expect(applica(P, { righe: [{ n: 4, taglia: 36, prof: 'IPEA', asse: '3', omega: 1.8, lFond: '3,2', lCusc: 2.5 }] }, d)).toBeNull();
+    expect(P.righe[0]).toMatchObject({ prof: 'IPEA 140', asse: '3,0', omega: '1,8', lFond: 3.2, lCusc: 2.5 });
+    expect(applica(Q, { righe: [{ n: 4, taglia: 36 }] }, d)).toBeNull();
+    expect(Q.righe[0]).toMatchObject({ prof: 'IPE 140', asse: '2,5', omega: '2,0' });
+    expect(applica(P, { righe: [{ n: 1, taglia: 36, omega: 1.5 }] }, d)).toMatch(/omega/);
+    expect(applica(P, { righe: [{ n: 1, taglia: 36, tipo: 'basso', lCusc: 2.5 }] }, d)).toMatch(/Cuscinetto/);
+  });
+  it('il riferimento è un titolo breve, non un posto per le note', () => {
+    const P: any = newPrev();
+    expect(applica(P, { rif: 'Note: IPE; asse 120x120x2,5 mm; omega 1,8 mm; fondazione 3 m; pannelli bifacciali da 730 W' }, defaultData())).toMatch(/nome breve/);
+    expect(applica(P, { rif: 'Impianto Foggia' }, defaultData())).toBeNull();
+    expect(P.rif).toBe('Impianto Foggia');
+  });
+});
+
+describe('modulo in Telegram', () => {
+  it('anteprima: calcolo e testi dell\'offerta senza salvare', async () => {
+    const { db, upsert } = finto();
+    const r: any = await anteprima(db, { cliente: 'Rossi', righe: [{ n: 5, taglia: 36 }], margine: 20, trasporto: 3000 }, '2026-10-20');
+    expect(r.ok).toBe(true);
+    expect(upsert).not.toHaveBeenCalled();
+    expect(r.offerta.titolo).toBe('Rossi');
+    expect(r.offerta.prezzi.find((p: any) => p.label === 'Trasporto').value).toBe('€ 3.000,00 + IVA');
+    expect(r.prezzo).toBeCloseTo(r.costo / 0.8, 6);
+  });
+  it('la firma di Telegram identifica chi apre il modulo', () => {
+    const token = '123:abc', user = JSON.stringify({ id: 42, first_name: 'Gio' }), auth = String(Math.floor(Date.now() / 1000));
+    const q = new URLSearchParams({ auth_date: auth, query_id: 'Q', user });
+    const testo = [...q].map(([k, v]) => `${k}=${v}`).sort().join('\n');
+    const chiave = createHmac('sha256', 'WebAppData').update(token).digest();
+    q.set('hash', createHmac('sha256', chiave).update(testo).digest('hex'));
+    expect(verificaInitData(q.toString(), token)?.id).toBe(42);
+    expect(verificaInitData(q.toString(), '123:altro')).toBeNull();
+    expect(verificaInitData(q.toString().replace('Gio', 'Eva'), token)).toBeNull();
+    expect(verificaInitData(q.toString(), token, Date.now() + 2 * 86400e3)).toBeNull();
   });
 });

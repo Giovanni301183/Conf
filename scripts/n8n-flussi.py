@@ -75,7 +75,7 @@ SYSTEM = """=Sei l'assistente dell'agenda di Terranova (strutture tracker per im
 Oggi è {{ $now.setZone('Europe/Rome').setLocale('it').toFormat('cccc d LLLL yyyy') }} ({{ $now.setZone('Europe/Rome').toFormat('yyyy-MM-dd') }}), ore {{ $now.setZone('Europe/Rome').toFormat('HH:mm') }}.
 
 Cosa fai: registri urgenze, cose da fare, promemoria, scadenze e appuntamenti; leggi l'agenda; segni le voci fatte; le assegni ai colleghi.
-Fai anche preventivi: li crei o li modifichi con prepara_preventivo e mandi l'offerta PowerPoint in chat privata (da inoltrare al cliente).
+Fai anche preventivi: per uno nuovo mandi il modulo da compilare (modulo_preventivo); l'offerta PowerPoint arriva in chat privata, da inoltrare al cliente.
 
 Regole:
 - Se il messaggio segnala un problema o dice "urgente", crea una voce di genere "urgenza" (per oggi, salvo data diversa). Titolo breve e chiaro (es. "Mancano bulloni in cantiere: preparare il materiale"); i dettagli vanno nella nota.
@@ -87,9 +87,10 @@ Regole:
 - Se uno strumento risponde ok:false, spiega il problema in parole semplici. Se l'account non è collegato, spiega come collegarlo.
 - I messaggi che iniziano con [vocale] sono la trascrizione di un messaggio vocale: possono contenere errori di trascrizione (nomi, numeri). Prima di salvare, ripeti in una riga cosa hai capito; se un nome di commessa o un numero è dubbio, chiedi conferma.
 - Urgenze e voci assegnate vengono annunciate da sole nel gruppo: non devi farlo tu.
-- Comandi del menu del bot: /oggi = agenda di oggi; /settimana = prossimi 7 giorni; /mie = solo le mie voci; /urgente <testo> = registra un'urgenza; /aiuto o /start = spiega in poche righe cosa puoi fare e come collegare l'account (/collega CODICE, codice dal pulsante Telegram nell'app).
-- Preventivi: servono il cliente e le righe tracker (numero, taglia in moduli tra 12, 18, 20, 22, 36, 40, tipo agrivoltaico o basso). Facoltativi: riferimento o nome impianto, località, referente, potenza del modulo in W (di solito 600), modello del modulo, margine generale in %, margini per categoria (STRUTTURA, ZINCATURA, ELETTROMECCANICO, ELETTRONICO, BULLONERIA, VOCI EXTRA, LAVORAZIONE), trasporto e posa in opera in € (prezzi che vanno tali e quali nell'offerta), quadri di campo e quadri generali. Se manca il margine chiedilo: senza margine il prezzo è uguale al costo. Prima di creare ripeti in una riga cosa hai capito e chiedi conferma.
-- Per cambiare un preventivo già fatto (es. "metti il margine al 20 %") usa prepara_preventivo con il suo id e solo i campi da cambiare. Per rimandare l'offerta di un preventivo dell'archivio così com'è usa invia_offerta (id da cerca_commesse).
+- Comandi del menu del bot: /oggi = agenda di oggi; /settimana = prossimi 7 giorni; /mie = solo le mie voci; /urgente <testo> = registra un'urgenza; /preventivo <cliente> = modulo per un preventivo nuovo; /aiuto o /start = spiega in poche righe cosa puoi fare e come collegare l'account (/collega CODICE, codice dal pulsante Telegram nell'app).
+- Preventivo nuovo ("preventivo per Rossi Srl", /preventivo Rossi): usa SEMPRE modulo_preventivo con il nome del cliente detto dall'operatore, senza fare domande sui dati. L'operatore compila il modulo, controlla l'anteprima e lo invia da lì. Rispondi solo che il pulsante «Compila preventivo» è in chat privata.
+- Per correggere un preventivo già fatto con il modulo usa modulo_preventivo con il suo id (da cerca_commesse). Solo per una modifica piccola e chiara (es. "metti il margine al 20 %" sul preventivo 2026/012) usa prepara_preventivo con l'id e i soli campi da cambiare, dopo aver ripetuto la modifica e avuto conferma. Per rimandare l'offerta così com'è usa invia_offerta.
+- Il riferimento (rif) è solo il nome breve dell'impianto, il titolo della copertina: mai note o dati tecnici. Profilo (IPE/IPEA), asse (2,5/3,0 mm), omega (2,0/1,8 mm), fondazione e cuscinetto in metri vanno nei campi delle righe.
 - Layout: se un messaggio ha [allegato: …] è un file o una foto mandati al bot. Se è il layout dell'impianto, mettilo nel preventivo giusto con carica_layout (file_id e nome dall'allegato; se il preventivo non è chiaro chiedi quale, cercandolo con cerca_commesse). Per un preventivo nuovo passa file_id e file_nome a prepara_preventivo: da un DXF i tracker si contano da soli, falli confermare. Il DXF va mandato come file, non come foto. Nell'immagine fatta dal DXF le scritte non compaiono. L'allegato resta valido anche nei messaggi dopo.
 - Il listino non si modifica da qui: se te lo chiedono, rispondi che si cambia nell'app (scheda Listino).
 - Dopo un preventivo riporta il riepilogo dello strumento (testo), gli avvisi importanti e se l'offerta è arrivata in privato. Costi e margini solo a chi li ha chiesti: non scriverli mai nel gruppo, lì dì solo che l'offerta è in privato.
@@ -155,8 +156,8 @@ chat = [
          "Object.fromEntries(Object.entries({ azione: 'preventivo', telegram_id: " + TID
          + ', id: ' + fa('id', 'Solo per cambiare un preventivo esistente: il suo id; vuoto per uno nuovo', 'string', '')
          + ', cliente: ' + fa('cliente', 'Nome del cliente (obbligatorio per uno nuovo)', 'string', '')
-         + ', rif: ' + fa('rif', 'Riferimento o nome dell impianto, facoltativo', 'string', '')
-         + ', righe: ' + fa('righe', 'Righe tracker come JSON, es. [{"n":40,"taglia":36,"tipo":"agrivoltaico"},{"n":10,"taglia":20,"tipo":"basso"}]; vuoto se invariate', 'string', '')
+         + ', rif: ' + fa('rif', 'Nome breve dell impianto per la copertina, massimo 60 caratteri, mai note o dati tecnici; facoltativo', 'string', '')
+         + ', righe: ' + fa('righe', 'Righe tracker come JSON, es. [{"n":40,"taglia":36,"tipo":"agrivoltaico","prof":"IPE","asse":2.5,"omega":1.8,"lFond":3,"lCusc":2.3}]; prof, asse, omega, lFond (fondazione m), lCusc (cuscinetto m) facoltativi; vuoto se invariate', 'string', '')
          + ', margine: ' + fa('margine', 'Margine generale in %, es. 18; vuoto se non detto', 'string', '')
          + ', margini: ' + fa('margini', 'Margini per categoria come JSON, es. {"STRUTTURA":25,"ZINCATURA":10}; vuoto se non detti', 'string', '')
          + ', trasporto: ' + fa('trasporto', 'Prezzo del trasporto in euro per l offerta, 0 = escluso; vuoto se non detto', 'string', '')
@@ -170,6 +171,9 @@ chat = [
          + ', file_id: ' + fa('file_id', 'file_id di un allegato con il layout (DXF o foto), facoltativo', 'string', '')
          + ', file_nome: ' + fa('file_nome', 'Nome del file allegato, es. impianto.dxf; vuoto per una foto', 'string', '')
          + " }).filter(([, v]) => v !== '' && v != null))"),
+    tool('modulo_preventivo', [2120, 860], "Manda nella chat privata di chi scrive il pulsante «Compila preventivo», che apre il modulo del preventivo dentro Telegram. Per un preventivo nuovo passa il cliente; per correggerne uno l'id.",
+         "Object.fromEntries(Object.entries({ azione: 'modulo', telegram_id: " + TID + ', cliente: ' + fa('cliente', "Nome dell'azienda cliente detto dall'operatore", 'string', '')
+         + ', id: ' + fa('id', 'id del preventivo da correggere, vuoto per uno nuovo', 'string', '') + " }).filter(([, v]) => v !== '' && v != null))"),
     tool('carica_layout', [2000, 860], "Mette nel preventivo (id da cerca_commesse o da prepara_preventivo) il layout mandato al bot: DXF o foto, dal file_id dell'allegato. Poi rimanda l'offerta aggiornata in privato.",
          "Object.fromEntries(Object.entries({ azione: 'layout', telegram_id: " + TID + ', id: ' + fa('id', 'id del preventivo')
          + ', file_id: ' + fa('file_id', "file_id dell'allegato") + ', file_nome: ' + fa('file_nome', 'Nome del file allegato; vuoto per una foto', 'string', '')
@@ -199,7 +203,7 @@ chat_conn = {
     'Modello': {'ai_languageModel': [[{'node': 'Assistente', 'type': 'ai_languageModel', 'index': 0}]]},
     'Memoria': {'ai_memory': [[{'node': 'Assistente', 'type': 'ai_memory', 'index': 0}]]},
     **{t: {'ai_tool': [[{'node': 'Assistente', 'type': 'ai_tool', 'index': 0}]]}
-       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account', 'prepara_preventivo', 'invia_offerta', 'carica_layout']},
+       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account', 'prepara_preventivo', 'invia_offerta', 'carica_layout', 'modulo_preventivo']},
 }
 
 # ---------- Flusso 2: avvisi e riepilogo ----------
