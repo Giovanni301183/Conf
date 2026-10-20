@@ -16,6 +16,7 @@ import { Montaggio } from './pages/Montaggio';
 import { Accesso } from './pages/Accesso';
 import { Utenti } from './pages/Utenti';
 import { Presenza } from './components/Presenza';
+import { nScadute } from './pages/Calendario';
 import { cloud, isAdmin, logout, setCloudToast } from './store/remote';
 
 const VIEWS: Record<Tab, () => React.ReactNode> = {
@@ -64,7 +65,7 @@ export default function App() {
 
   if (cloud.fase !== 'locale' && cloud.fase !== 'pronto') return <><Accesso />{node}</>;
   const View = VIEWS[S.ui.tab];
-  const dirty = isDirty();
+  const dirty = isDirty(), nSc = cloud.fase === 'pronto' || cloud.fase === 'locale' ? nScadute() : 0;
   return (
     <div className="app">
       {menu && <div className="scrim" onClick={() => setMenu(false)} />}
@@ -79,7 +80,8 @@ export default function App() {
           {GROUPS.filter(([, tabs]) => isAdmin() || !tabs.includes('utenti')).map(([g, tabs]) => (
             <div key={g || 'home'} className="ng">
               {g && <div className="ngt">{g}</div>}
-              {tabs.map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span></button>)}
+              {tabs.map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span>
+                {k === 'archivio' && nSc > 0 && <em className="nbadge" title={`${nSc} voci in agenda scadute`}>{nSc}</em>}</button>)}
             </div>
           ))}
         </nav>

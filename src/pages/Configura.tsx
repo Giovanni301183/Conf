@@ -7,6 +7,7 @@ import { unitCost } from '../domain/compute';
 import { eur, fDate, fL, fN } from '../domain/format';
 import { IMP, MIN_CUSC, OPT_LCUSC, OPT_LFOND, STATI, clone, defRiga, num } from '../domain/model';
 import { R, S, commit, save } from '../store/state';
+import { AgendaPreventivo } from './Calendario';
 
 const done = () => { save(); commit(); };
 
@@ -43,6 +44,7 @@ export function Configura() {
   return (
     <>
       <TabTools />
+      <AgendaPreventivo />
       <Fold id="cf-comm" step={1} title="Commessa" sum={(comm || 'Da compilare') + ' · ' + fDate(P.data)}>{() => (
         <div className="grid">
           <label className="f">N° preventivo<Inp path="prev.num" type="txt" ph="assegnato al salvataggio" /></label>

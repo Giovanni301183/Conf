@@ -1,22 +1,23 @@
 // Calendario e agenda della Home: date ricavate dalle commesse (preventivi vinti) e voci inserite a mano
 // (cose da fare, promemoria, scadenze, appuntamenti), legate o no a un preventivo e assegnabili a un collega.
 // Dalle commesse si prendono solo inizio e fine produzione e inizio montaggio, per non affollare il mese.
+// Dai preventivi inviati senza risposta nasce da solo il richiamo al cliente dopo RICHIAMO giorni.
 import { S, withPrev } from '../store/state';
 import { eStato } from './kpi';
 import { clone, normPrev } from './model';
-import { AUTO, buildGantt, buildLavor, buildMontGantt, dNum, montDrv } from './plan';
+import { AUTO, buildGantt, buildLavor, buildMontGantt, dNum, dToday, montDrv } from './plan';
 
 export type Genere = 'attivita' | 'promemoria' | 'scadenza' | 'appuntamento';
 export interface Scadenza {
   id: string; giorno: string; ora: string | null; genere: Genere; titolo: string; nota: string | null; preventivo_id: string | null;
   assegnata_a: string | null; fatto: boolean; origine: 'app' | 'telegram'; creato_da: string; creato: string;
 }
-export type Tipo = 'prod' | 'prodFine' | 'mont' | 'man';
+export type Tipo = 'prod' | 'prodFine' | 'mont' | 'richiamo' | 'man';
 export interface Voce { key: string; giorno: number; tipo: Tipo; titolo: string; sotto: string; prevId?: string; s?: Scadenza }
 // [etichetta, colore]
 export const TIPI: Record<Tipo, [string, string]> = {
   prod: ['Inizio produzione', 'var(--c-lav)'], prodFine: ['Fine produzione', 'var(--c-mat)'],
-  mont: ['Inizio montaggio', 'var(--c-acq)'], man: ['Voce a mano', 'var(--acc)'],
+  mont: ['Inizio montaggio', 'var(--c-acq)'], richiamo: ['Richiamare il cliente', 'var(--warn)'], man: ['Voce a mano', 'var(--acc)'],
 };
 // Voci a mano: [etichetta, colore]
 export const GENERI: Record<Genere, [string, string]> = {
@@ -29,6 +30,10 @@ export const oraBreve = (s?: Scadenza) => (s?.ora ? s.ora.slice(0, 5) : '');
 /** "Le mie": voci a mano create da me o assegnate a me (le date delle commesse restano per tutti). */
 export const mia = (v: Voce, me: string) => !v.s || v.s.creato_da === me || v.s.assegnata_a === me;
 export const PREAVVISO = 3;   // giorni: "in scadenza" da oggi a oggi + 3
+export const RICHIAMO = 10;   // giorni dall'invio dell'offerta senza risposta
+export const TIENI_FATTE = 30;   // giorni: le voci fatte piu' vecchie spariscono dal calendario (restano nel database)
+/** Voci che "scadono" se non fatte: quelle a mano e i richiami. Le date delle commesse passano e basta. */
+export const daFare = (v: Voce) => v.tipo === 'man' || v.tipo === 'richiamo';
 
 const nomeCommessa = (e: any) => [e.prev?.num ? 'N° ' + e.prev.num : '', e.cliente].filter(Boolean).join(' · ');
 /** Commessa = preventivo vinto con la data di avvio produzione impostata nel Gantt. */
@@ -59,6 +64,13 @@ export function dateCommessa(e: any): Voce[] {
   return v;
 }
 
+/** Preventivo inviato e ancora senza risposta: richiamo RICHIAMO giorni dopo l'invio (o dopo la data del preventivo). */
+export function richiamo(e: any): Voce[] {
+  if (eStato(e) !== 'inviato') return [];
+  const d = dNum(e.prev?.offerta?.inviata) ?? dNum(e.data); if (d == null) return [];
+  return [{ key: e.id + ':richiamo', giorno: d + RICHIAMO, tipo: 'richiamo', titolo: e.nome, sotto: nomeCommessa(e), prevId: e.id }];
+}
+
 export function vociScadenze(sc: Scadenza[], arch: any[]): Voce[] {
   const byId = new Map(arch.map(e => [e.id, e]));
   return sc.flatMap(s => {
@@ -68,16 +80,17 @@ export function vociScadenze(sc: Scadenza[], arch: any[]): Voce[] {
   });
 }
 
-export function voci(arch: any[], sc: Scadenza[]): Voce[] {
-  return [...arch.flatMap(dateCommessa), ...vociScadenze(sc, arch)]
+export function voci(arch: any[], sc: Scadenza[], oggi = dToday()): Voce[] {
+  const recenti = sc.filter(s => !(s.fatto && (dNum(s.giorno) ?? 0) < oggi - TIENI_FATTE));
+  return [...arch.flatMap(dateCommessa), ...arch.flatMap(richiamo), ...vociScadenze(recenti, arch)]
     .sort((a, b) => a.giorno - b.giorno || a.tipo.localeCompare(b.tipo) || (oraBreve(a.s) || '99').localeCompare(oraBreve(b.s) || '99') || a.titolo.localeCompare(b.titolo));
 }
 
-/** Scadute: voci a mano non fatte con data passata. In arrivo: da oggi a oggi + PREAVVISO (le voci fatte no). */
+/** Scadute: voci a mano non fatte e richiami con data passata. In arrivo: da oggi a oggi + PREAVVISO (le voci fatte no). */
 export function allarmi(vv: Voce[], oggi: number) {
-  const aperta = (v: Voce) => v.tipo !== 'man' || !v.s?.fatto;
+  const aperta = (v: Voce) => !v.s?.fatto;
   return {
-    scadute: vv.filter(v => v.tipo === 'man' && aperta(v) && v.giorno < oggi),
+    scadute: vv.filter(v => daFare(v) && aperta(v) && v.giorno < oggi),
     prossime: vv.filter(v => aperta(v) && v.giorno >= oggi && v.giorno <= oggi + PREAVVISO),
   };
 }

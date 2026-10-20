@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { agenda, allarmi, dateCommessa, daPianificare, mia, voci, type Scadenza } from './calendario';
+import { RICHIAMO, agenda, allarmi, dateCommessa, daPianificare, mia, voci, type Scadenza } from './calendario';
 import { newPrev } from './model';
 import { dNum } from './plan';
 import { R, S } from '../store/state';
@@ -46,5 +46,14 @@ describe('calendario', () => {
     expect(arretrate.map(v => v.s!.id)).toEqual(['d']);
     expect(avanti.map(v => v.s!.id)).toEqual(['b', 'a', 'c', 'e', 'f']);
     expect(vv.filter(v => mia(v, 'a@terranovasrl.net')).map(v => v.s!.id)).not.toContain('f');
+  });
+  it('richiamo dei preventivi inviati senza risposta; le voci fatte vecchie spariscono', () => {
+    const oggi = dNum('2026-10-20')!;
+    const inv: any = commessa('r', 'inviato', ''); inv.prev.offerta.inviata = '2026-10-05';
+    const [v] = voci([inv, commessa('s', 'vinto', '')], [], oggi);
+    expect(v).toMatchObject({ tipo: 'richiamo', prevId: 'r', giorno: dNum('2026-10-05')! + RICHIAMO });
+    expect(allarmi([v], oggi).scadute).toHaveLength(1);   // 15/10: gia' passato
+    const vv = voci([], [sc('x', '2026-08-01', { fatto: true }), sc('y', '2026-08-01'), sc('z', '2026-10-01', { fatto: true })], oggi);
+    expect(vv.map(x => x.s!.id)).toEqual(['y', 'z']);
   });
 });

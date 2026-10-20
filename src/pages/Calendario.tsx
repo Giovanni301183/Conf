@@ -2,7 +2,9 @@
 // inserite a mano, dettaglio del giorno scelto. Si nasconde e si rimette con un pulsante (scelta ricordata in questo browser);
 // nascosto restano gli allarmi in breve.
 import { useState } from 'react';
-import { GENERI, PREAVVISO, TIPI, agenda, allarmi, aspetto, daPianificare, mia, oraBreve, perGiorno, voci, type Genere, type Scadenza, type Voce } from '../domain/calendario';
+import { GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, mia, oraBreve, perGiorno, voci, type Genere, type Scadenza, type Voce } from '../domain/calendario';
+import { Fold } from '../components/ui';
+import { StatoSel } from './Cruscotto';
 import { eStato } from '../domain/kpi';
 import { DAY, dDate, dFmt, dToday, isWork, isoDay, monday } from '../domain/plan';
 import { S, commit } from '../store/state';
@@ -12,7 +14,7 @@ import { cloud, eliminaScadenza, mioEmail, puoModificare, puoSpuntare, salvaScad
 const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 const meseNome = (y: number, m: number) => new Date(Date.UTC(y, m, 1)).toLocaleDateString('it-IT', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 const giornoNome = (n: number) => dDate(n).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
-// Le voci a mano "scadono"; le date delle commesse passano e basta.
+// Le voci a mano e i richiami "scadono"; le date delle commesse passano e basta.
 const quando = (g: number, oggi: number, man: boolean) => {
   const d = g - oggi;
   if (d >= 0) return d === 0 ? 'oggi' : d === 1 ? 'domani' : `tra ${d} giorni`;
@@ -28,6 +30,8 @@ const togli = async (s: Scadenza) => {
 };
 // Voci visibili: con "Le mie" solo quelle create da me o assegnate a me.
 const vociVisibili = () => { const vv = voci(S.arch, S.scad), me = mioEmail(); return S.ui.calMie && me ? vv.filter(v => mia(v, me)) : vv; };
+/** Voci scadute e non fatte, per il numerino sulla voce Home del menu. */
+export const nScadute = () => allarmi(vociVisibili(), dToday()).scadute.length;
 
 function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean }) {
   const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s);
@@ -36,10 +40,12 @@ function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?
       {s ? <input type="checkbox" checked={s.fatto} disabled={!spunta} onChange={() => segna(s)} title={spunta ? 'Fatto' : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
       <div className="vt">
         <b>{ora && <span className="vora">{ora}</span>}{v.titolo}</b>
-        <small>{l}{data ? <> · {dFmt(v.giorno)} ({quando(v.giorno, oggi, !!s && !s.fatto)})</> : null}{v.sotto ? ' · ' + v.sotto : ''}
+        <small>{l}{data ? <> · {dFmt(v.giorno)} ({quando(v.giorno, oggi, daFare(v) && !s?.fatto)})</> : null}{v.sotto ? ' · ' + v.sotto : ''}
           {s?.assegnata_a ? ' · per ' + nomeDi(s.assegnata_a) : ''}{s?.creato_da ? ' · da ' + nomeDi(s.creato_da) : ''}{s?.origine === 'telegram' ? ' (Telegram)' : ''}</small>
         {s?.nota ? <span className="muted small">{s.nota}</span> : null}
+        {v.tipo === 'richiamo' ? <span className="muted small">Offerta inviata da {RICHIAMO}+ giorni senza risposta: quando il cliente risponde, cambia lo stato.</span> : null}
       </div>
+      {v.tipo === 'richiamo' && v.prevId && <StatoSel id={v.prevId} k="inviato" />}
       {v.prevId && <button className="btn s" onClick={() => apri(v.prevId!)}>Apri</button>}
       {mio && onEdit && <><button className="btn s" onClick={() => onEdit(s)}>Modifica</button><button className="btn x" onClick={() => togli(s)} title="Elimina">✕</button></>}
     </div>
@@ -69,6 +75,7 @@ export function Allarmi({ compatto = false }: { compatto?: boolean }) {
 }
 
 type Bozza = { id?: string; genere: Genere; giorno: string; ora: string; titolo: string; nota: string; preventivo_id: string; assegnata_a: string };
+const bozzaDa = (s: Scadenza): Bozza => ({ id: s.id, genere: s.genere || 'attivita', giorno: s.giorno, ora: oraBreve(s), titolo: s.titolo, nota: s.nota || '', preventivo_id: s.preventivo_id || '', assegnata_a: s.assegnata_a || '' });
 const ESEMPI: Record<Genere, string> = {
   attivita: 'es. Rifare il computo bulloneria', promemoria: 'es. Richiamare il cliente per il preventivo',
   scadenza: 'es. Consegna documentazione collaudo', appuntamento: 'es. Sopralluogo in cantiere',
@@ -119,7 +126,7 @@ function Mese({ ym, sel, setSel, nuova, byDay, oggi }: { ym: { y: number; m: num
           <button key={n} className={`cday${mese ? '' : ' out'}${n === oggi ? ' oggi' : ''}${isWork(n) ? '' : ' fest'}${n === sel ? ' on' : ''}`}
             onClick={() => setSel(n)} onDoubleClick={() => { setSel(n); nuova(n); }} aria-label={`${dFmt(n)}: ${vs.length} voci`}>
             <span className="dn">{dDate(n).getUTCDate()}</span>
-            {vs.slice(0, 3).map(v => <span key={v.key} className={`cchip${v.s?.fatto ? ' fatto' : v.s && n < oggi ? ' late' : ''}`}
+            {vs.slice(0, 3).map(v => <span key={v.key} className={`cchip${v.s?.fatto ? ' fatto' : daFare(v) && n < oggi ? ' late' : ''}`}
               style={{ '--vc': aspetto(v)[1] } as React.CSSProperties}>{oraBreve(v.s) && <em>{oraBreve(v.s)}</em>}{v.titolo}</span>)}
             {vs.length > 3 && <span className="cmore">+{vs.length - 3}</span>}
           </button>
@@ -153,10 +160,7 @@ export function Calendario() {
   const vv = vociVisibili(), byDay = perGiorno(vv), mese = S.ui.calV === 'mese';
   const sposta = (d: number) => { const x = new Date(Date.UTC(ym.y, ym.m + d, 1)); setYm({ y: x.getUTCFullYear(), m: x.getUTCMonth() }); };
   const nuova = (g = sel) => setBozza({ genere: 'attivita', giorno: isoDay(g), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '' });
-  const modifica = (s: Scadenza) => {
-    setSel(Date.UTC(+s.giorno.slice(0, 4), +s.giorno.slice(5, 7) - 1, +s.giorno.slice(8, 10)) / DAY);
-    setBozza({ id: s.id, genere: s.genere || 'attivita', giorno: s.giorno, ora: oraBreve(s), titolo: s.titolo, nota: s.nota || '', preventivo_id: s.preventivo_id || '', assegnata_a: s.assegnata_a || '' });
-  };
+  const modifica = (s: Scadenza) => { setSel(Date.UTC(+s.giorno.slice(0, 4), +s.giorno.slice(5, 7) - 1, +s.giorno.slice(8, 10)) / DAY); setBozza(bozzaDa(s)); };
   const vista = (k: 'mese' | 'agenda') => { S.ui.calV = k; commit(); };
   const delGiorno = byDay.get(sel) || [];
   return (
@@ -182,7 +186,7 @@ export function Calendario() {
           </div>
           {mese ? <Mese ym={ym} sel={sel} setSel={setSel} nuova={nuova} byDay={byDay} oggi={oggi} /> : <Agenda vv={vv} oggi={oggi} sel={sel} setSel={setSel} onEdit={modifica} />}
           <div className="klegend">
-            {(['prod', 'prodFine', 'mont'] as const).map(k => <span key={k}><i style={{ background: TIPI[k][1] }} />{TIPI[k][0]}</span>)}
+            {(['prod', 'prodFine', 'mont', 'richiamo'] as const).map(k => <span key={k}><i style={{ background: TIPI[k][1] }} />{TIPI[k][0]}</span>)}
             {Object.entries(GENERI).map(([k, [l, c]]) => <span key={k}><i style={{ background: c }} />{l}</span>)}
           </div>
           <p className="hint" style={{ margin: '8px 0 0' }}>{mese ? 'Clic su un giorno per il dettaglio, doppio clic per aggiungere. ' : ''}Le date delle commesse vengono dal Gantt dei preventivi vinti; il resto si aggiunge a mano, legato o no a un preventivo.</p>
@@ -202,3 +206,22 @@ export function Calendario() {
 
 /** In cima alla Home: calendario completo, oppure solo gli allarmi se l'utente l'ha nascosto. */
 export const CalendarioHome = () => (S.ui.cal ? <><Calendario /><div className="calsep" /></> : <Allarmi compatto />);
+
+/** Nel preventivo aperto: le sue voci in agenda (date della commessa, richiamo, voci a mano) e l'aggiunta di un promemoria. */
+export function AgendaPreventivo() {
+  const [bozza, setBozza] = useState<Bozza | null>(null);
+  const id = S.prev._id, oggi = dToday();
+  if (!id) return <Fold id="cf-agenda" title="Agenda" sum="Salva il preventivo per collegarci promemoria e cose da fare">{() =>
+    <p className="hint" style={{ margin: 0 }}>Le voci in agenda si legano a un preventivo salvato nell'archivio.</p>}</Fold>;
+  const vv = voci(S.arch, S.scad).filter(v => v.prevId === id), aperte = vv.filter(v => daFare(v) && !v.s?.fatto && v.giorno >= oggi - 365);
+  const tardi = aperte.filter(v => v.giorno < oggi).length;
+  const nuova = () => setBozza({ genere: 'promemoria', giorno: isoDay(oggi), ora: '', titolo: '', nota: '', preventivo_id: id, assegnata_a: '' });
+  return (
+    <Fold id="cf-agenda" title="Agenda" sum={vv.length ? `${aperte.length} da fare${tardi ? ` · ${tardi} scadut${tardi === 1 ? 'a' : 'e'}` : ''} · ${vv.length} voc${vv.length === 1 ? 'e' : 'i'} in tutto` : 'Nessuna voce: aggiungi un promemoria'}
+      act={!bozza && <button className="btn s p" onClick={nuova}>+ Promemoria</button>}>{() => <>
+      {bozza && <Modulo b={bozza} set={setBozza} chiudi={() => setBozza(null)} />}
+      {vv.length ? vv.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={s => setBozza(bozzaDa(s))} />)
+        : !bozza && <p className="hint" style={{ margin: 0 }}>Niente in agenda per questo preventivo.</p>}
+    </>}</Fold>
+  );
+}

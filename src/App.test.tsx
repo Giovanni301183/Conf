@@ -83,6 +83,18 @@ describe('archivio: cruscotto e mappa', () => {
     expect(container.querySelector('.cday')).not.toBeNull();
     act(() => { S.scad = []; commit(); });
   });
+  it('richiamo di un preventivo inviato: numerino sul menu e agenda nel preventivo', () => {
+    act(() => {
+      S.scad = []; S.ui.cal = true; S.ui.tab = 'config'; S.ui.folds['cf-agenda'] = true;
+      S.arch = [{ id: 'r1', nome: 'Offerta Beta', cliente: 'Beta', rif: '', data: '2026-01-10', salvato: '2026-01-10T10:00:00Z', totale: 1, prezzo: 1, kwp: 1, nTracker: 1, righe: '',
+        prev: { stato: 'inviato', offerta: { inviata: '2026-01-10' } } }];
+      S.prev._id = 'r1'; commit();
+    });
+    const { container } = render(<App />);
+    expect(container.querySelector('.nbadge')!.textContent).toBe('1');
+    expect(container.querySelector('[data-fold="cf-agenda"]')!.textContent).toContain('Richiamare il cliente');
+    act(() => { delete S.prev._id; S.arch = []; S.ui.tab = 'archivio'; commit(); });
+  });
 });
 
 describe('progressivo dei preventivi', () => {
