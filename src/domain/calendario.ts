@@ -1,21 +1,33 @@
-// Calendario della Home: date ricavate dalle commesse (preventivi vinti) e scadenze inserite a mano.
+// Calendario e agenda della Home: date ricavate dalle commesse (preventivi vinti) e voci inserite a mano
+// (cose da fare, promemoria, scadenze, appuntamenti), legate o no a un preventivo e assegnabili a un collega.
 // Dalle commesse si prendono solo inizio e fine produzione e inizio montaggio, per non affollare il mese.
 import { S, withPrev } from '../store/state';
 import { eStato } from './kpi';
 import { clone, normPrev } from './model';
 import { AUTO, buildGantt, buildLavor, buildMontGantt, dNum, montDrv } from './plan';
 
+export type Genere = 'attivita' | 'promemoria' | 'scadenza' | 'appuntamento';
 export interface Scadenza {
-  id: string; giorno: string; titolo: string; nota: string | null; preventivo_id: string | null;
-  fatto: boolean; origine: 'app' | 'telegram'; creato_da: string; creato: string;
+  id: string; giorno: string; ora: string | null; genere: Genere; titolo: string; nota: string | null; preventivo_id: string | null;
+  assegnata_a: string | null; fatto: boolean; origine: 'app' | 'telegram'; creato_da: string; creato: string;
 }
 export type Tipo = 'prod' | 'prodFine' | 'mont' | 'man';
 export interface Voce { key: string; giorno: number; tipo: Tipo; titolo: string; sotto: string; prevId?: string; s?: Scadenza }
 // [etichetta, colore]
 export const TIPI: Record<Tipo, [string, string]> = {
   prod: ['Inizio produzione', 'var(--c-lav)'], prodFine: ['Fine produzione', 'var(--c-mat)'],
-  mont: ['Inizio montaggio', 'var(--c-acq)'], man: ['Scadenza', 'var(--acc)'],
+  mont: ['Inizio montaggio', 'var(--c-acq)'], man: ['Voce a mano', 'var(--acc)'],
 };
+// Voci a mano: [etichetta, colore]
+export const GENERI: Record<Genere, [string, string]> = {
+  attivita: ['Da fare', 'var(--acc)'], promemoria: ['Promemoria', 'var(--gold)'],
+  scadenza: ['Scadenza', 'var(--c-altro)'], appuntamento: ['Appuntamento', '#2f6fb0'],
+};
+/** Etichetta e colore di una voce: per le voci a mano conta il genere. */
+export const aspetto = (v: Voce): [string, string] => (v.s ? GENERI[v.s.genere] || GENERI.attivita : TIPI[v.tipo]);
+export const oraBreve = (s?: Scadenza) => (s?.ora ? s.ora.slice(0, 5) : '');
+/** "Le mie": voci a mano create da me o assegnate a me (le date delle commesse restano per tutti). */
+export const mia = (v: Voce, me: string) => !v.s || v.s.creato_da === me || v.s.assegnata_a === me;
 export const PREAVVISO = 3;   // giorni: "in scadenza" da oggi a oggi + 3
 
 const nomeCommessa = (e: any) => [e.prev?.num ? 'N° ' + e.prev.num : '', e.cliente].filter(Boolean).join(' · ');
@@ -58,16 +70,21 @@ export function vociScadenze(sc: Scadenza[], arch: any[]): Voce[] {
 
 export function voci(arch: any[], sc: Scadenza[]): Voce[] {
   return [...arch.flatMap(dateCommessa), ...vociScadenze(sc, arch)]
-    .sort((a, b) => a.giorno - b.giorno || a.tipo.localeCompare(b.tipo) || a.titolo.localeCompare(b.titolo));
+    .sort((a, b) => a.giorno - b.giorno || a.tipo.localeCompare(b.tipo) || (oraBreve(a.s) || '99').localeCompare(oraBreve(b.s) || '99') || a.titolo.localeCompare(b.titolo));
 }
 
-/** Scadute: scadenze a mano non fatte con data passata. In arrivo: da oggi a oggi + PREAVVISO (le scadenze fatte no). */
+/** Scadute: voci a mano non fatte con data passata. In arrivo: da oggi a oggi + PREAVVISO (le voci fatte no). */
 export function allarmi(vv: Voce[], oggi: number) {
   const aperta = (v: Voce) => v.tipo !== 'man' || !v.s?.fatto;
   return {
     scadute: vv.filter(v => v.tipo === 'man' && aperta(v) && v.giorno < oggi),
     prossime: vv.filter(v => aperta(v) && v.giorno >= oggi && v.giorno <= oggi + PREAVVISO),
   };
+}
+
+/** Agenda: le voci aperte rimaste indietro, poi tutto quello che c'e' da oggi per i prossimi giorni. */
+export function agenda(vv: Voce[], oggi: number, giorni = 30) {
+  return { arretrate: allarmi(vv, oggi).scadute, avanti: vv.filter(v => v.giorno >= oggi && v.giorno <= oggi + giorni) };
 }
 
 export const perGiorno = (vv: Voce[]) => {

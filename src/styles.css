@@ -470,3 +470,16 @@ table.arch td input{width:100%;max-width:260px}
   .cform{grid-template-columns:minmax(0,1fr)}
 }
 .calsep{height:20px}
+.calgrid .klegend{margin-top:12px;gap:10px 14px}
+.cvoce .vora{font-variant-numeric:tabular-nums;color:var(--vc);margin-right:7px}
+.cchip em{font-style:normal;font-weight:600;margin-right:4px;font-variant-numeric:tabular-nums}
+.cgen{flex-wrap:wrap}
+.cgen button i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--vc);margin-right:6px}
+.cagenda{display:flex;flex-direction:column;gap:6px}
+.agiorno{border:1px solid var(--line);border-radius:10px;padding:4px 14px}
+.agiorno.on{border-color:var(--acc)}
+.agiorno.late{border-color:#e7c3bf;background:#fcf5f4}
+.agiorno h3{margin:8px 0 2px;display:flex;align-items:center;gap:8px}
+.agiorno.late h3{color:var(--bad)}
+.agiorno h3 button{border:0;background:none;padding:0;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;cursor:pointer}
+.agiorno h3 button:hover{color:var(--acc)}

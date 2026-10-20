@@ -19,6 +19,8 @@ export const cloud = {
   locali: [] as any[],
   // Errore nel leggere le scadenze (es. tabella non ancora creata): il resto dell'app funziona lo stesso.
   scadErr: '',
+  // Colleghi attivi, per assegnare le voci dell'agenda.
+  colleghi: [] as Utente[],
 };
 export const online = () => !!supabase;
 let toastFn = (_: string) => {};
@@ -149,16 +151,20 @@ export async function ultimiAccessi(): Promise<Record<string, string> | null> {
 
 /* ---------- Scadenze del calendario ---------- */
 // Senza server le scadenze restano nel browser; con il server si rileggono a ogni modifica, anche dei colleghi.
-const SCAD_COLS = 'id, giorno, titolo, nota, preventivo_id, fatto, origine, creato_da, creato';
+const SCAD_COLS = 'id, giorno, ora, genere, titolo, nota, preventivo_id, assegnata_a, fatto, origine, creato_da, creato';
 export const mioEmail = () => cloud.session?.user.email?.toLowerCase() ?? '';
 export const puoModificare = (s: Scadenza) => isAdmin() || s.creato_da === mioEmail();
+// Chi ha la voce assegnata puo' solo segnarla come fatta (lo garantisce anche il database).
+export const puoSpuntare = (s: Scadenza) => puoModificare(s) || s.assegnata_a === mioEmail();
 async function loadScadenze() {
+  listUtenti().then(u => { cloud.colleghi = u.filter(x => x.attivo); }, () => {});
   const { data, error } = await supabase!.from('scadenze').select(SCAD_COLS).order('giorno');
   if (error) { cloud.scadErr = error.message; S.scad = []; return; }
   cloud.scadErr = ''; S.scad = data;
 }
 export async function salvaScadenza(s: Partial<Scadenza>): Promise<string> {
-  const v = { giorno: s.giorno, titolo: (s.titolo || '').trim(), nota: s.nota?.trim() || null, preventivo_id: s.preventivo_id || null, fatto: !!s.fatto };
+  const v = { giorno: s.giorno, ora: s.ora || null, genere: s.genere || 'attivita', titolo: (s.titolo || '').trim(), nota: s.nota?.trim() || null,
+    preventivo_id: s.preventivo_id || null, assegnata_a: s.assegnata_a || null, fatto: !!s.fatto };
   if (!v.titolo || !v.giorno) return 'Servono titolo e data.';
   if (!supabase) {
     const i = S.scad.findIndex(x => x.id === s.id);
@@ -167,6 +173,12 @@ export async function salvaScadenza(s: Partial<Scadenza>): Promise<string> {
     store(KEY_SCAD, S.scad); return '';
   }
   const { error } = s.id ? await supabase.from('scadenze').update(v).eq('id', s.id) : await supabase.from('scadenze').insert(v);
+  if (error) return error.message;
+  await loadScadenze(); return '';
+}
+export async function spuntaScadenza(s: Scadenza): Promise<string> {
+  if (!supabase) return salvaScadenza({ ...s, fatto: !s.fatto });
+  const { error } = await supabase.from('scadenze').update({ fatto: !s.fatto }).eq('id', s.id);
   if (error) return error.message;
   await loadScadenze(); return '';
 }

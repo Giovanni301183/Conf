@@ -71,9 +71,9 @@ describe('archivio: cruscotto e mappa', () => {
     const { container } = render(<App />);
     expect(container.querySelectorAll('.cday').length).toBeGreaterThanOrEqual(28);
     expect(container.textContent).toContain('Archivio preventivi');   // l'archivio resta sotto
-    fireEvent.click(screen.getByText('+ Scadenza'));
-    fireEvent.change(screen.getByPlaceholderText(/Sollecito/), { target: { value: 'Collaudo quadri' } });
-    await act(async () => { fireEvent.click(screen.getByText('Aggiungi scadenza')); });
+    fireEvent.click(screen.getByText('+ Aggiungi'));
+    fireEvent.change(screen.getByPlaceholderText(/computo/), { target: { value: 'Collaudo quadri' } });
+    await act(async () => { fireEvent.click(screen.getByText('Aggiungi')); });
     expect(S.scad.map(s => s.titolo)).toEqual(['Collaudo quadri']);
     expect(container.querySelector('.calarm')!.textContent).toContain('Collaudo quadri');
     fireEvent.click(screen.getByText('Nascondi calendario'));

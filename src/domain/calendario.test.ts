@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { allarmi, dateCommessa, daPianificare, voci, type Scadenza } from './calendario';
+import { agenda, allarmi, dateCommessa, daPianificare, mia, voci, type Scadenza } from './calendario';
 import { newPrev } from './model';
 import { dNum } from './plan';
 import { R, S } from '../store/state';
@@ -10,7 +10,7 @@ const commessa = (id: string, stato: string, inizio: string) => {
   return { id, nome: 'Impianto ' + id, cliente: 'Alfa', salvato: '2026-10-01T10:00:00Z', prev };
 };
 const sc = (id: string, giorno: string, o: Partial<Scadenza> = {}): Scadenza =>
-  ({ id, giorno, titolo: 'Scad ' + id, nota: null, preventivo_id: null, fatto: false, origine: 'app', creato_da: 'a@terranovasrl.net', creato: '', ...o });
+  ({ id, giorno, ora: null, genere: 'attivita', titolo: 'Scad ' + id, nota: null, preventivo_id: null, assegnata_a: null, fatto: false, origine: 'app', creato_da: 'a@terranovasrl.net', creato: '', ...o });
 
 describe('calendario', () => {
   it('date della commessa dal Gantt, senza toccare il preventivo aperto', () => {
@@ -37,5 +37,14 @@ describe('calendario', () => {
   it('scadenza legata a un preventivo', () => {
     const [v] = voci([commessa('d', 'bozza', '')], [sc('7', '2026-10-25', { preventivo_id: 'd' })]);
     expect(v).toMatchObject({ tipo: 'man', prevId: 'd', sotto: 'Impianto d' });
+  });
+  it('agenda: in ordine di ora, arretrate in cima; "le mie" = create da me o assegnate a me', () => {
+    const oggi = dNum('2026-10-20')!;
+    const vv = voci([], [sc('a', '2026-10-21', { ora: '15:00:00' }), sc('b', '2026-10-21', { ora: '08:30:00' }), sc('c', '2026-10-21'), sc('d', '2026-10-10'),
+      sc('e', '2026-10-22', { creato_da: 'b@terranovasrl.net', assegnata_a: 'a@terranovasrl.net' }), sc('f', '2026-10-22', { creato_da: 'b@terranovasrl.net' })]);
+    const { arretrate, avanti } = agenda(vv, oggi);
+    expect(arretrate.map(v => v.s!.id)).toEqual(['d']);
+    expect(avanti.map(v => v.s!.id)).toEqual(['b', 'a', 'c', 'e', 'f']);
+    expect(vv.filter(v => mia(v, 'a@terranovasrl.net')).map(v => v.s!.id)).not.toContain('f');
   });
 });
