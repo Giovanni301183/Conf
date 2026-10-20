@@ -1,0 +1,77 @@
+// Calendario della Home: date ricavate dalle commesse (preventivi vinti) e scadenze inserite a mano.
+// Dalle commesse si prendono solo inizio e fine produzione e inizio montaggio, per non affollare il mese.
+import { S, withPrev } from '../store/state';
+import { eStato } from './kpi';
+import { clone, normPrev } from './model';
+import { AUTO, buildGantt, buildLavor, buildMontGantt, dNum, montDrv } from './plan';
+
+export interface Scadenza {
+  id: string; giorno: string; titolo: string; nota: string | null; preventivo_id: string | null;
+  fatto: boolean; origine: 'app' | 'telegram'; creato_da: string; creato: string;
+}
+export type Tipo = 'prod' | 'prodFine' | 'mont' | 'man';
+export interface Voce { key: string; giorno: number; tipo: Tipo; titolo: string; sotto: string; prevId?: string; s?: Scadenza }
+// [etichetta, colore]
+export const TIPI: Record<Tipo, [string, string]> = {
+  prod: ['Inizio produzione', 'var(--c-lav)'], prodFine: ['Fine produzione', 'var(--c-mat)'],
+  mont: ['Inizio montaggio', 'var(--c-acq)'], man: ['Scadenza', 'var(--acc)'],
+};
+export const PREAVVISO = 3;   // giorni: "in scadenza" da oggi a oggi + 3
+
+const nomeCommessa = (e: any) => [e.prev?.num ? 'N° ' + e.prev.num : '', e.cliente].filter(Boolean).join(' · ');
+/** Commessa = preventivo vinto con la data di avvio produzione impostata nel Gantt. */
+export const daPianificare = (arch: any[]) => arch.filter(e => eStato(e) === 'vinto' && dNum(e.prev?.gantt?.inizio) == null);
+
+// Il calcolo del Gantt costa: si rifà solo se cambiano il preventivo salvato o i parametri di Gantt e montaggio.
+const memo = new Map<string, { k: string; v: Voce[] }>();
+export function dateCommessa(e: any): Voce[] {
+  if (eStato(e) !== 'vinto' || dNum(e.prev?.gantt?.inizio) == null) return [];
+  const k = e.salvato + JSON.stringify(S.data.params?.gantt) + JSON.stringify(S.data.mont?.par);
+  const m = memo.get(e.id); if (m && m.k === k) return m.v;
+  const bak = { ...AUTO };   // i segnaposto del preventivo aperto non vanno toccati
+  let v: Voce[] = [];
+  try {
+    v = withPrev(normPrev(clone(e.prev)), () => {
+      const G = buildGantt(buildLavor()), M = buildMontGantt(montDrv(), G);
+      // Inizio montaggio = prima fase di cantiere pianificata (anche senza durate: parte dopo tracciamento e prima consegna).
+      const cant = M.tasks.filter((t: any) => t.grp === 'cant');
+      const base = { titolo: e.nome, sotto: nomeCommessa(e), prevId: e.id };
+      const out: Voce[] = [{ ...base, key: e.id + ':prod', giorno: G.start, tipo: 'prod' }];
+      if (G.end > G.start) out.push({ ...base, key: e.id + ':prodFine', giorno: G.end, tipo: 'prodFine' });
+      if (cant.length) out.push({ ...base, key: e.id + ':mont', giorno: Math.min(...cant.map((t: any) => t.s)), tipo: 'mont' });
+      return out;
+    });
+  } catch { v = []; }   // un preventivo malformato non deve bloccare il calendario
+  finally { for (const x in AUTO) delete AUTO[x]; Object.assign(AUTO, bak); }
+  memo.set(e.id, { k, v });
+  return v;
+}
+
+export function vociScadenze(sc: Scadenza[], arch: any[]): Voce[] {
+  const byId = new Map(arch.map(e => [e.id, e]));
+  return sc.flatMap(s => {
+    const g = dNum(s.giorno); if (g == null) return [];
+    const e = s.preventivo_id ? byId.get(s.preventivo_id) : null;
+    return [{ key: 's:' + s.id, giorno: g, tipo: 'man' as const, titolo: s.titolo, sotto: e ? e.nome : '', prevId: e?.id, s }];
+  });
+}
+
+export function voci(arch: any[], sc: Scadenza[]): Voce[] {
+  return [...arch.flatMap(dateCommessa), ...vociScadenze(sc, arch)]
+    .sort((a, b) => a.giorno - b.giorno || a.tipo.localeCompare(b.tipo) || a.titolo.localeCompare(b.titolo));
+}
+
+/** Scadute: scadenze a mano non fatte con data passata. In arrivo: da oggi a oggi + PREAVVISO (le scadenze fatte no). */
+export function allarmi(vv: Voce[], oggi: number) {
+  const aperta = (v: Voce) => v.tipo !== 'man' || !v.s?.fatto;
+  return {
+    scadute: vv.filter(v => v.tipo === 'man' && aperta(v) && v.giorno < oggi),
+    prossime: vv.filter(v => aperta(v) && v.giorno >= oggi && v.giorno <= oggi + PREAVVISO),
+  };
+}
+
+export const perGiorno = (vv: Voce[]) => {
+  const m = new Map<number, Voce[]>();
+  for (const v of vv) { const a = m.get(v.giorno); if (a) a.push(v); else m.set(v.giorno, [v]); }
+  return m;
+};

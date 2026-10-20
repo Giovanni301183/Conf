@@ -5,7 +5,7 @@ import { compute } from '../domain/compute';
 import { defaultData, newPrev } from '../domain/model';
 
 export const KEY_DATA = 'tracker_prev_data_v1', KEY_PREV = 'tracker_prev_prev_v1', KEY_UI = 'tracker_prev_ui_v1';
-export const KEY_ARCH = 'tracker_prev_archivio_v1', KEY_DRAFT = 'tracker_prev_bozza_v1';
+export const KEY_ARCH = 'tracker_prev_archivio_v1', KEY_DRAFT = 'tracker_prev_bozza_v1', KEY_SCAD = 'tracker_prev_scadenze_v1';
 
 export function load(k: string): any {
   try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : null; } catch { return null; }
@@ -22,20 +22,27 @@ export const TABS = [['archivio', 'Home'], ['listino', 'Listino'], ['distinte', 
 export type Tab = (typeof TABS)[number][0];
 
 export interface Ui {
-  tab: Tab; view: string; av: 'elenco' | 'kpi' | 'mappa'; kf: { anno: string; mese: string; stato: string; cliente: string }; folds: Record<string, boolean>; open: Set<string>; sizeSel: string; openSd: Set<number>; filter: string; aq: string;
+  tab: Tab; view: string; av: 'elenco' | 'kpi' | 'mappa' | 'cal'; kf: { anno: string; mese: string; stato: string; cliente: string }; folds: Record<string, boolean>; open: Set<string>; sizeSel: string; openSd: Set<number>; filter: string; aq: string;
 }
-export interface State { data: any; prev: any; ui: Ui; arch: any[] }
+// scad = scadenze del calendario inserite a mano (dal server, o dal browser senza Supabase).
+export interface State { data: any; prev: any; ui: Ui; arch: any[]; scad: any[] }
 
 const UI0 = load(KEY_UI) || {};
 const hashTab = TABS.find(t => t[0] === location.hash.slice(1))?.[0];
 // All'avvio si parte sempre da un preventivo nuovo, sulla schermata Preventivi (elenco dell'archivio).
 export const S: State = {
-  data: load(KEY_DATA) || defaultData(), prev: newPrev(), arch: load(KEY_ARCH) || [],
+  data: load(KEY_DATA) || defaultData(), prev: newPrev(), arch: load(KEY_ARCH) || [], scad: load(KEY_SCAD) || [],
   ui: { tab: hashTab || 'archivio', view: UI0.view || 'cat', av: UI0.av || 'elenco', kf: { anno: '', mese: '', stato: '', cliente: '' }, folds: UI0.folds || {}, open: new Set(), sizeSel: '12', openSd: new Set(), filter: '', aq: '' },
 };
 
 // Risultato del calcolo sul preventivo aperto: si aggiorna a ogni commit().
 export let R = compute(S.data, S.prev);
+
+/** Esegue f come se fosse aperto un altro preventivo (es. le date di una commessa in archivio), poi rimette tutto com'era. */
+export function withPrev<T>(prev: any, f: () => T): T {
+  const p0 = S.prev, r0 = R;
+  try { S.prev = prev; R = compute(S.data, prev); return f(); } finally { S.prev = p0; R = r0; }
+}
 
 // Chiamato dopo ogni salvataggio: con Supabase attivo invia il listino al server.
 let saveHook = () => {};

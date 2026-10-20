@@ -1,7 +1,8 @@
 // Archivio e listino condivisi su Supabase. Senza Supabase configurato tutto resta nel browser come prima.
 import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { linkType, supabase } from '../lib/supabase';
-import { KEY_ARCH, KEY_DRAFT, S, commit, load, setSaveHook, store, unstore } from './state';
+import type { Scadenza } from '../domain/calendario';
+import { KEY_ARCH, KEY_DRAFT, KEY_SCAD, S, commit, load, setSaveHook, store, unstore } from './state';
 
 type Fase = 'locale' | 'avvio' | 'login' | 'password' | 'carico' | 'pronto' | 'negato' | 'errore';
 export interface Utente { email: string; nome: string | null; ruolo: 'admin' | 'utente'; attivo: boolean; creato?: string; invitato_da?: string | null }
@@ -16,6 +17,8 @@ export const cloud = {
   err: '',
   // Preventivi rimasti nell'archivio del browser e non ancora caricati sul server.
   locali: [] as any[],
+  // Errore nel leggere le scadenze (es. tabella non ancora creata): il resto dell'app funziona lo stesso.
+  scadErr: '',
 };
 export const online = () => !!supabase;
 let toastFn = (_: string) => {};
@@ -144,22 +147,58 @@ export async function ultimiAccessi(): Promise<Record<string, string> | null> {
   return error || !data ? null : Object.fromEntries(data.map((r: any) => [r.email, r.ultimo_accesso]));
 }
 
+/* ---------- Scadenze del calendario ---------- */
+// Senza server le scadenze restano nel browser; con il server si rileggono a ogni modifica, anche dei colleghi.
+const SCAD_COLS = 'id, giorno, titolo, nota, preventivo_id, fatto, origine, creato_da, creato';
+export const mioEmail = () => cloud.session?.user.email?.toLowerCase() ?? '';
+export const puoModificare = (s: Scadenza) => isAdmin() || s.creato_da === mioEmail();
+async function loadScadenze() {
+  const { data, error } = await supabase!.from('scadenze').select(SCAD_COLS).order('giorno');
+  if (error) { cloud.scadErr = error.message; S.scad = []; return; }
+  cloud.scadErr = ''; S.scad = data;
+}
+export async function salvaScadenza(s: Partial<Scadenza>): Promise<string> {
+  const v = { giorno: s.giorno, titolo: (s.titolo || '').trim(), nota: s.nota?.trim() || null, preventivo_id: s.preventivo_id || null, fatto: !!s.fatto };
+  if (!v.titolo || !v.giorno) return 'Servono titolo e data.';
+  if (!supabase) {
+    const i = S.scad.findIndex(x => x.id === s.id);
+    if (i >= 0) S.scad[i] = { ...S.scad[i], ...v };
+    else S.scad.push({ ...v, id: 's' + Date.now().toString(36), origine: 'app', creato_da: '', creato: new Date().toISOString() });
+    store(KEY_SCAD, S.scad); return '';
+  }
+  const { error } = s.id ? await supabase.from('scadenze').update(v).eq('id', s.id) : await supabase.from('scadenze').insert(v);
+  if (error) return error.message;
+  await loadScadenze(); return '';
+}
+export async function eliminaScadenza(id: string): Promise<string> {
+  if (!supabase) { S.scad = S.scad.filter(x => x.id !== id); store(KEY_SCAD, S.scad); return ''; }
+  const { error } = await supabase.from('scadenze').delete().eq('id', id);
+  if (error) return error.message;
+  await loadScadenze(); return '';
+}
+let scadCh: RealtimeChannel | null = null;
+function joinScadenze() {
+  if (scadCh) return;
+  scadCh = supabase!.channel('scadenze').on('postgres_changes', { event: '*', schema: 'public', table: 'scadenze' }, async () => { await loadScadenze(); commit(); }).subscribe();
+}
+function leaveScadenze() { if (scadCh) supabase!.removeChannel(scadCh); scadCh = null; }
+
 /* ---------- Accesso ---------- */
 async function loadAll() {
   cloud.fase = 'carico'; cloud.err = ''; commit();
   try {
     if (!(await loadMe())) { cloud.fase = 'negato'; commit(); return; }
-    await Promise.all([loadArch(), loadListino(true)]);
+    await Promise.all([loadArch(), loadListino(true), loadScadenze()]);
     if (S.prev._id && !S.arch.some(e => e.id === S.prev._id)) delete S.prev._id;
     cloud.fase = 'pronto';
-    joinPresenza();
+    joinPresenza(); joinScadenze();
   } catch (err) { cloud.fase = 'errore'; cloud.err = (err as Error).message; }
   commit();
 }
 // Al ritorno sulla finestra si rileggono archivio e listino, per vedere il lavoro dei colleghi.
 async function refresh() {
   if (cloud.fase !== 'pronto') return;
-  try { await Promise.all([loadArch(), loadListino(false)]); commit(); } catch { /* si riprova al prossimo ritorno */ }
+  try { await Promise.all([loadArch(), loadListino(false), loadScadenze()]); commit(); } catch { /* si riprova al prossimo ritorno */ }
 }
 
 export function initCloud() {
@@ -168,8 +207,8 @@ export function initCloud() {
     const prima = cloud.session?.user.id;
     cloud.session = session;
     if (ev === 'PASSWORD_RECOVERY' || (session && linkType && cloud.fase === 'avvio')) { cloud.fase = 'password'; commit(); return; }
-    if (!session) { leavePresenza(); cloud.fase = 'login'; commit(); return; }
-    if (session.user.id !== prima && cloud.fase !== 'password') { leavePresenza(); setTimeout(loadAll); }   // fuori dalla callback: evita blocchi del client
+    if (!session) { leavePresenza(); leaveScadenze(); cloud.fase = 'login'; commit(); return; }
+    if (session.user.id !== prima && cloud.fase !== 'password') { leavePresenza(); leaveScadenze(); setTimeout(loadAll); }   // fuori dalla callback: evita blocchi del client
   });
   window.addEventListener('focus', refresh);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
@@ -192,7 +231,7 @@ export async function setPassword(password: string) {
 }
 export async function logout() {
   if (cloud.sync === 'salvo' || (cloud.fase === 'pronto' && JSON.stringify(S.data) !== synced)) await pushListino();
-  leavePresenza();
+  leavePresenza(); leaveScadenze();
   await supabase!.auth.signOut();
-  S.arch = []; synced = ''; listinoTs = ''; cloud.me = null;
+  S.arch = []; S.scad = []; synced = ''; listinoTs = ''; cloud.me = null;
 }
