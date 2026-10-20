@@ -80,6 +80,7 @@ Regole:
 - Date relative ("domani", "lunedì", "fra una settimana") → AAAA-MM-GG. Ora → HH:MM. Senza data per una voce non urgente, chiedi.
 - Non inventare mai id: prendili dagli strumenti. Prima di eliminare chiedi conferma.
 - Se uno strumento risponde ok:false, spiega il problema in parole semplici. Se l'account non è collegato, spiega come collegarlo.
+- I messaggi che iniziano con [vocale] sono la trascrizione di un messaggio vocale: possono contenere errori di trascrizione (nomi, numeri). Prima di salvare, ripeti in una riga cosa hai capito; se un nome di commessa o un numero è dubbio, chiedi conferma.
 - Urgenze e voci assegnate vengono annunciate da sole nel gruppo: non devi farlo tu.
 - Comandi del menu del bot: /oggi = agenda di oggi; /settimana = prossimi 7 giorni; /mie = solo le mie voci; /urgente <testo> = registra un'urgenza; /aiuto o /start = spiega in poche righe cosa puoi fare e come collegare l'account (/collega CODICE, codice dal pulsante Telegram nell'app).
 - Rispondi breve, testo semplice senza Markdown. Dopo aver registrato qualcosa, riassumi cosa hai salvato."""
@@ -103,8 +104,14 @@ chat = [
     send('Rispondi id', [1120, 280], '$json.message.chat.id', "'Id di questa chat: ' + $json.message.chat.id"),
     http('Collega → app', [1120, 440], "{ azione: 'collega', telegram_id: $json.message.from.id, codice: String($json.message.text).split(' ').slice(1).join('').trim() }"),
     send('Rispondi collega', [1340, 440], "$('Telegram Trigger').item.json.message.chat.id", "$json.ok ? $json.testo : '⚠️ ' + $json.errore"),
+    # Messaggi vocali (o file audio): si scaricano da Telegram, si trascrivono e il testo va all'assistente.
+    node('È un vocale?', 'n8n-nodes-base.if', 2.2, [680, 620], cond('!!($json.message?.voice || $json.message?.audio)')),
+    node('Scarica audio', 'n8n-nodes-base.telegram', 1.2, [680, 760], {'resource': 'file', 'fileId': '={{ ($json.message.voice || $json.message.audio).file_id }}',
+         'download': True, 'additionalFields': {}}, TG),
+    node('Trascrivi', '@n8n/n8n-nodes-langchain.openAi', 1.8, [800, 760], {'resource': 'audio', 'operation': 'transcribe', 'options': {'language': 'it'}},
+         {'openAiApi': {'id': '', 'name': 'OpenAI'}}),
     node('Assistente', '@n8n/n8n-nodes-langchain.agent', 1.7, [900, 620], {'promptType': 'define',
-         'text': "={{ $('Telegram Trigger').item.json.message.text || '(messaggio senza testo: chiedi di scriverlo a parole)' }}",
+         'text': "={{ $json.text ? '[vocale] ' + $json.text : ($('Telegram Trigger').item.json.message.text || '(messaggio senza testo: chiedi di scriverlo a parole o con un vocale)') }}",
          'options': {'systemMessage': SYSTEM}}),
     send('Rispondi', [1340, 620], "$('Telegram Trigger').item.json.message.chat.id", '$json.output'),
     # Modello: si cambia qui (OpenAI, Anthropic, ...). Il resto del flusso non dipende dal modello.
@@ -149,7 +156,9 @@ chat_conn = {
     'È un pulsante?': {'main': [to('Pulsante → app'), to('È /collega o /id?')]},
     'Pulsante → app': {'main': [to('Risposta al pulsante')]}, 'Risposta al pulsante': {'main': [to('Andato a buon fine?')]},
     'Andato a buon fine?': {'main': [to('Avvisa nel gruppo'), []]},
-    'È /collega o /id?': {'main': [to('Quale comando?'), to('Assistente')]},
+    'È /collega o /id?': {'main': [to('Quale comando?'), to('È un vocale?')]},
+    'È un vocale?': {'main': [to('Scarica audio'), to('Assistente')]},
+    'Scarica audio': {'main': [to('Trascrivi')]}, 'Trascrivi': {'main': [to('Assistente')]},
     'Quale comando?': {'main': [to('Rispondi id'), to('Collega → app')]},
     'Collega → app': {'main': [to('Rispondi collega')]}, 'Assistente': {'main': [to('Rispondi')]},
     'Modello': {'ai_languageModel': [[{'node': 'Assistente', 'type': 'ai_languageModel', 'index': 0}]]},
