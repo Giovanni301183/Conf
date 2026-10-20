@@ -41,3 +41,6 @@ desktop.ini
 
 # Copie di sicurezza del database (scripts/backup.py)
 backup/
+
+# Flussi n8n con il codice di bypass Vercel (scripts/n8n-flussi.py)
+n8n/da-importare/

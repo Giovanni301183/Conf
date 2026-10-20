@@ -180,9 +180,17 @@ avvisi_conn = {
 }
 
 SETTINGS = {'executionOrder': 'v1', 'timezone': 'Europe/Rome'}
-os.makedirs(os.path.join(ROOT, 'n8n'), exist_ok=True)
-for nome, nodi, conn, file in [('Agenda - Chat Telegram', chat, chat_conn, 'agenda-chat-telegram.json'),
-                               ('Agenda - Avvisi e riepilogo', avvisi, avvisi_conn, 'agenda-avvisi-riepilogo.json')]:
-    with open(os.path.join(ROOT, 'n8n', file), 'w', encoding='utf-8') as f:
-        json.dump({'name': nome, 'nodes': nodi, 'connections': conn, 'settings': SETTINGS, 'pinData': {}}, f, ensure_ascii=False, indent=1)
-    print('Scritto n8n/' + file)
+# Copia pronta da importare con il codice di bypass di .env.local (VERCEL_BYPASS): va in n8n/da-importare/, esclusa da GitHub.
+try:
+    BYPASS = dict(l.strip().split('=', 1) for l in open(os.path.join(ROOT, '.env.local'), encoding='utf-8') if '=' in l).get('VERCEL_BYPASS', '')
+except OSError:
+    BYPASS = ''
+for cartella, sost in [('n8n', None), (os.path.join('n8n', 'da-importare'), BYPASS or None)]:
+    if cartella != 'n8n' and not sost: continue
+    os.makedirs(os.path.join(ROOT, cartella), exist_ok=True)
+    for nome, nodi, conn, file in [('Agenda - Chat Telegram', chat, chat_conn, 'agenda-chat-telegram.json'),
+                                   ('Agenda - Avvisi e riepilogo', avvisi, avvisi_conn, 'agenda-avvisi-riepilogo.json')]:
+        t = json.dumps({'name': nome, 'nodes': nodi, 'connections': conn, 'settings': SETTINGS, 'pinData': {}}, ensure_ascii=False, indent=1)
+        with open(os.path.join(ROOT, cartella, file), 'w', encoding='utf-8') as f:
+            f.write(t.replace('INSERISCI_CODICE_BYPASS', sost) if sost else t)
+        print('Scritto ' + os.path.join(cartella, file).replace(os.sep, '/'))
