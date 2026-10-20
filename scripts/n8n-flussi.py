@@ -20,6 +20,7 @@ AUTH = {'authentication': 'genericCredentialType', 'genericAuthType': 'httpHeade
 CRED = {'httpHeaderAuth': {'id': '', 'name': 'Agenda - segreto'}}
 TG = {'telegramApi': {'id': '', 'name': 'Telegram Agenda'}}
 TID = "$('Telegram Trigger').item.json.message.from.id"
+CMD = "String($json.message?.text || '').trim().split(' ')[0].split('@')[0].toLowerCase()"
 
 
 def node(name, typ, ver, pos, params, creds=None):
@@ -96,10 +97,11 @@ chat = [
     send('Avvisa nel gruppo', [1340, 120], "$('Telegram Trigger').item.json.callback_query.message.chat.id", "$('Pulsante → app').item.json.testo",
          {'reply_to_message_id': "={{ $('Telegram Trigger').item.json.callback_query.message.message_id }}"}),
     # Messaggi: /id (per sapere l'id del gruppo), /collega CODICE, il resto all'assistente.
-    node('È /collega o /id?', 'n8n-nodes-base.if', 2.2, [680, 440], cond("/^\\/(collega|id)\\b/i.test($json.message?.text || '')")),
-    node('Quale comando?', 'n8n-nodes-base.if', 2.2, [900, 360], cond('/^\\/id\\b/i.test($json.message.text)')),
+    # Primo "parola" del messaggio, senza @nomebot (nei gruppi Telegram scrive /id@nomebot). Niente espressioni regolari: alcune versioni di n8n non le leggono.
+    node('È /collega o /id?', 'n8n-nodes-base.if', 2.2, [680, 440], cond(f"['/collega', '/id'].includes({CMD})")),
+    node('Quale comando?', 'n8n-nodes-base.if', 2.2, [900, 360], cond(f"{CMD} === '/id'")),
     send('Rispondi id', [1120, 280], '$json.message.chat.id', "'Id di questa chat: ' + $json.message.chat.id"),
-    http('Collega → app', [1120, 440], "{ azione: 'collega', telegram_id: $json.message.from.id, codice: ($json.message.text.split(/\\s+/)[1] || '') }"),
+    http('Collega → app', [1120, 440], "{ azione: 'collega', telegram_id: $json.message.from.id, codice: String($json.message.text).split(' ').slice(1).join('').trim() }"),
     send('Rispondi collega', [1340, 440], "$('Telegram Trigger').item.json.message.chat.id", "$json.ok ? $json.testo : '⚠️ ' + $json.errore"),
     node('Assistente', '@n8n/n8n-nodes-langchain.agent', 1.7, [900, 620], {'promptType': 'define',
          'text': "={{ $('Telegram Trigger').item.json.message.text || '(messaggio senza testo: chiedi di scriverlo a parole)' }}",
@@ -114,6 +116,8 @@ chat = [
          "{ azione: 'chi_sono', telegram_id: " + TID + ' }'),
     tool('cerca_commesse', [1040, 860], 'Cerca preventivi e commesse (preventivi vinti) per nome, cliente, numero, riferimento o luogo. Restituisce id, nome, numero, stato.',
          "{ azione: 'commesse', telegram_id: " + TID + ', cerca: ' + fa('cerca', 'Parole da cercare, es. Ripo oppure 2026/014', 'string', '') + ' }'),
+    tool('collega_account', [1640, 860], "Collega l'account Telegram di chi scrive all'app con il codice di 6 cifre generato nell'app (pulsante Telegram). Usalo quando scrive /collega CODICE o ti da' il codice.",
+         "{ azione: 'collega', telegram_id: " + TID + ', codice: ' + fa('codice', 'Codice di 6 cifre') + ' }'),
     tool('colleghi', [1160, 860], 'Elenco dei colleghi attivi (email e nome), per assegnare una voce.',
          "{ azione: 'colleghi', telegram_id: " + TID + ' }'),
     tool('leggi_agenda', [1280, 860], "Legge l'agenda: voci tra due date comprese, piu' urgenze aperte e voci rimaste indietro. Ogni voce ha un id.",
@@ -151,7 +155,7 @@ chat_conn = {
     'Modello': {'ai_languageModel': [[{'node': 'Assistente', 'type': 'ai_languageModel', 'index': 0}]]},
     'Memoria': {'ai_memory': [[{'node': 'Assistente', 'type': 'ai_memory', 'index': 0}]]},
     **{t: {'ai_tool': [[{'node': 'Assistente', 'type': 'ai_tool', 'index': 0}]]}
-       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce']},
+       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account']},
 }
 
 # ---------- Flusso 2: avvisi e riepilogo ----------
