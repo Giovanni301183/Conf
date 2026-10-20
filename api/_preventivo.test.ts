@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { anteprima, applica, preventivoBot } from './_preventivo';
 import { verificaInitData } from './modulo';
+import { categoria, corrosivita, zonaVento } from './_sito';
 import { dimensioni, rasterizza } from './_layout';
 import { leggiDxf } from '../src/domain/dxf';
 import JSZip from 'jszip';
@@ -149,5 +150,37 @@ describe('modulo in Telegram', () => {
     expect(verificaInitData(q.toString(), '123:altro')).toBeNull();
     expect(verificaInitData(q.toString().replace('Gio', 'Eva'), token)).toBeNull();
     expect(verificaInitData(q.toString(), token, Date.now() + 2 * 86400e3)).toBeNull();
+  });
+});
+
+describe('condizioni di progetto, sensori e PDF', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+  it('categoria di esposizione (NTC 2018), zona del vento e corrosività', () => {
+    expect(zonaVento('Sicilia', 'Trapani', 37.8, 12.4)).toBe(4);
+    expect(zonaVento('Sardegna', 'Cagliari', 39.22, 9.12)).toBe(5);
+    expect(zonaVento('Sardegna', 'Oristano', 39.9, 8.59)).toBe(6);
+    expect(zonaVento('Friuli-Venezia Giulia', 'Trieste', 45.6, 13.8)).toBe(8);
+    expect(zonaVento('Puglia', 'Foggia', 41.4, 15.5)).toBe(3);
+    expect([categoria(4, 'D', 10, 20), categoria(3, 'D', Infinity, 600), categoria(1, 'D', Infinity, 900), categoria(9, 'C', 1, 0)]).toEqual(['II', 'III', 'IV', 'I']);
+    expect([corrosivita(0.3), corrosivita(1), corrosivita(10), corrosivita(Infinity)]).toEqual(['C5', 'C4', 'C3', 'C2']);
+  });
+  it('sensori, campi della slide e coordinate vanno nel preventivo', () => {
+    const P: any = newPrev();
+    expect(applica(P, { piranometro: '2', centralina: 1, prog: { vento_ms: '27', categoria_terreno: 'II', sconosciuto: 'x' }, lat: '37,8', lng: '12,44' }, defaultData())).toBeNull();
+    expect([P.imp.piran, P.imp.box, P.offerta.prog.vento_ms, P.offerta.prog.categoria_terreno, P.offerta.prog.sconosciuto, P.luogo.lat]).toEqual([2, 1, '27', 'II', undefined, 37.8]);
+    expect(applica(P, { lat: '51', lng: '0' }, defaultData())).toMatch(/Coordinate/);
+  });
+  it('con il token di ConvertAPI arriva il PDF', async () => {
+    vi.stubEnv('TELEGRAM_BOT_TOKEN', 'tok'); vi.stubEnv('CONVERTAPI_TOKEN', 'cv');
+    const tg = vi.fn(async (url: any) => /convertapi/.test(url)
+      ? new Response(JSON.stringify({ Files: [{ FileName: 'x.pdf', FileData: Buffer.from('%PDF-1.7').toString('base64') }] })) : new Response('{"ok":true}'));
+    vi.stubGlobal('fetch', tg);
+    const { db } = finto();
+    const r: any = await preventivoBot(db, { azione: 'preventivo', cliente: 'Rossi', righe: [{ n: 1, taglia: 12 }] }, 'a@x', 3, '2026-10-20');
+    expect(r.offerta).toMatch(/inviata/);
+    expect(tg.mock.calls[0][1].headers).toEqual({ authorization: 'Bearer cv' });
+    const doc = (tg.mock.calls[1][1] as any).body.get('document') as File;
+    expect(doc.name).toBe('Offerta_2026_008_Rossi.pdf');
+    expect(await doc.text()).toBe('%PDF-1.7');
   });
 });

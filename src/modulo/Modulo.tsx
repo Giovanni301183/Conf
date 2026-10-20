@@ -12,12 +12,14 @@ type Riga = { n: string; taglia: string; tipo: string; prof: string; asse: strin
 type Layout = { url: string; w: number; h: number; nome: string; dxf: Record<string, number> | null };
 type Campi = {
   cliente: string; rif: string; localita: string; referente: string; rev: string; wp: string; modulo: string; righe: Riga[];
-  quadri_campo: string; quadri_generali: string; margine: string; margini: Record<string, string>;
-  trasporto: string; posa: string; pieno: string; layout: Layout | null | false;
+  margine: string; margini: Record<string, string>; trasporto: string; posa: string; pieno: string; layout: Layout | null | false;
+  prog: Record<string, string>; lat: string; lng: string;
+  [componente: string]: any;   // quadri e sensori (centralina, piranometro…): numero di pezzi, vuoto = 0
 };
 const rigaNuova = (taglia = '36'): Riga => ({ n: '', taglia, tipo: 'Agrivoltaico', prof: 'IPE 140', asse: '2,5', omega: '2,0', lFond: 3, lCusc: 2.3 });
 const vuoti = (): Campi => ({ cliente: parametri.get('cliente') || '', rif: '', localita: '', referente: '', rev: '0', wp: '600', modulo: '', righe: [rigaNuova()],
-  quadri_campo: '', quadri_generali: '', margine: '', margini: {}, trasporto: '', posa: '', pieno: '', layout: null });
+  margine: '', margini: {}, trasporto: '', posa: '', pieno: '', layout: null, prog: {}, lat: '', lng: '' });
+const CATEGORIE_ESP = ['I', 'II', 'III', 'IV', 'V'], CORROSIVITA = ['C1', 'C2', 'C3', 'C4', 'C5', 'CX'];
 
 async function chiama(azione: string, campi: unknown = {}) {
   const r = await fetch('/api/modulo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ initData: tg?.initData || '', azione, campi }) });
@@ -55,6 +57,7 @@ export function Modulo() {
   const [fatto, setFatto] = useState<any>(null);     // esito dell'ultimo "Crea e invia": da li' in poi si corregge lo stesso preventivo
   const [esito, setEsito] = useState(false);
   const [catAperte, setCatAperte] = useState(false);
+  const [sito, setSito] = useState('');           // motivazione della proposta dalla localita'
   const id = fatto?.id || parametri.get('id') || '';
 
   useEffect(() => {
@@ -63,7 +66,7 @@ export function Modulo() {
     chiama('dati', { id }).then(r => {
       if (!r.ok) { setErrore(r.errore); return; }
       setCfg(r);
-      if (r.prev) setF({ ...vuoti(), ...r.prev, margini: r.prev.margini || {} });
+      if (r.prev) setF({ ...vuoti(), ...r.prev, margini: r.prev.margini || {}, prog: r.prev.prog || {} });
       else setF(x => ({ ...x, righe: [rigaNuova(r.taglie.includes('36') ? '36' : r.taglie[0])] }));
     }).catch(() => setErrore('Server non raggiungibile: riprova tra poco.'));
   }, []);
@@ -75,6 +78,22 @@ export function Modulo() {
     if (n.lCusc < min) n.lCusc = min;
     return n;
   }) });
+
+  const cambiaProg = (k: string, v: string) => cambia({ prog: { ...f.prog, [k]: v } });
+  // Campo della slide "Dati di progetto", con l'etichetta del modello (cfg.progetto: [chiave, etichetta, esempio]).
+  const prog = (k: string, modo: 'text' | 'decimal' | 'numeric' = 'text', nota?: string) => {
+    const [, label, es] = cfg.progetto.find((p: string[]) => p[0] === k) || [k, k, ''];
+    return <Campo key={k} label={label} nota={nota}><input inputMode={modo} value={f.prog[k] ?? ''} placeholder={'es. ' + es} onChange={e => cambiaProg(k, e.target.value)} /></Campo>;
+  };
+  async function proponi() {
+    if (!f.localita.trim() && !f.lat) { tg?.showAlert?.('Scrivi prima la località (in Commessa).'); return; }
+    setBusy('sito');
+    const r = await chiama('sito', { localita: f.localita, lat: f.lat, lng: f.lng }).catch(() => ({ ok: false, errore: 'Servizio non raggiungibile.' }));
+    setBusy('');
+    if (!r.ok) { tg?.showAlert ? tg.showAlert(r.errore) : alert(r.errore); return; }
+    cambia({ lat: String(r.lat), lng: String(r.lng), prog: { ...f.prog, categoria_terreno: r.categoria_terreno, classe_corrosivita: r.classe_corrosivita, altitudine_m: r.altitudine_m } });
+    setSito('Proposta: ' + r.motivo);
+  }
 
   async function caricaLayout(file: File) {
     try {
@@ -122,12 +141,42 @@ export function Modulo() {
         <Campo label="Nome impianto" nota="Titolo della copertina e della slide Layout: breve. Vuoto = nome del cliente.">
           <input value={f.rif} maxLength={60} onChange={e => cambia({ rif: e.target.value })} placeholder={f.cliente} /></Campo>
         <div className="due">
-          <Campo label="Località"><input value={f.localita} onChange={e => cambia({ localita: e.target.value })} /></Campo>
+          <Campo label="Località"><input value={f.localita} onChange={e => cambia({ localita: e.target.value, lat: '', lng: '' })} placeholder="es. Marsala (TP)" /></Campo>
           <Campo label="Referente"><input value={f.referente} onChange={e => cambia({ referente: e.target.value })} /></Campo>
         </div>
+      </section>
+
+      <section>
+        <h2>Modulo fotovoltaico</h2>
         <div className="due">
-          <Campo label="Pannello (W)"><input inputMode="numeric" value={f.wp} onChange={e => cambia({ wp: e.target.value })} /></Campo>
-          <Campo label="Modello pannello"><input value={f.modulo} onChange={e => cambia({ modulo: e.target.value })} /></Campo>
+          <Campo label="Potenza (W)"><input inputMode="numeric" value={f.wp} onChange={e => cambia({ wp: e.target.value })} /></Campo>
+          <Campo label="Modello"><input value={f.modulo} onChange={e => cambia({ modulo: e.target.value })} /></Campo>
+        </div>
+        <div className="due">
+          {prog('modulo_tipo')}{prog('modulo_peso_kg', 'decimal')}
+        </div>
+        {prog('modulo_dimensioni')}
+      </section>
+
+      <section>
+        <h2>Condizioni di progetto</h2>
+        <button type="button" className="sec" disabled={busy === 'sito'} onClick={proponi}>{busy === 'sito' ? 'Cerco…' : '📍 Proponi dalla località'}</button>
+        {sito ? <p className="muted">{sito}</p> : null}
+        <div className="due">
+          {prog('vento_ms', 'decimal', 'Lo inserisci tu')}
+          <Campo label="Categoria di esposizione"><select value={f.prog.categoria_terreno ?? ''} onChange={e => cambiaProg('categoria_terreno', e.target.value)}>
+            <option value="">–</option>{CATEGORIE_ESP.map(c => <option key={c}>{c}</option>)}</select></Campo>
+        </div>
+        <div className="due">
+          {prog('altitudine_m', 'numeric')}
+          <Campo label="Corrosività (ISO 9223)"><select value={f.prog.classe_corrosivita ?? ''} onChange={e => cambiaProg('classe_corrosivita', e.target.value)}>
+            <option value="">–</option>{CORROSIVITA.map(c => <option key={c}>{c}</option>)}</select></Campo>
+        </div>
+        <div className="due">{prog('pendenza_ns')}{prog('altezza_min_modulo_m', 'decimal')}</div>
+        <div className="due">{prog('infissione_m', 'decimal')}{prog('angolo_rotazione', 'numeric')}</div>
+        <div className="due">
+          <Campo label="Latitudine"><input inputMode="decimal" value={f.lat} onChange={e => cambia({ lat: e.target.value })} /></Campo>
+          <Campo label="Longitudine"><input inputMode="decimal" value={f.lng} onChange={e => cambia({ lng: e.target.value })} /></Campo>
         </div>
       </section>
 
@@ -158,10 +207,12 @@ export function Modulo() {
           );
         })}
         <button type="button" className="sec" onClick={() => cambia({ righe: [...f.righe, rigaNuova(f.righe.at(-1)?.taglia)] })}>+ Aggiungi riga</button>
-        <div className="due">
-          <Campo label="Quadri di campo"><input inputMode="numeric" value={f.quadri_campo} onChange={e => cambia({ quadri_campo: e.target.value })} placeholder="0" /></Campo>
-          <Campo label="Quadri generali"><input inputMode="numeric" value={f.quadri_generali} onChange={e => cambia({ quadri_generali: e.target.value })} placeholder="0" /></Campo>
-        </div>
+      </section>
+
+      <section>
+        <h2>Quadri e sensori</h2>
+        <div className="due">{cfg.impianto.map(([k, nome]: [string, string]) => (
+          <Campo key={k} label={nome.charAt(0).toUpperCase() + nome.slice(1)}><input inputMode="numeric" value={f[k] ?? ''} onChange={e => cambia({ [k]: e.target.value })} placeholder="0" /></Campo>))}</div>
       </section>
 
       <section>

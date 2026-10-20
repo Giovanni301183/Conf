@@ -5,14 +5,14 @@
 // "layout" mette nel preventivo il DXF o l'immagine mandati al bot (file_id di Telegram); anche "preventivo" accetta file_id.
 // Da un DXF si contano i tracker: un preventivo nuovo senza righe le prende da li' (agrivoltaico).
 // Il listino non si tocca mai da qui: un preventivo nuovo usa quello condiviso, uno esistente il listino salvato con lui.
-// L'offerta arriva nella chat privata con il bot (mai nel gruppo: ci sono i prezzi), con TELEGRAM_BOT_TOKEN su Vercel.
+// L'offerta arriva in PDF nella chat privata con il bot (mai nel gruppo: ci sono i prezzi), con TELEGRAM_BOT_TOKEN e CONVERTAPI_TOKEN su Vercel.
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { compute } from '../src/domain/compute.js';
 import { eur, fN, fP, fileName } from '../src/domain/format.js';
 import { MCATS, MIN_CUSC, OPT_LCUSC, OPT_LFOND, clone, defRiga, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../src/domain/model.js';
-import { compilaPptxBytes, datiOfferta, layoutImg, offPrev } from '../src/domain/offerta.js';
+import { PROGETTO, compilaPptxBytes, datiOfferta, layoutImg, offPrev } from '../src/domain/offerta.js';
 import { layoutDaTelegram } from './_layout.js';
 
 type Db = SupabaseClient;
@@ -30,6 +30,10 @@ export const OPZIONI = {
   omega: [['2,0', '2,0 mm'], ['1,8', '1,8 mm']],
   lFond: OPT_LFOND, lCusc: OPT_LCUSC, minCusc: MIN_CUSC,
 };
+// Componenti di impianto nel modulo: [campo del modulo, chiave in prev.imp, nome]. Quadri e sensori della parte elettronica.
+export const IMPIANTO = [['quadri_campo', 'quadA', 'quadri di campo'], ['quadri_generali', 'quadGen', 'quadri generali'],
+  ['centralina', 'box', 'centraline meteo'], ['piranometro', 'piran', 'piranometri'], ['anemometro', 'anem', 'anemometri'],
+  ['temp_aria', 'termAria', "sensori di temperatura dell'aria"], ['temp_pannello', 'termCont', 'sensori di temperatura dei pannelli']] as const;
 const vicino = (lista: number[], v: number) => lista.find(x => Math.abs(x - v) < 1e-6);
 
 /** Una riga tracker dai campi detti o scritti nel modulo; i dati tecnici non detti restano quelli predefiniti. Stringa = errore. */
@@ -79,8 +83,16 @@ export function applica(P: any, b: any, data: any): string | null {
     for (const r of rr) { const x = rigaDa(r, Object.keys(data.sizes)); if (typeof x === 'string') return x; righe.push(x); }
     P.righe = righe;
   }
-  for (const [k, campo] of [['quadri_campo', 'quadA'], ['quadri_generali', 'quadGen']] as const)
-    if (!vuoto(b[k])) { const q = num(b[k]); if (!(q >= 0 && Number.isInteger(q))) return `Numero di ${k.replace('_', ' ')} non valido.`; P.imp[campo] = q; }
+  for (const [k, campo, nome] of IMPIANTO)
+    if (!vuoto(b[k])) { const q = num(b[k]); if (!(q >= 0 && Number.isInteger(q))) return `Numero di ${nome} non valido.`; P.imp[campo] = q; }
+  // Condizioni di progetto e dati del modulo (slide "Dati di progetto"): testi brevi, vuoto = «–» nell'offerta.
+  if (b.prog && typeof b.prog === 'object') for (const [k] of PROGETTO) if (b.prog[k] != null) O.prog[k] = breve(b.prog[k], 40);
+  if (b.lat != null && b.lng != null) {
+    const lat = num(b.lat), lng = num(b.lng);
+    if (b.lat === '' || b.lng === '') P.luogo = { ...P.luogo, lat: null, lng: null };
+    else if (lat >= 35 && lat <= 48 && lng >= 6 && lng <= 19) P.luogo = { ...P.luogo, lat, lng };
+    else return 'Coordinate non valide: devono essere in Italia (es. 37,80 e 12,44).';
+  }
 
   const ric = P.marg.modo === 'ricarico', okM = (v: number) => (ric ? v > -100 : v < 100);
   if (!vuoto(b.margine)) { const m = num(b.margine); if (!okM(m)) return 'Margine non valido: con il margine sul prezzo deve essere sotto il 100 %.'; P.marg.gen = m; }
@@ -118,7 +130,8 @@ export function campiModulo(P: any) {
     cliente: s(P.cliente), rif: s(P.rif), localita: s(P.luogo?.nome), referente: s(O.referente), rev: s(O.rev || '0'),
     wp: s(P.modulo?.wp), modulo: s(P.modulo?.marca),
     righe: P.righe.map((r: any) => ({ n: s(r.n), taglia: s(r.taglia), tipo: r.tipo, prof: r.prof, asse: r.asse, omega: r.omega, lFond: num(r.lFond), lCusc: num(r.lCusc) })),
-    quadri_campo: s(P.imp?.quadA), quadri_generali: s(P.imp?.quadGen),
+    ...Object.fromEntries(IMPIANTO.map(([k, c]) => [k, num(P.imp?.[c]) ? s(P.imp[c]) : ''])),
+    prog: Object.fromEntries(PROGETTO.map(([k]) => [k, s(O.prog[k])])), lat: s(P.luogo?.lat), lng: s(P.luogo?.lng),
     margine: s(P.marg?.gen), margini: Object.fromEntries(MCATS.map(c => [c, s(P.marg?.cat?.[c])])),
     trasporto: s(O.trasporto), posa: s(O.posa), pieno: s(O.pieno),
     layout: O.layout ? { url: O.layout, w: O.layoutW, h: O.layoutH, nome: O.layoutNome, dxf: O.dxf } : null,
@@ -150,18 +163,32 @@ const offertaDi = (P: any, R: any, data: any) => {
   return { D, avvisi: D.avvisi.filter(a => !/salvalo per assegnarlo/.test(a)) };
 };
 
-/** Compila l'offerta e la manda come documento nella chat privata con il bot. Ritorna l'errore, se c'e'. */
+/** PowerPoint → PDF con ConvertAPI (usa i caratteri incorporati nel modello). null se non c'e' il token o la conversione non riesce. */
+async function inPdf(pptx: Uint8Array, nome: string): Promise<Uint8Array | null> {
+  const token = process.env.CONVERTAPI_TOKEN;
+  if (!token) return null;
+  const fd = new FormData();
+  fd.append('File', new Blob([pptx as BlobPart]), nome);
+  const r = await fetch('https://v2.convertapi.com/convert/pptx/to/pdf', { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: fd }).catch(() => null);
+  const j: any = r?.ok ? await r.json().catch(() => null) : null;
+  const dati = j?.Files?.[0]?.FileData;
+  return dati ? new Uint8Array(Buffer.from(dati, 'base64')) : null;
+}
+
+/** Compila l'offerta e la manda in PDF nella chat privata con il bot (il PowerPoint solo se il PDF non riesce). Ritorna l'errore, se c'e'. */
 async function inviaOfferta(P: any, R: any, data: any, chat: number): Promise<{ errore?: string; avvisi: string[] }> {
   const { D, avvisi } = offertaDi(P, R, data);
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return { errore: "Sul server manca TELEGRAM_BOT_TOKEN (Vercel → Settings → Environment Variables): l'offerta non si può mandare.", avvisi };
   const O = P.offerta;
   const bytes = await compilaPptxBytes(await modello(), D, layoutImg(O));
-  const nome = `Offerta_${P.num ? fileName(P.num) + '_' : ''}${fileName(P.cliente || P._nome || 'cliente')}${O.rev && O.rev !== '0' ? '_rev' + fileName(O.rev) : ''}.pptx`;
+  const nome = `Offerta_${P.num ? fileName(P.num) + '_' : ''}${fileName(P.cliente || P._nome || 'cliente')}${O.rev && O.rev !== '0' ? '_rev' + fileName(O.rev) : ''}`;
+  const pdf = await inPdf(bytes, nome + '.pptx');
+  if (!pdf) avvisi.unshift('PDF non disponibile in questo momento: ti ho mandato il PowerPoint.');
   const fd = new FormData();
   fd.append('chat_id', String(chat));
   fd.append('caption', `Offerta N° ${P.num || '–'} · ${P.cliente || 'cliente'} · ${eur(R.prezzo)} + IVA`);
-  fd.append('document', new Blob([bytes as BlobPart]), nome);
+  fd.append('document', new Blob([(pdf || bytes) as BlobPart]), nome + (pdf ? '.pdf' : '.pptx'));
   const r = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, { method: 'POST', body: fd });
   if (!r.ok) {
     const j: any = await r.json().catch(() => ({}));
