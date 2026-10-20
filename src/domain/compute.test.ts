@@ -48,4 +48,10 @@ describe('margine sulla lavorazione', () => {
     expect(lav).toBeGreaterThan(0);
     expect(r.prezzo).toBeCloseTo((r.total - lav) / 0.8 + lav / 0.5, 6);
   });
+  it('zincatura con valore proprio: separata da struttura e lavorazione', () => {
+    const p = prev(); p.marg.cat.ZINCATURA = 10; p.marg.cat.LAVORAZIONE = 50; const r = compute(defaultData(), p);
+    const lav = r.lines.reduce((s, l) => s + l.lav, 0), zinc = r.lines.reduce((s, l) => s + l.zinc, 0);
+    expect(zinc).toBeGreaterThan(0);
+    expect(r.prezzo).toBeCloseTo((r.total - lav - zinc) / 0.8 + lav / 0.5 + zinc / 0.9, 6);
+  });
 });

@@ -1,5 +1,5 @@
 // Calcolo dei costi e albero di esplosione.
-import { CATS, EXTRA_VOCI, IMP, LAV_CAT, hasOwnMarg, margFactor, num } from './model';
+import { CATS, EXTRA_VOCI, IMP, LAV_CAT, ZINC_CAT, hasOwnMarg, margFactor, num } from './model';
 import { fL } from './format';
 /* ======================= CALCOLO ======================= */
 export function evalQ(expr,drv){
@@ -79,10 +79,10 @@ export function compute(data,prev){
   const totTracker=righe.reduce((s,r)=>s+r.tot,0);
   let prezzo=0; righe.forEach(r=>r.prezzo=0);
   const bad=c=>{warn.add(`Margine di "${c}" non valido: con il margine sul prezzo deve essere sotto il 100 %`);return 1;};
-  // La lavorazione ha un margine proprio (categoria LAVORAZIONE); se e' vuoto segue la categoria della riga.
-  const own=hasOwnMarg(prev,LAV_CAT), fL0=own?(margFactor(prev,LAV_CAT)??bad(LAV_CAT)):null;
-  for(const l of lines){const f=margFactor(prev,l.cat)??bad(l.cat), fl=fL0??f;
-    l.pLav=l.lav*fl; l.prezzo=(tot(l)-l.lav)*f+l.pLav; prezzo+=l.prezzo; if(typeof l.riga==='number')righe[l.riga].prezzo+=l.prezzo;}
+  // Lavorazione e zincatura hanno un margine proprio (categorie LAVORAZIONE e ZINCATURA); se e' vuoto seguono la categoria della riga.
+  const fOwn=c=>hasOwnMarg(prev,c)?(margFactor(prev,c)??bad(c)):null, fL0=fOwn(LAV_CAT), fZ0=fOwn(ZINC_CAT);
+  for(const l of lines){const f=margFactor(prev,l.cat)??bad(l.cat), fl=fL0??f, fz=fZ0??f;
+    l.pLav=l.lav*fl; l.pZinc=l.zinc*fz; l.prezzo=(tot(l)-l.lav-l.zinc)*f+l.pLav+l.pZinc; prezzo+=l.prezzo; if(typeof l.riga==='number')righe[l.riga].prezzo+=l.prezzo;}
   return {lines,righe,T,total:tot(T),prezzo,kwp,wp,nTracker,nModuli,steel,pesi,totTracker,warn:[...warn]};
 }
 

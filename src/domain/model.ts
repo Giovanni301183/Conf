@@ -121,9 +121,9 @@ export function defLuogo(){return {nome:'',lat:null,lng:null};}
 // Pianificazione della commessa: data di avvio, durate scritte a mano e date "non prima del" per fase (vuoto = calcolato).
 export function defGantt(){return {inizio:'',dur:{},da:{}};}
 // Marginalita': % generale + % per categoria (vuota = usa la generale). modo: 'margine' sul prezzo | 'ricarico' sul costo.
-// LAVORAZIONE non e' una categoria del listino: e' la voce di costo "lavorazione" di tutte le righe, con un margine proprio.
-export const LAV_CAT='LAVORAZIONE';
-export const MCATS=[...CATS,'VOCI EXTRA',LAV_CAT];
+// LAVORAZIONE e ZINCATURA non sono categorie del listino: sono le voci di costo "lavorazione" e "zincatura" di tutte le righe, con un margine proprio.
+export const LAV_CAT='LAVORAZIONE', ZINC_CAT='ZINCATURA';
+export const MCATS=[CATS[0],ZINC_CAT,...CATS.slice(1),'VOCI EXTRA',LAV_CAT];
 export function hasOwnMarg(prev,cat){const v=prev.marg&&prev.marg.cat&&prev.marg.cat[cat];return !(v===''||v==null);}
 export function defMarg(){return {modo:'margine',gen:0,cat:Object.fromEntries(MCATS.map(c=>[c,'']))};}
 export function normPrev(p){if(p&&!p.offerta)p.offerta=defOfferta();if(p&&!p.stato)p.stato='bozza';if(p&&!p.luogo)p.luogo=defLuogo();if(p&&!p.marg)p.marg=defMarg();if(p&&!p.gantt)p.gantt=defGantt();if(p&&!p.mont)p.mont=defMontPrev();return p;}
