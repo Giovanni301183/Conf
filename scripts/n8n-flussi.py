@@ -80,6 +80,7 @@ Regole:
 - Non inventare mai id: prendili dagli strumenti. Prima di eliminare chiedi conferma.
 - Se uno strumento risponde ok:false, spiega il problema in parole semplici. Se l'account non è collegato, spiega come collegarlo.
 - Urgenze e voci assegnate vengono annunciate da sole nel gruppo: non devi farlo tu.
+- Comandi del menu del bot: /oggi = agenda di oggi; /settimana = prossimi 7 giorni; /mie = solo le mie voci; /urgente <testo> = registra un'urgenza; /aiuto o /start = spiega in poche righe cosa puoi fare e come collegare l'account (/collega CODICE, codice dal pulsante Telegram nell'app).
 - Rispondi breve, testo semplice senza Markdown. Dopo aver registrato qualcosa, riassumi cosa hai salvato."""
 
 # ---------- Flusso 1: chat ----------
@@ -194,3 +195,33 @@ for cartella, sost in [('n8n', None), (os.path.join('n8n', 'da-importare'), BYPA
         with open(os.path.join(ROOT, cartella, file), 'w', encoding='utf-8') as f:
             f.write(t.replace('INSERISCI_CODICE_BYPASS', sost) if sost else t)
         print('Scritto ' + os.path.join(cartella, file).replace(os.sep, '/'))
+
+# ---------- Un unico flusso completo, pronto all'uso (solo in n8n/da-importare/) ----------
+# Segreto e bypass gia' dentro: in n8n restano da collegare solo il token Telegram e la chiave del modello,
+# piu' l'id del gruppo nel nodo "Impostazioni avvisi" (si ricava scrivendo /id nel gruppo).
+try:
+    ENV = dict(l.strip().split('=', 1) for l in open(os.path.join(ROOT, '.env.local'), encoding='utf-8') if '=' in l)
+except OSError:
+    ENV = {}
+SEGRETO = ENV.get('AGENDA_SECRET', '')
+if SEGRETO and BYPASS:
+    av = json.loads(json.dumps(avvisi).replace("$('Impostazioni')", "$('Impostazioni avvisi')"))
+    for n in av:
+        if n['name'] == 'Impostazioni': n['name'] = 'Impostazioni avvisi'
+        n['position'] = [n['position'][0], n['position'][1] + 1150]
+    av_conn = json.loads(json.dumps(avvisi_conn).replace('"Impostazioni"', '"Impostazioni avvisi"'))
+    tutti = json.loads(json.dumps(chat)) + av
+    for n in tutti:
+        p = n['parameters']
+        if p.get('authentication') == 'genericCredentialType':   # richieste all'app: segreto nell'intestazione
+            del p['authentication'], p['genericAuthType']; n.pop('credentials', None)
+            p['sendHeaders'] = True
+            p['headerParameters'] = {'parameters': [{'name': 'x-agenda-secret', 'value': SEGRETO}]}
+        if n['name'] == 'Voce nuova (Supabase)':   # avviso dal database: si controlla il segreto nell'IF che segue
+            p['authentication'] = 'none'; n.pop('credentials', None)
+        if n['name'] == 'È un inserimento?':
+            n['parameters'] = cond(f"$json.headers['x-agenda-secret'] === '{SEGRETO}' && $json.body.type === 'INSERT' && !!$json.body.record?.id")
+    t = json.dumps({'name': 'Agenda Terranova - Telegram', 'nodes': tutti, 'connections': {**chat_conn, **av_conn}, 'settings': SETTINGS, 'pinData': {}},
+                   ensure_ascii=False, indent=1).replace('INSERISCI_CODICE_BYPASS', BYPASS)
+    with open(os.path.join(ROOT, 'n8n', 'da-importare', 'agenda-completo.json'), 'w', encoding='utf-8') as f: f.write(t)
+    print('Scritto n8n/da-importare/agenda-completo.json (flusso unico, con segreto e bypass)')
