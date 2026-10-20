@@ -66,17 +66,21 @@ describe('archivio: cruscotto e mappa', () => {
     if (av === 'kpi') expect(container.querySelector('.ktiles')!.textContent).toContain('Tasso di successo');
     act(() => { S.ui.av = 'elenco'; S.arch = []; commit(); });
   });
-  it('calendario: una scadenza aggiunta compare negli allarmi', async () => {
-    act(() => { S.scad = []; S.ui.tab = 'archivio'; S.ui.av = 'cal'; commit(); });
+  it('calendario in cima alla Home: una scadenza aggiunta va negli allarmi; si nasconde e si rimette', async () => {
+    act(() => { S.scad = []; S.ui.tab = 'archivio'; S.ui.av = 'elenco'; S.ui.cal = true; commit(); });
     const { container } = render(<App />);
     expect(container.querySelectorAll('.cday').length).toBeGreaterThanOrEqual(28);
+    expect(container.textContent).toContain('Archivio preventivi');   // l'archivio resta sotto
     fireEvent.click(screen.getByText('+ Scadenza'));
     fireEvent.change(screen.getByPlaceholderText(/Sollecito/), { target: { value: 'Collaudo quadri' } });
     await act(async () => { fireEvent.click(screen.getByText('Aggiungi scadenza')); });
     expect(S.scad.map(s => s.titolo)).toEqual(['Collaudo quadri']);
     expect(container.querySelector('.calarm')!.textContent).toContain('Collaudo quadri');
-    act(() => { S.ui.av = 'elenco'; commit(); });
-    expect(container.querySelector('.calarm')!.textContent).toContain('Collaudo quadri');   // allarmi anche nell'elenco
+    fireEvent.click(screen.getByText('Nascondi calendario'));
+    expect(container.querySelector('.cday')).toBeNull();
+    expect(container.querySelector('.calarm')!.textContent).toContain('Collaudo quadri');   // nascosto restano gli allarmi
+    fireEvent.click(screen.getByText('Mostra calendario'));
+    expect(container.querySelector('.cday')).not.toBeNull();
     act(() => { S.scad = []; commit(); });
   });
 });

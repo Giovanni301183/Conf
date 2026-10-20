@@ -1,4 +1,5 @@
-// Calendario della Home: allarmi in cima, mese con le date delle commesse e le scadenze, dettaglio del giorno scelto.
+// Calendario in cima alla Home: allarmi, mese con le date delle commesse e le scadenze, dettaglio del giorno scelto.
+// Si nasconde e si rimette con un pulsante (scelta ricordata in questo browser); nascosto restano gli allarmi in breve.
 import { useState } from 'react';
 import { PREAVVISO, TIPI, allarmi, daPianificare, perGiorno, voci, type Scadenza, type Voce } from '../domain/calendario';
 import { eStato } from '../domain/kpi';
@@ -16,6 +17,7 @@ const quando = (g: number, oggi: number, man: boolean) => {
   return man ? (d === -1 ? 'scaduta ieri' : `scaduta da ${-d} giorni`) : d === -1 ? 'ieri' : `${-d} giorni fa`;
 };
 const apri = (id: string) => { archOpen(id); commit(); };
+const mostra = (v: boolean) => { S.ui.cal = v; commit(); };
 const segna = async (s: Scadenza) => { const e = await salvaScadenza({ ...s, fatto: !s.fatto }); if (e) toast('Scadenza non aggiornata: ' + e); commit(); };
 const togli = async (s: Scadenza) => {
   if (!confirm(`Eliminare la scadenza "${s.titolo}"?`)) return;
@@ -42,7 +44,6 @@ function Riga({ v, oggi, onEdit }: { v: Voce; oggi: number; onEdit?: (s: Scadenz
 /** Riquadro degli allarmi: scadenze superate, in arrivo nei prossimi giorni, commesse senza data di avvio. */
 export function Allarmi({ compatto = false }: { compatto?: boolean }) {
   const oggi = dToday(), { scadute, prossime } = allarmi(voci(S.arch, S.scad), oggi), np = daPianificare(S.arch);
-  if (compatto && !scadute.length && !prossime.length) return null;
   const tutte = [...scadute, ...prossime], vis = compatto ? tutte.slice(0, 4) : tutte;
   return (
     <div className="card calarm">
@@ -50,7 +51,7 @@ export function Allarmi({ compatto = false }: { compatto?: boolean }) {
         {scadute.length > 0 && <span className="tag alate">{scadute.length} scadut{scadute.length === 1 ? 'a' : 'e'}</span>}
         <span className="tag asoon">{prossime.length} nei prossimi {PREAVVISO} giorni</span>
         <span className="sp" />
-        {compatto && <button className="btn s" onClick={() => { S.ui.av = 'cal'; commit(); }}>Apri calendario</button>}
+        {compatto && <button className="btn s" onClick={() => mostra(true)}>Mostra calendario</button>}
       </h2>
       {tutte.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} />) : <p className="hint" style={{ margin: 0 }}>Nessuna scadenza superata o in arrivo.</p>}
       {vis.length < tutte.length && <p className="hint" style={{ margin: '6px 0 0' }}>… e altre {tutte.length - vis.length} nel calendario.</p>}
@@ -114,6 +115,7 @@ export function Calendario() {
             <button className="btn s" onClick={() => { setYm({ y: t.getUTCFullYear(), m: t.getUTCMonth() }); setSel(oggi); }}>Oggi</button>
             <span className="sp" />
             <span className="klegend">{Object.entries(TIPI).map(([k, [l, c]]) => <span key={k}><i style={{ background: c }} />{l}</span>)}</span>
+            <button className="btn s" onClick={() => mostra(false)} title="Toglie il calendario dalla Home: restano solo gli allarmi">Nascondi calendario</button>
           </div>
           <div className="cal">
             {GIORNI.map(g => <div key={g} className="dh">{g}</div>)}
@@ -144,3 +146,6 @@ export function Calendario() {
     </>
   );
 }
+
+/** In cima alla Home: calendario completo, oppure solo gli allarmi se l'utente l'ha nascosto. */
+export const CalendarioHome = () => (S.ui.cal ? <><Calendario /><div className="calsep" /></> : <Allarmi compatto />);

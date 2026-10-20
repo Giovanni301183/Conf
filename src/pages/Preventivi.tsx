@@ -1,9 +1,9 @@
-// Scheda Preventivi: archivio dei preventivi salvati, bozza recuperabile, backup su file; calendario, cruscotto KPI e mappa.
+// Home: calendario in cima (si nasconde), poi archivio dei preventivi salvati, bozza recuperabile, backup su file; cruscotto KPI e mappa.
 import { Fold, Seg } from '../components/ui';
 import { eStato, testo } from '../domain/kpi';
 import { Cruscotto, StatoSel } from './Cruscotto';
 import { Mappa } from './Mappa';
-import { Allarmi, Calendario } from './Calendario';
+import { CalendarioHome } from './Calendario';
 import { eur, fDate, fN } from '../domain/format';
 import { KEY_DRAFT, S, commit, load } from '../store/state';
 import { cloud, isAdmin, uploadLocali } from '../store/remote';
@@ -19,18 +19,18 @@ export function Preventivi() {
   const n = S.arch.length;
   return (
     <>
+      <CalendarioHome />
       <div className="card head"><div className="headrow">
         <div><h2>Archivio preventivi</h2>
           <p className="hint" style={{ margin: 0 }}>{n} preventiv{n === 1 ? 'o salvato' : 'i salvati'} {cloud.session ? "nell'archivio condiviso" : 'in questo browser'}. Ogni preventivo conserva anche il listino usato.</p></div>
         <span className="sp" />
-        <Seg path="ui.av" opts={[['elenco', 'Elenco'], ['cal', 'Calendario'], ['kpi', 'Cruscotto'], ['mappa', 'Mappa']]} />
+        <Seg path="ui.av" opts={[['elenco', 'Elenco'], ['kpi', 'Cruscotto'], ['mappa', 'Mappa']]} />
         {S.ui.av === 'elenco' && <input placeholder="Cerca per nome, cliente, commessa…" value={S.ui.aq} onChange={e => { S.ui.aq = e.target.value; commit(); }} style={{ width: 260 }} />}
         <button className="btn" onClick={run(() => archSave(false))}>Salva preventivo corrente</button>
         <button className="btn p" onClick={run(newPreventivo)}>+ Nuovo preventivo</button>
       </div></div>
 
-      {S.ui.av === 'kpi' ? <Cruscotto /> : S.ui.av === 'mappa' ? <Mappa /> : S.ui.av === 'cal' ? <Calendario /> : <>
-      <Allarmi compatto />
+      {S.ui.av === 'kpi' ? <Cruscotto /> : S.ui.av === 'mappa' ? <Mappa /> : <>
       {cloud.locali.length > 0 && (
         <div className="card head"><div className="headrow">
           <div><h2>Preventivi solo in questo browser</h2><p className="hint" style={{ margin: 0 }}>

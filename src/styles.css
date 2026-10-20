@@ -469,3 +469,4 @@ table.arch td input{width:100%;max-width:260px}
   .cal .dh{padding:4px 2px;text-align:center;font-size:9.5px}
   .cform{grid-template-columns:minmax(0,1fr)}
 }
+.calsep{height:20px}
