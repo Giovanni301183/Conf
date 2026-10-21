@@ -8,6 +8,7 @@ import { GARANZIE0, INCLUSI0, PROGETTO, compilaPptx, datiOfferta, layoutImg, off
 import { buildMont } from '../domain/plan';
 import { R, S, commit, save } from '../store/state';
 import { archPatch, archSave, isDirty, toast } from '../store/actions';
+import { online, pdfOfferta } from '../store/remote';
 import { StatoTag } from './Cruscotto';
 
 const MODELLO = `${import.meta.env.BASE_URL}offerta/modello-offerta.pptx`;
@@ -35,18 +36,20 @@ export function Invia() {
   const P = S.prev, O = offPrev(P), cfg = offCfg(S.data);
   const mont = buildMont().tot;
   const D = datiOfferta(P, R, S.data, mont);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState('');
   const traspAuto = R.lines.filter((l: any) => l.riga === 'extra' && /traspor/i.test(l.desc || '')).reduce((s: number, l: any) => s + l.prezzo, 0);
   const inclusiDefault = cfg.inclusi.join('\n') === INCLUSI0.join('\n') && JSON.stringify(cfg.garanzie) === JSON.stringify(GARANZIE0);
 
-  async function scarica() {
-    setBusy(true);
+  // Il PDF si fa sul server (ConvertAPI) dal PowerPoint compilato qui.
+  async function scarica(pdf: boolean) {
+    setBusy(pdf ? 'pdf' : 'pptx');
     try {
       const r = await fetch(MODELLO); if (!r.ok) throw new Error(`modello non trovato (${r.status})`);
       const blob = await compilaPptx(await r.arrayBuffer(), D, layoutImg(O));
-      download(`Offerta_${P.num ? fileName(P.num) + '_' : ''}${fileName(P.cliente || P._nome || 'cliente')}${O.rev && O.rev !== '0' ? '_rev' + fileName(O.rev) : ''}.pptx`, blob);
-    } catch (err) { toast('Offerta non generata: ' + (err as Error).message); }
-    setBusy(false);
+      const nome = `Offerta_${P.num ? fileName(P.num) + '_' : ''}${fileName(P.cliente || P._nome || 'cliente')}${O.rev && O.rev !== '0' ? '_rev' + fileName(O.rev) : ''}`;
+      if (pdf) download(nome + '.pdf', await pdfOfferta(blob)); else download(nome + '.pptx', blob);
+    } catch (err) { toast(`${pdf ? 'PDF' : 'Offerta'} non generato: ` + (err as Error).message); }
+    setBusy('');
   }
   function inviato() {
     if (!P._id || isDirty()) { archSave(false); if (!S.prev._id) return; }
@@ -58,11 +61,12 @@ export function Invia() {
     <>
       <div className="card head"><div className="headrow">
         <div><h2>Invia preventivo</h2>
-          <p className="hint" style={{ margin: 0 }}>Genera l'offerta tecnico-economica dal modello PowerPoint: copertina (con numero e revisione), dati di progetto, layout, garanzie e investimento si compilano dal preventivo; le altre slide restano quelle del modello. Per il PDF: in PowerPoint File → Salva come → PDF.</p></div>
+          <p className="hint" style={{ margin: 0 }}>Genera l'offerta tecnico-economica dal modello PowerPoint: copertina (con numero e revisione), dati di progetto, layout, garanzie e investimento si compilano dal preventivo; le altre slide restano quelle del modello.{online() ? ' Il PDF è lo stesso che manda il bot Telegram.' : ' Per il PDF: in PowerPoint File → Salva come → PDF.'}</p></div>
         <span className="sp" />
         <span className="muted small">{O.inviata ? <>Inviato il {fDate(O.inviata)} · </> : null}<StatoTag k={P.stato || 'bozza'} /></span>
         <button className="btn" onClick={inviato}>Segna come inviato</button>
-        <button className="btn p" onClick={scarica} disabled={busy}>{busy ? 'Preparo…' : 'Scarica PowerPoint'}</button>
+        <button className={online() ? 'btn' : 'btn p'} onClick={() => scarica(false)} disabled={!!busy}>{busy === 'pptx' ? 'Preparo…' : 'Scarica PowerPoint'}</button>
+        {online() && <button className="btn p" onClick={() => scarica(true)} disabled={!!busy}>{busy === 'pdf' ? 'Preparo il PDF…' : 'Scarica PDF'}</button>}
       </div></div>
       <TabTools />
 

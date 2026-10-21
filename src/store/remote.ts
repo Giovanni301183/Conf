@@ -129,6 +129,14 @@ export async function invitaUtente(email: string, nome: string, ruolo: string): 
     return r.ok ? j : { error: j.error || `Errore ${r.status}` };
   } catch (err) { return { error: (err as Error).message }; }
 }
+// Il PDF dell'offerta passa dalla funzione /api/pdf, l'unica con la chiave di ConvertAPI (la stessa del bot Telegram).
+export async function pdfOfferta(pptx: Blob): Promise<Blob> {
+  const r = await fetch('/api/pdf', { method: 'POST', headers: { 'content-type': 'application/octet-stream', authorization: `Bearer ${cloud.session?.access_token}` }, body: pptx });
+  if (r.ok) return r.blob();
+  if (r.status === 413) throw new Error('il PowerPoint è troppo grande da convertire (prova con un layout più leggero)');
+  const j = await r.json().catch(() => ({}));
+  throw new Error(j.error || `errore ${r.status}`);
+}
 
 // Presenza: ogni finestra aperta si annuncia sul canale; chiudendola (o uscendo) sparisce dall'elenco.
 let presenza: RealtimeChannel | null = null;
