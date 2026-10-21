@@ -122,6 +122,16 @@ describe('dati tecnici e riferimento', () => {
     expect(applica(P, { righe: [{ n: 1, taglia: 36, omega: 1.5 }] }, d)).toMatch(/omega/);
     expect(applica(P, { righe: [{ n: 1, taglia: 36, tipo: 'basso', lCusc: 2.5 }] }, d)).toMatch(/Cuscinetto/);
   });
+  it('profili dei pilastri: quelli spuntati nel listino, per codice o per famiglia', () => {
+    const d = defaultData(), P: any = newPrev();
+    d.listino.push({ c: 'IPE 180', d: 'Profilo IPE 180', cat: 'STRUTTURA', sub: 'Profili a barra', t: 'barra', kg: 18.8, acq: 0.95, zn: 0.5, lav: 0.3, pil: true });
+    expect(applica(P, { righe: [{ n: 1, taglia: 36, prof: 'ipe180' }] }, d)).toBeNull();
+    expect(P.righe[0].prof).toBe('IPE 180');
+    expect(applica(P, { righe: [{ n: 1, taglia: 36, prof: 'IPE' }] }, d)).toMatch(/IPE 140 o IPE 180/);
+    expect(applica(P, { righe: [{ n: 1, taglia: 36, prof: 'IPEA' }] }, d)).toBeNull();
+    d.listino.find((x: any) => x.c === 'IPEA 140').pil = false;
+    expect(applica(P, { righe: [{ n: 1, taglia: 36, prof: 'IPEA' }] }, d)).toMatch(/sconosciuto: IPE 140, IPE 180/);
+  });
   it('il riferimento è un titolo breve, non un posto per le note', () => {
     const P: any = newPrev();
     expect(applica(P, { rif: 'Note: IPE; asse 120x120x2,5 mm; omega 1,8 mm; fondazione 3 m; pannelli bifacciali da 730 W' }, defaultData())).toMatch(/nome breve/);

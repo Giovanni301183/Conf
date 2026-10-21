@@ -12,6 +12,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { compute } from '../src/domain/compute.js';
 import { eur, fN, fP, fileName } from '../src/domain/format.js';
 import { MCATS, MIN_CUSC, OPT_LCUSC, OPT_LFOND, clone, defRiga, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../src/domain/model.js';
+import { pilastri } from '../src/domain/referenze.js';
 import { PROGETTO, compilaPptxBytes, datiOfferta, layoutImg, offPrev } from '../src/domain/offerta.js';
 import { layoutDaTelegram } from './_layout.js';
 
@@ -24,8 +25,8 @@ const breve = (v: unknown, max: number) => String(v).trim().slice(0, max);
 const MAX_RIF = 60;   // il riferimento e' il titolo della copertina e della slide Layout: solo un nome breve
 
 // Opzioni della configurazione di una riga, come nella scheda Configura: [valore salvato, come si scrive].
+// I profili dei pilastri sono quelli spuntati nel listino (opzioni(data)).
 export const OPZIONI = {
-  prof: [['IPE 140', 'IPE'], ['IPEA 140', 'IPEA']],
   asse: [['2,5', '2,5 mm'], ['3,0', '3,0 mm']],
   omega: [['2,0', '2,0 mm'], ['1,8', '1,8 mm']],
   lFond: OPT_LFOND, lCusc: OPT_LCUSC, minCusc: MIN_CUSC,
@@ -34,15 +35,25 @@ export const OPZIONI = {
 export const IMPIANTO = [['quadri_campo', 'quadA', 'quadri di campo'], ['quadri_generali', 'quadGen', 'quadri generali'],
   ['centralina', 'box', 'centraline meteo'], ['piranometro', 'piran', 'piranometri'], ['anemometro', 'anem', 'anemometri'],
   ['temp_aria', 'termAria', "sensori di temperatura dell'aria"], ['temp_pannello', 'termCont', 'sensori di temperatura dei pannelli']] as const;
+export const opzioni = (data: any) => ({ prof: pilastri(data), ...OPZIONI });
+// Profilo detto o scritto: il codice esatto ("IPE 180", "hea160") o la sola famiglia ("IPE") se nel listino ce n'e' uno solo.
+const norm = (v: unknown) => String(v).toUpperCase().replace(/[\s.]/g, '');
+function profDa(v: unknown, data: any): string {
+  const pp = pilastri(data).map(([c]) => c), x = norm(v);
+  const esatto = pp.find(c => norm(c) === x); if (esatto) return esatto;
+  const fam = pp.filter(c => norm(c).replace(/[\d,x]+$/i, '') === x);
+  if (fam.length === 1) return fam[0];
+  throw new Error(fam.length ? `Profilo "${v}": quale? ${fam.join(' o ')}.` : `Profilo "${v}" sconosciuto: ${pp.join(', ')}.`);
+}
 const vicino = (lista: number[], v: number) => lista.find(x => Math.abs(x - v) < 1e-6);
 
 /** Una riga tracker dai campi detti o scritti nel modulo; i dati tecnici non detti restano quelli predefiniti. Stringa = errore. */
-function rigaDa(r: any, taglie: string[]): any {
+function rigaDa(r: any, taglie: string[], data: any): any {
   const n = num(r?.n), taglia = String(num(r?.taglia)), tipo = /bass/i.test(String(r?.tipo ?? '')) ? 'Basso' : 'Agrivoltaico';
   if (!(n > 0 && Number.isInteger(n))) return `Numero di tracker non valido: ${r?.n ?? 'mancante'}.`;
   if (!taglie.includes(taglia)) return `Taglia ${r?.taglia ?? 'mancante'} non a listino: le taglie sono ${taglie.join(', ')} moduli.`;
   const riga: any = { ...defRiga(), taglia, n, tipo };
-  if (!vuoto(r.prof)) { const p = String(r.prof); riga.prof = /ipea/i.test(p) ? 'IPEA 140' : /ipe/i.test(p) ? 'IPE 140' : ''; if (!riga.prof) return `Profilo "${p}" sconosciuto: IPE o IPEA.`; }
+  if (!vuoto(r.prof)) { try { riga.prof = profDa(r.prof, data); } catch (e) { return (e as Error).message; } }
   for (const k of ['asse', 'omega'] as const) if (!vuoto(r[k])) {
     const o = OPZIONI[k].find(([v]) => Math.abs(num(v) - num(r[k])) < 1e-6);
     if (!o) return `Spessore ${k} ${r[k]} non previsto: ${OPZIONI[k].map(x => x[1]).join(' o ')}.`;
@@ -80,7 +91,7 @@ export function applica(P: any, b: any, data: any): string | null {
     const rr = daJson(b.righe);
     if (!Array.isArray(rr) || !rr.length) return 'Righe tracker non leggibili: servono numero, taglia (moduli) e tipo per ogni riga.';
     const righe: any[] = [];
-    for (const r of rr) { const x = rigaDa(r, Object.keys(data.sizes)); if (typeof x === 'string') return x; righe.push(x); }
+    for (const r of rr) { const x = rigaDa(r, Object.keys(data.sizes), data); if (typeof x === 'string') return x; righe.push(x); }
     P.righe = righe;
   }
   for (const [k, campo, nome] of IMPIANTO)

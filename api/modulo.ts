@@ -5,9 +5,9 @@
 //         anteprima (calcolo senza salvare), crea (salva e manda l'offerta).
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { MCATS, clone, normPrev } from '../src/domain/model.js';
+import { MCATS, clone, defaultData, normPrev } from '../src/domain/model.js';
 import { PROGETTO } from '../src/domain/offerta.js';
-import { IMPIANTO, OPZIONI, anteprima, campiModulo, preventivoBot } from './_preventivo.js';
+import { IMPIANTO, anteprima, opzioni, campiModulo, preventivoBot } from './_preventivo.js';
 import { propostaSito } from './_sito.js';
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
         if (!e) return json(200, fail('Preventivo non trovato.'));
         prev = campiModulo(normPrev(clone(e.prev))); numero = e.prev?.num || '';
       }
-      return json(200, { ok: true, taglie: Object.keys(l?.dati?.sizes || { 12: 1, 18: 1, 20: 1, 22: 1, 36: 1, 40: 1 }), opzioni: OPZIONI, categorie: MCATS, impianto: IMPIANTO.map(([k, , nome]) => [k, nome]), progetto: PROGETTO, prev, numero });
+      return json(200, { ok: true, taglie: Object.keys(l?.dati?.sizes || { 12: 1, 18: 1, 20: 1, 22: 1, 36: 1, 40: 1 }), opzioni: opzioni(l?.dati || defaultData()), categorie: MCATS, impianto: IMPIANTO.map(([k, , nome]) => [k, nome]), progetto: PROGETTO, prev, numero });
     }
     if (b.azione === 'sito') return json(200, await propostaSito(String(campi.localita || ''), campi.lat ? Number(campi.lat) : null, campi.lng ? Number(campi.lng) : null));
     if (b.azione === 'anteprima') return json(200, await anteprima(db, campi, oggiISO()));
