@@ -1,0 +1,111 @@
+// Assistente con AI (Claude, via /api/assistente): pannello chat a destra. Le modifiche arrivano come proposte
+// con Conferma e Annulla; solo la conferma cambia listino, distinte o calendario, con gli stessi strumenti dell'app.
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { datiPerAssistente, type Proposta } from '../domain/assistente';
+import { sostituisci } from '../domain/referenze';
+import { clone } from '../domain/model';
+import { S, commit, save } from '../store/state';
+import { chiediAssistente, online, salvaScadenza } from '../store/remote';
+
+type Voce = { ruolo: 'tu' | 'ai' | 'err'; testo: string; proposte?: Proposta[] };
+const cap = (g: string) => g.charAt(0) + g.slice(1).toLowerCase();
+const giorno = (d: string) => new Date(d + 'T12:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+
+/** Applica una sostituzione confermata: crea i codici nuovi copiando i vecchi, poi cambia le righe delle distinte. */
+function applicaSostituzione(p: Extract<Proposta, { tipo: 'sostituzione' }>): string {
+  const D = S.data;
+  for (const c of p.coppie) {
+    if (D.listino.some((x: any) => x.c === c.a)) continue;
+    const da = D.listino.find((x: any) => x.c === c.da);
+    if (!da) throw new Error(`il codice ${c.da} non è più nel listino`);
+    const it = { ...clone(da), c: c.a, u: true };
+    delete it.pil;
+    if (c.descrizione_nuovo) it.d = c.descrizione_nuovo;
+    if (c.peso_kg != null) it.kg = c.peso_kg;
+    if (c.costo != null && it.t === 'comm') { it.costo = c.costo; delete it.sd; }
+    D.listino.splice(D.listino.indexOf(da) + 1, 0, it);
+  }
+  const conti = sostituisci(D, p.coppie.map(c => [c.da, c.a] as [string, string]), new Set(p.gruppi));
+  save(); commit();
+  return `sostituite ${conti.reduce((t, c) => t + c.n, 0)} righe` + (p.nuovi.length ? `, creati nel listino ${p.nuovi.join(', ')}` : '');
+}
+
+function Card({ p, stato, onFatto }: { p: Proposta; stato?: string; onFatto: (esito: string, nota: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const conferma = async () => {
+    setBusy(true);
+    try {
+      if (p.tipo === 'sostituzione') { const r = applicaSostituzione(p); onFatto('✓ Fatto: ' + r, `Proposta ${p.id} confermata dall'utente e applicata: ${r}.`); }
+      else {
+        const e = await salvaScadenza({ titolo: p.titolo, giorno: p.giorno, ora: p.ora, genere: p.genere as any, nota: p.nota });
+        if (e) throw new Error(e);
+        commit(); onFatto('✓ Evento aggiunto al calendario', `Proposta ${p.id} confermata: evento creato nel calendario.`);
+      }
+    } catch (err) { onFatto('Non riuscito: ' + (err as Error).message, `Proposta ${p.id} non applicata: ${(err as Error).message}.`); }
+    setBusy(false);
+  };
+  return (
+    <div className="aicard">
+      {p.tipo === 'sostituzione' ? <>
+        <b>Sostituzione nelle distinte</b>
+        <ul>{p.righe.map((r, i) => <li key={i}>{cap(r.g)}: <code>{r.da}</code> → <code>{r.a}</code> ×{r.n}{r.taglie.length ? ` (taglie ${r.taglie.join(', ')})` : ''}</li>)}</ul>
+        {p.nuovi.length > 0 && <div className="muted">Nuovi nel listino: {p.nuovi.join(', ')}. Controlla poi peso e prezzo.</div>}
+      </> : <>
+        <b>Nuovo evento</b>
+        <div>{p.titolo}</div>
+        <div className="muted">{giorno(p.giorno)}{p.ora ? ` alle ${p.ora}` : ''}{p.nota ? ` · ${p.nota}` : ''}</div>
+      </>}
+      {stato ? <div className="aiesito">{stato}</div> : <div className="aibtn">
+        <button className="btn p s" disabled={busy} onClick={conferma}>{busy ? 'Applico…' : 'Conferma'}</button>
+        <button className="btn s" disabled={busy} onClick={() => onFatto('Annullata', `Proposta ${p.id} annullata dall'utente.`)}>Annulla</button>
+      </div>}
+    </div>
+  );
+}
+
+export function Assistente() {
+  const [aperto, setAperto] = useState(false), [voci, setVoci] = useState<Voce[]>([]), [testo, setTesto] = useState(''), [busy, setBusy] = useState(false);
+  const [esiti, setEsiti] = useState<Record<string, string>>({});
+  const conv = useRef<unknown[]>([]), note = useRef<string[]>([]), fondo = useRef<HTMLDivElement>(null);
+  useEffect(() => { fondo.current?.scrollIntoView({ block: 'end' }); }, [voci, esiti, aperto]);
+  if (!online()) return null;
+
+  const invia = async (e?: FormEvent) => {
+    e?.preventDefault();
+    const t = testo.trim(); if (!t || busy) return;
+    setTesto(''); setVoci(v => [...v, { ruolo: 'tu', testo: t }]); setBusy(true);
+    try {
+      const nota = note.current.length ? `[Dall'app] ${note.current.join(' ')}` : '';
+      const r = await chiediAssistente({ messages: conv.current, testo: t, nota, dati: datiPerAssistente(S.data) });
+      conv.current = r.messages; note.current = [];
+      setVoci(v => [...v, { ruolo: 'ai', testo: r.testo, proposte: r.proposte }]);
+    } catch (err) { setVoci(v => [...v, { ruolo: 'err', testo: (err as Error).message }]); }
+    setBusy(false);
+  };
+  const nuova = () => { conv.current = []; note.current = []; setVoci([]); setEsiti({}); };
+
+  return <>
+    {!aperto && <button className="aifab noprint" onClick={() => setAperto(true)} title="Assistente AI">✦ Assistente</button>}
+    {aperto && <aside className="aipanel noprint">
+      <div className="aihead"><b>✦ Assistente</b><span style={{ flex: 1 }} />
+        {voci.length > 0 && <button className="btn s" onClick={nuova}>Nuova chat</button>}
+        <button className="btn x" onClick={() => setAperto(false)} title="Chiudi">✕</button></div>
+      <div className="aibody">
+        {!voci.length && <div className="muted aihint">Chiedimi di cambiare articoli nelle distinte o di aggiungere un evento. Per esempio:
+          <ul><li>«Nel pilastro motore sostituisci bullone, dado e rondella M16 con M20»</li><li>«Aggiungi un evento domani alle 17: riunione con Rossi»</li></ul>
+          Prima di cambiare qualcosa ti mostro la proposta: decidi tu se confermarla.</div>}
+        {voci.map((v, i) => <div key={i} className={'aimsg ' + v.ruolo}>
+          {v.testo && <div className="aitxt">{v.testo}</div>}
+          {v.proposte?.map(p => <Card key={p.id} p={p} stato={esiti[p.id]} onFatto={(esito, nota) => { note.current.push(nota); setEsiti(x => ({ ...x, [p.id]: esito })); }} />)}
+        </div>)}
+        {busy && <div className="aimsg ai"><div className="aitxt muted">Sto pensando…</div></div>}
+        <div ref={fondo} />
+      </div>
+      <form className="aiform" onSubmit={invia}>
+        <textarea rows={2} value={testo} placeholder="Scrivi qui…" onChange={e => setTesto(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); invia(); } }} />
+        <button className="btn p" disabled={busy || !testo.trim()}>Invia</button>
+      </form>
+    </aside>}
+  </>;
+}

@@ -489,3 +489,22 @@ table.arch td input{width:100%;max-width:260px}
 .tgbox .btn{background:transparent;color:#dbe3e6;border-color:rgba(255,255,255,.18)}.tgbox .btn:hover{background:rgba(255,255,255,.08);color:#fff}
 .tgcode{font-size:15px;font-weight:700;color:#fff;background:rgba(255,255,255,.08);border-radius:6px;padding:6px 8px;user-select:all;text-align:center;letter-spacing:.04em}
 .tgerr{color:#f0a49b}
+
+/* ---------- Assistente AI: pulsante in basso a destra e pannello chat ---------- */
+.aifab{position:fixed;right:20px;bottom:20px;z-index:30;border:0;border-radius:22px;padding:10px 16px;background:var(--acc2);color:#fff;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.18)}
+.aifab:hover{background:var(--acc)}
+.aipanel{position:fixed;right:0;top:0;bottom:0;width:min(400px,100vw);z-index:45;background:var(--card);border-left:1px solid var(--line);box-shadow:-8px 0 32px rgba(0,0,0,.12);display:flex;flex-direction:column}
+.aihead{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);box-shadow:inset 0 3px var(--yel)}
+.aibody{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.aihint{font-size:13px}.aihint ul{padding-left:18px;margin:6px 0}
+.aimsg{max-width:92%;display:flex;flex-direction:column;gap:8px}
+.aimsg.tu{align-self:flex-end}.aimsg.tu .aitxt{background:var(--acc-soft);color:var(--ink)}
+.aimsg.err .aitxt{background:#fbeceb;color:var(--bad)}
+.aitxt{background:var(--soft2);border-radius:10px;padding:8px 11px;font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.aicard{border:1px solid var(--line);border-left:3px solid var(--acc2);border-radius:10px;padding:10px 12px;font-size:13px;display:flex;flex-direction:column;gap:4px;background:#fff}
+.aicard ul{margin:2px 0;padding-left:18px}.aicard code{font-size:12px}
+.aibtn{display:flex;gap:6px;margin-top:4px}
+.aiesito{font-weight:600;color:var(--acc);margin-top:2px}
+.aiform{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);align-items:flex-end}
+.aiform textarea{flex:1;resize:none;font:inherit;font-size:13.5px;padding:7px 9px;border:1px solid var(--line);border-radius:8px}
+@media print{.aifab,.aipanel{display:none!important}}

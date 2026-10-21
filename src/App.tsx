@@ -16,6 +16,7 @@ import { Montaggio } from './pages/Montaggio';
 import { Accesso } from './pages/Accesso';
 import { Utenti } from './pages/Utenti';
 import { Presenza } from './components/Presenza';
+import { Assistente } from './components/Assistente';
 import { Telegram } from './components/Telegram';
 import { nScadute } from './pages/Calendario';
 import { cloud, isAdmin, logout, setCloudToast } from './store/remote';
@@ -127,6 +128,7 @@ export default function App() {
       <input type="file" ref={setFileInput} accept=".json,application/json" className="hide" onChange={e => { const f = e.target.files?.[0]; if (f) onFilePicked(f); }} />
       {node}
       </div>
+      <Assistente />
     </div>
   );
 }

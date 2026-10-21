@@ -138,6 +138,14 @@ export async function pdfOfferta(pptx: Blob): Promise<Blob> {
   throw new Error(j.error || `errore ${r.status}`);
 }
 
+// L'assistente passa dalla funzione /api/assistente, l'unica con la chiave di Anthropic.
+export async function chiediAssistente(body: unknown): Promise<{ messages: unknown[]; testo: string; proposte: any[] }> {
+  const r = await fetch('/api/assistente', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({ error: `Risposta non valida dal server (${r.status})` }));
+  if (!r.ok) throw new Error(j.error || `Errore ${r.status}`);
+  return j;
+}
+
 // Presenza: ogni finestra aperta si annuncia sul canale; chiudendola (o uscendo) sparisce dall'elenco.
 let presenza: RealtimeChannel | null = null;
 function joinPresenza() {
