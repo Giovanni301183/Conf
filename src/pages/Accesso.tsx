@@ -6,9 +6,8 @@ import { commit } from '../store/state';
 function Box({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="login"><div className="card">
-      <div className="brand"><div className="logo">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10l9-4 9 4-9 4z" /><path d="M12 14v7M8 21h8" /></svg>
-      </div><h1>Preventivatore Tracker<small>{title}</small></h1></div>
+      <div className="brand"><img src="/logo-terranova.png" alt="Terranova" /></div>
+      <h1 className="ltit">{title}</h1>
       {children}
     </div></div>
   );
