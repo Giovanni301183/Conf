@@ -141,6 +141,14 @@ export async function pdfOfferta(pptx: Blob): Promise<Blob> {
   throw new Error(j.error || `errore ${r.status}`);
 }
 
+// Condizioni di progetto dalla localita' (categoria di esposizione, corrosivita', altitudine): /api/sito, come il modulo Telegram.
+export async function propostaSito(localita: string, lat: number | null, lng: number | null): Promise<any> {
+  const r = await fetch('/api/sito', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify({ localita, lat, lng }) });
+  const j = await r.json().catch(() => ({ ok: false, errore: `Risposta non valida dal server (${r.status})` }));
+  if (!j.ok) throw new Error(j.errore || `errore ${r.status}`);
+  return j;
+}
+
 // L'assistente passa dalla funzione /api/assistente, l'unica con la chiave di Anthropic.
 export async function chiediAssistente(body: unknown): Promise<{ messages: unknown[]; testo: string; proposte: any[] }> {
   const r = await fetch('/api/assistente', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify(body) });

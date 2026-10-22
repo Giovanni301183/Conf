@@ -8,8 +8,31 @@ import { GARANZIE0, INCLUSI0, PROGETTO, compilaPptx, datiOfferta, layoutImg, off
 import { buildMont } from '../domain/plan';
 import { R, S, commit, save } from '../store/state';
 import { archPatch, archSave, isDirty, toast } from '../store/actions';
-import { online, pdfOfferta } from '../store/remote';
+import { online, pdfOfferta, propostaSito } from '../store/remote';
 import { StatoTag } from './Cruscotto';
+
+// Categoria di esposizione, corrosivita' e altitudine proposte dalla localita' di Configura, come "Proponi dalla località" su Telegram.
+function ProponiSito() {
+  const [busy, setBusy] = useState(false), [motivo, setMotivo] = useState('');
+  const P = S.prev, lu = P.luogo || {}, pos = lu.lat != null && lu.lng != null;
+  const proponi = async () => {
+    if (!online()) { toast('La proposta usa il server: non disponibile nella versione solo-browser.'); return; }
+    if (!String(lu.nome || '').trim() && !pos) { toast('Scrivi prima la località in Configura.'); return; }
+    setBusy(true);
+    try {
+      const r = await propostaSito(lu.nome || '', pos ? lu.lat : null, pos ? lu.lng : null), O = offPrev(P);
+      if (!pos) P.luogo = { ...lu, lat: +(+r.lat).toFixed(5), lng: +(+r.lng).toFixed(5) };
+      Object.assign(O.prog, { categoria_terreno: r.categoria_terreno, classe_corrosivita: r.classe_corrosivita, altitudine_m: r.altitudine_m });
+      setMotivo('Proposta: ' + r.motivo); commit();
+    } catch (e) { toast('Proposta non riuscita: ' + (e as Error).message); }
+    setBusy(false);
+  };
+  return <div style={{ marginBottom: 12 }}>
+    <button className="btn s" disabled={busy} onClick={proponi}>{busy ? 'Cerco…' : '📍 Proponi dalla località'}</button>
+    <span className="muted small"> Compila categoria di esposizione, corrosività e altitudine; il vento lo inserisci tu.</span>
+    {motivo ? <p className="hint" style={{ margin: '6px 0 0' }}>{motivo}</p> : null}
+  </div>;
+}
 
 const MODELLO = `${import.meta.env.BASE_URL}offerta/modello-offerta.pptx`;
 const oggi = () => new Date().toISOString().slice(0, 10);
@@ -116,6 +139,7 @@ export function Invia() {
 
       <Fold id="in-prog" step={4} title="Dati di progetto" sum={`${PROGETTO.filter(([k]) => String(O.prog[k] ?? '').trim()).length} di ${PROGETTO.length} compilati`}>{() => <>
         <p className="hint">Slide "Dati di progetto". Località, coordinate e modello del modulo vengono da Configura (<b>{P.luogo?.nome || 'località non indicata'}</b> · <b>{P.modulo?.marca || 'modulo non indicato'}</b>). I campi vuoti compaiono come «–».</p>
+        <ProponiSito />
         <div className="grid">{PROGETTO.map(([k, l, ph]) => <label key={k} className="f">{l}<Inp path={`prev.offerta.prog.${k}`} type="txt" ph={'es. ' + ph} /></label>)}</div>
       </>}</Fold>
 
