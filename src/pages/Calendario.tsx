@@ -9,6 +9,7 @@ import { eStato } from '../domain/kpi';
 import { DAY, dDate, dFmt, dToday, isWork, isoDay, monday } from '../domain/plan';
 import { S, commit } from '../store/state';
 import { archOpen, toast } from '../store/actions';
+import { DocPanel, docNonDisponibili } from './Documenti';
 import { cloud, eliminaScadenza, mioEmail, puoModificare, puoSpuntare, salvaScadenza, spuntaScadenza } from '../store/remote';
 
 const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
@@ -35,7 +36,9 @@ export const nScadute = () => { const a = allarmi(vociVisibili(), dToday()); ret
 
 function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean }) {
   const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s);
-  return (
+  // Allegati della voce (file e note): la graffetta mostra quanti sono e apre l'elenco sotto la voce.
+  const [all, setAll] = useState(false), nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
+  return (<>
     <div className={`cvoce ${s?.fatto ? 'fatto' : ''}`} style={{ '--vc': c } as React.CSSProperties}>
       {s ? <input type="checkbox" checked={s.fatto} disabled={!spunta} onChange={() => segna(s)} title={spunta ? 'Fatto' : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
       <div className="vt">
@@ -47,9 +50,11 @@ function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?
       </div>
       {v.tipo === 'richiamo' && v.prevId && <StatoSel id={v.prevId} k="inviato" />}
       {v.prevId && <button className="btn s" onClick={() => apri(v.prevId!)}>Apri</button>}
+      {docOk && <button className={`btn s${all ? ' on' : ''}`} onClick={() => setAll(!all)} title="File e note allegati alla voce">📎{nAll ? ' ' + nAll : ''}</button>}
       {mio && onEdit && <><button className="btn s" onClick={() => onEdit(s)}>Modifica</button><button className="btn x" onClick={() => togli(s)} title="Elimina">✕</button></>}
     </div>
-  );
+    {all && s && <div className="callegati"><DocPanel scadenza={s.id} preventivo={s.preventivo_id} compatto /></div>}
+  </>);
 }
 
 /** Riquadro degli allarmi: voci superate, in arrivo nei prossimi giorni, commesse senza data di avvio. */

@@ -2,6 +2,7 @@
 import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { linkType, supabase } from '../lib/supabase';
 import type { Scadenza } from '../domain/calendario';
+import { LIMITE_MB, percorsoPer, type Documento } from '../domain/documenti';
 import { KEY_ARCH, KEY_DRAFT, KEY_SCAD, S, commit, load, setSaveHook, store, unstore } from './state';
 
 type Fase = 'locale' | 'avvio' | 'login' | 'password' | 'carico' | 'pronto' | 'negato' | 'errore';
@@ -21,6 +22,8 @@ export const cloud = {
   scadErr: '',
   // Colleghi attivi, per assegnare le voci dell'agenda.
   colleghi: [] as Utente[],
+  // Errore nel leggere i documenti (es. migrazione 20261022000000_documenti.sql non ancora eseguita).
+  docErr: '',
 };
 export const online = () => !!supabase;
 let toastFn = (_: string) => {};
@@ -211,6 +214,69 @@ function joinScadenze() {
 }
 function leaveScadenze() { if (scadCh) supabase!.removeChannel(scadCh); scadCh = null; }
 
+/* ---------- Documenti e note ---------- */
+// I file vanno nello Storage (cartella privata "documenti"), i dati nella tabella documenti.
+// Prima si carica il file, poi la riga; se la riga non si salva, il file si toglie. Eliminando: prima il file, poi la riga.
+const BUCKET = 'documenti';
+export const puoGestireDoc = (d: Documento) => isAdmin() || d.creato_da === mioEmail();
+async function loadDocumenti() {
+  const { data, error } = await supabase!.from('documenti').select('*').order('creato', { ascending: false });
+  if (error) { cloud.docErr = error.message; S.docs = []; return; }
+  cloud.docErr = ''; S.docs = data;
+}
+const dbErr = (m: string) => (/documenti_legato/.test(m) ? "il documento deve restare legato a un preventivo o a una voce d'agenda" : m);
+export async function caricaFile(f: File, dove: { preventivo_id?: string | null; scadenza_id?: string | null }, cartella: string): Promise<string> {
+  if (!supabase) return 'I documenti si salvano solo con il server.';
+  if (f.size > LIMITE_MB * 1024 * 1024) return `"${f.name}" supera ${LIMITE_MB} MB.`;
+  const percorso = percorsoPer(dove.preventivo_id || null, crypto.randomUUID(), f.name);
+  const up = await supabase.storage.from(BUCKET).upload(percorso, f, { contentType: f.type || undefined, upsert: false });
+  if (up.error) return `"${f.name}" non caricato: ${up.error.message}`;
+  const { error } = await supabase.from('documenti').insert({ preventivo_id: dove.preventivo_id || null, scadenza_id: dove.scadenza_id || null, cartella, tipo: 'file',
+    titolo: f.name.slice(0, 200), percorso, mime: f.type || null, dimensione: f.size });
+  if (error) { await supabase.storage.from(BUCKET).remove([percorso]); return `"${f.name}" non salvato: ${dbErr(error.message)}`; }
+  return '';
+}
+export async function salvaNota(n: { id?: string; titolo: string; testo: string; cartella: string; preventivo_id?: string | null; scadenza_id?: string | null }): Promise<string> {
+  if (!supabase) return 'Le note si salvano solo con il server.';
+  const v = { titolo: n.titolo.trim().slice(0, 200), testo: n.testo.trim() || null, cartella: n.cartella };
+  if (!v.titolo) return 'Serve un titolo.';
+  const { error } = n.id ? await supabase.from('documenti').update(v).eq('id', n.id)
+    : await supabase.from('documenti').insert({ ...v, tipo: 'nota', preventivo_id: n.preventivo_id || null, scadenza_id: n.scadenza_id || null });
+  if (error) return dbErr(error.message);
+  await loadDocumenti(); return '';
+}
+export async function aggiornaDoc(id: string, patch: Partial<Pick<Documento, 'titolo' | 'cartella' | 'testo'>>): Promise<string> {
+  const { error } = await supabase!.from('documenti').update(patch).eq('id', id);
+  if (error) return dbErr(error.message);
+  await loadDocumenti(); return '';
+}
+export async function eliminaDoc(d: Documento): Promise<string> {
+  if (d.percorso) { const { error } = await supabase!.storage.from(BUCKET).remove([d.percorso]); if (error) return error.message; }
+  const { error } = await supabase!.from('documenti').delete().eq('id', d.id);
+  if (error) return error.message;
+  await loadDocumenti(); return '';
+}
+export async function ricaricaDocumenti() { if (supabase) await loadDocumenti(); }
+/** Link temporaneo (1 ora) per aprire o scaricare un file. */
+export async function linkDoc(d: Documento, scarica = false): Promise<string> {
+  const { data, error } = await supabase!.storage.from(BUCKET).createSignedUrl(d.percorso!, 3600, scarica ? { download: d.titolo } : undefined);
+  if (error) throw error;
+  return data.signedUrl;
+}
+/** Anteprime delle foto: link temporanei per piu' file in una sola richiesta. */
+export async function linkAnteprime(dd: Documento[]): Promise<Record<string, string>> {
+  const pp = dd.filter(d => d.percorso).map(d => d.percorso!);
+  if (!supabase || !pp.length) return {};
+  const { data } = await supabase.storage.from(BUCKET).createSignedUrls(pp, 3600);
+  return Object.fromEntries((data || []).filter(x => x.signedUrl).map(x => [x.path, x.signedUrl]));
+}
+let docCh: RealtimeChannel | null = null;
+function joinDocumenti() {
+  if (docCh) return;
+  docCh = supabase!.channel('documenti').on('postgres_changes', { event: '*', schema: 'public', table: 'documenti' }, async () => { await loadDocumenti(); commit(); }).subscribe();
+}
+function leaveDocumenti() { if (docCh) supabase!.removeChannel(docCh); docCh = null; }
+
 /* ---------- Telegram ---------- */
 // Codice di 6 cifre (valido 10 minuti) da scrivere al bot come "/collega 123456"; lo abbina /api/agenda.
 export async function codiceTelegram(): Promise<{ codice?: string; error?: string }> {
@@ -229,17 +295,17 @@ async function loadAll() {
   cloud.fase = 'carico'; cloud.err = ''; commit();
   try {
     if (!(await loadMe())) { cloud.fase = 'negato'; commit(); return; }
-    await Promise.all([loadArch(), loadListino(true), loadScadenze()]);
+    await Promise.all([loadArch(), loadListino(true), loadScadenze(), loadDocumenti()]);
     if (S.prev._id && !S.arch.some(e => e.id === S.prev._id)) delete S.prev._id;
     cloud.fase = 'pronto';
-    joinPresenza(); joinScadenze();
+    joinPresenza(); joinScadenze(); joinDocumenti();
   } catch (err) { cloud.fase = 'errore'; cloud.err = (err as Error).message; }
   commit();
 }
 // Al ritorno sulla finestra si rileggono archivio e listino, per vedere il lavoro dei colleghi.
 async function refresh() {
   if (cloud.fase !== 'pronto') return;
-  try { await Promise.all([loadArch(), loadListino(false), loadScadenze()]); commit(); } catch { /* si riprova al prossimo ritorno */ }
+  try { await Promise.all([loadArch(), loadListino(false), loadScadenze(), loadDocumenti()]); commit(); } catch { /* si riprova al prossimo ritorno */ }
 }
 
 export function initCloud() {
@@ -248,8 +314,8 @@ export function initCloud() {
     const prima = cloud.session?.user.id;
     cloud.session = session;
     if (ev === 'PASSWORD_RECOVERY' || (session && linkType && cloud.fase === 'avvio')) { cloud.fase = 'password'; commit(); return; }
-    if (!session) { leavePresenza(); leaveScadenze(); cloud.fase = 'login'; commit(); return; }
-    if (session.user.id !== prima && cloud.fase !== 'password') { leavePresenza(); leaveScadenze(); setTimeout(loadAll); }   // fuori dalla callback: evita blocchi del client
+    if (!session) { leavePresenza(); leaveScadenze(); leaveDocumenti(); cloud.fase = 'login'; commit(); return; }
+    if (session.user.id !== prima && cloud.fase !== 'password') { leavePresenza(); leaveScadenze(); leaveDocumenti(); setTimeout(loadAll); }   // fuori dalla callback: evita blocchi del client
   });
   window.addEventListener('focus', refresh);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
@@ -272,7 +338,7 @@ export async function setPassword(password: string) {
 }
 export async function logout() {
   if (cloud.sync === 'salvo' || (cloud.fase === 'pronto' && JSON.stringify(S.data) !== synced)) await pushListino();
-  leavePresenza(); leaveScadenze();
+  leavePresenza(); leaveScadenze(); leaveDocumenti();
   await supabase!.auth.signOut();
-  S.arch = []; S.scad = []; synced = ''; listinoTs = ''; cloud.me = null;
+  S.arch = []; S.scad = []; S.docs = []; synced = ''; listinoTs = ''; cloud.me = null;
 }

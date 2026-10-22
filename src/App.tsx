@@ -13,6 +13,7 @@ import { Margini } from './pages/Margini';
 import { Invia } from './pages/Invia';
 import { Lavorazione } from './pages/Lavorazione';
 import { Montaggio } from './pages/Montaggio';
+import { Documenti } from './pages/Documenti';
 import { Accesso } from './pages/Accesso';
 import { Utenti } from './pages/Utenti';
 import { Presenza } from './components/Presenza';
@@ -23,13 +24,13 @@ import { cloud, isAdmin, logout, setCloudToast } from './store/remote';
 
 const VIEWS: Record<Tab, () => React.ReactNode> = {
   archivio: Preventivi, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
-  extra: Extra, margini: Margini, invia: Invia, lavor: Lavorazione, mont: Montaggio, utenti: Utenti,
+  extra: Extra, margini: Margini, invia: Invia, docs: Documenti, lavor: Lavorazione, mont: Montaggio, utenti: Utenti,
 };
 const goTab = (t: Tab) => { S.ui.tab = t; window.scrollTo(0, 0); commit(); };
 const save = () => { (document.activeElement as HTMLElement | null)?.blur?.(); archSave(false); commit(); };
 
 // Barra laterale: schede raggruppate per fase di lavoro.
-const GROUPS: [string, Tab[]][] = [['', ['archivio']], ['Preventivo', ['config', 'costi', 'extra', 'margini', 'invia']],
+const GROUPS: [string, Tab[]][] = [['', ['archivio']], ['Preventivo', ['config', 'costi', 'extra', 'margini', 'invia', 'docs']],
   ['Produzione e cantiere', ['lavor', 'mont']], ['Dati di base', ['listino', 'distinte']], ['Amministrazione', ['utenti']]];
 const ICON: Record<Tab, string> = {
   archivio: 'M3 11l9-7 9 7M5 9.5V20h5v-6h4v6h5V9.5',
@@ -38,6 +39,7 @@ const ICON: Record<Tab, string> = {
   extra: 'M12 5v14M5 12h14',
   margini: 'M19 5L5 19M7 9a2 2 0 100-4 2 2 0 000 4zM17 19a2 2 0 100-4 2 2 0 000 4z',
   invia: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
+  docs: 'M21 11.5l-8.6 8.6a5 5 0 01-7.1-7.1l8.6-8.6a3.3 3.3 0 014.7 4.7l-8.6 8.6a1.7 1.7 0 01-2.4-2.4l7.9-7.9',
   lavor: 'M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z',
   mont: 'M3 20h18M5 20V10l7-6 7 6v10M9 20v-6h6v6',
   listino: 'M8 6h12M8 12h12M8 18h12M4 6h0M4 12h0M4 18h0',
