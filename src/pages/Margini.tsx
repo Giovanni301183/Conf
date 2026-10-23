@@ -1,12 +1,17 @@
-// Scheda Margini: margine generale e per categoria, prezzo di vendita.
+// Scheda Margini: margine generale e per categoria, prezzo di vendita; prezzo spot che ricalcola i margini.
+import { useState } from 'react';
 import { Fold, Inp, Seg, TabTools } from '../components/ui';
 import { eur, fN, fP } from '../domain/format';
-import { perCategoria } from '../domain/margini';
+import { margineSpot, perCategoria } from '../domain/margini';
 import { LAV_CAT, MCATS, ZINC_CAT, normPrev, num } from '../domain/model';
-import { R, S } from '../store/state';
+import { R, S, commit, save } from '../store/state';
 
 export function Margini() {
   const P = normPrev(S.prev), M = P.marg, C = R.total, V = R.prezzo, mg = V - C, ric = M.modo === 'ricarico';
+  // Prezzo spot: si scrive il totale voluto, si vede di quanti punti cambiano i margini e si applica.
+  const [spot, setSpot] = useState(''), sv = num(spot.replace(/\./g, '').replace(',', '.'));
+  const prova = spot.trim() ? margineSpot(S.data, P, sv) : null;
+  const applica = () => { if (!prova || 'errore' in prova) return; S.prev.marg = prova.marg; setSpot(''); save(); commit(); };
   const wpS = (x: number) => (R.kwp ? fN(x / (R.kwp * 1000), 4) : '–');
   // Lavorazione e zincatura si contano a parte, nella loro categoria: le altre categorie mostrano il costo senza di esse.
   const byCat = perCategoria(R);
@@ -24,6 +29,17 @@ export function Margini() {
         </div>
         <p className="hint" style={{ margin: '12px 0 0' }}>{ric ? 'Ricarico: prezzo = costo × (1 + %). Es. costo 100 €, ricarico 25 % → prezzo 125 €.' : 'Margine sul prezzo: prezzo = costo ÷ (1 − %). Es. costo 100 €, margine 20 % → prezzo 125 € (il margine è il 20 % del prezzo).'}
           {' '}Vale per tutte le categorie, salvo quelle con un valore proprio al passo 2.</p>
+        <div className="grid" style={{ marginTop: 14, alignItems: 'end' }}>
+          <label className="f">Prezzo spot (€)<input value={spot} inputMode="decimal" placeholder={fN(V, 0)} onChange={e => setSpot(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') applica(); }} /></label>
+          {prova && ('errore' in prova ? <div className="f wide warn">{prova.errore}</div> : <>
+            <div className="f wide">Margini {prova.delta >= 0 ? '+' : ''}{fN(prova.delta, 2)} punti: generale {fP(num(prova.marg.gen))}
+              {MCATS.filter(c => M.cat[c] !== '' && M.cat[c] != null).map(c => ` · ${c.toLowerCase()} ${fP(num(prova.marg.cat[c]))}`).join('')}
+              {' '}→ prezzo <b>{eur(prova.prezzo)}</b>{sv < C ? <span style={{ color: 'var(--bad)' }}> · sotto il costo ({eur(C)})</span> : null}</div>
+            <div className="f"><button className="btn p" onClick={applica}>Applica</button></div>
+          </>)}
+        </div>
+        <p className="hint" style={{ margin: '8px 0 0' }}>Scrivi il prezzo totale che vuoi fare: il margine generale e quelli per categoria si spostano tutti degli stessi punti, così le differenze tra categorie restano.</p>
       </>}</Fold>
 
       <Fold id="mg-cat" step={2} title="Margine per categoria" sum={own.length ? own.map(c => `${c.toLowerCase()} ${fP(num(M.cat[c]))}`).join(' · ') : 'Tutte le categorie usano il valore generale'}>{() => <>
