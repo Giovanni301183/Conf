@@ -6,17 +6,15 @@ import { createClient } from '@supabase/supabase-js';
 const MODELLO = 'claude-opus-5-5';
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-const STRUMENTO: Anthropic.Messages.Tool = {
-  name: 'bozza_email',
-  description: "Restituisce l'email di aggiornamento pronta da rileggere.",
-  input_schema: {
-    type: 'object',
-    properties: {
-      oggetto: { type: 'string', description: 'Oggetto breve e chiaro, con il riferimento della commessa se c\'è.' },
-      testo: { type: 'string', description: 'Corpo in testo semplice (niente markdown), con saluto iniziale e chiusura firmata col nome del mittente.' },
-    },
-    required: ['oggetto', 'testo'],
+// Risposta strutturata: JSON con oggetto e testo (su questo modello non si può forzare l'uso di uno strumento).
+const SCHEMA = {
+  type: 'object',
+  properties: {
+    oggetto: { type: 'string', description: "Oggetto breve e chiaro, con il riferimento della commessa se c'è." },
+    testo: { type: 'string', description: 'Corpo in testo semplice (niente markdown), con saluto iniziale e chiusura firmata col nome del mittente.' },
   },
+  required: ['oggetto', 'testo'],
+  additionalProperties: false,
 };
 
 const sistema = (mittente: string) => `Sei l'assistente di Terranova S.r.l. (strutture per fotovoltaico, serre e agricoltura).
@@ -27,7 +25,7 @@ Regole:
 - Togli abbreviazioni e note personali che non devono arrivare al destinatario.
 - Se l'appunto indica a chi è rivolto, saluta di conseguenza; altrimenti usa "Buongiorno,".
 - Chiudi con "Cordiali saluti," e il nome del mittente: ${mittente}.
-Rispondi chiamando lo strumento bozza_email.`;
+Rispondi con il JSON richiesto (oggetto e testo).`;
 
 export async function POST(req: Request) {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -50,13 +48,16 @@ export async function POST(req: Request) {
     richiesta && `Indicazioni per l'email: ${richiesta}`].filter(Boolean).join('\n\n');
 
   try {
-    const r = await new Anthropic().messages.create({
-      model: MODELLO, max_tokens: 4000, system: sistema(mittente), tools: [STRUMENTO],
-      tool_choice: { type: 'tool', name: STRUMENTO.name }, messages: [{ role: 'user', content: domanda }],
+    const r = await new Anthropic().beta.messages.create({
+      model: MODELLO, max_tokens: 4000, system: sistema(mittente), messages: [{ role: 'user', content: domanda }],
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
+      // Se il modello declina, la richiesta riparte da sola sul modello di riserva consigliato da Anthropic.
+      betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
     });
-    const uso = r.content.find(c => c.type === 'tool_use');
-    if (!uso) return json(502, { error: r.stop_reason === 'refusal' ? 'Il servizio AI non ha voluto scrivere questa email.' : 'Il servizio AI non ha restituito la bozza: riprova.' });
-    const x = uso.input as { oggetto?: string; testo?: string };
+    if (r.stop_reason === 'refusal') return json(502, { error: 'Il servizio AI non ha voluto scrivere questa email.' });
+    const out = r.content.flatMap(c => (c.type === 'text' ? [c.text] : [])).join('');
+    let x: { oggetto?: string; testo?: string };
+    try { x = JSON.parse(out); } catch { return json(502, { error: 'Il servizio AI non ha restituito la bozza: riprova.' }); }
     return json(200, { oggetto: String(x.oggetto || ''), testo: String(x.testo || '') });
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) return json(500, { error: 'Chiave ANTHROPIC_API_KEY non valida.' });
