@@ -269,7 +269,7 @@ export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''):
     const parole = norm(String(b.cerca ?? '')).split(/\s+/).filter(Boolean);
     const trovati = (data || []).filter((p: any) => { const t = norm([p.nome, p.cliente, p.rif, p.num, p.luogo].join(' ')); return parole.every(w => t.includes(w)); })
       .sort((a: any, x: any) => Number(x.stato === 'vinto') - Number(a.stato === 'vinto') || String(x.salvato).localeCompare(String(a.salvato)))
-      .slice(0, 15).map((p: any) => ({ id: p.id, nome: p.nome, numero: p.num, cliente: p.cliente, riferimento: p.rif, luogo: p.luogo, stato: p.stato || 'bozza', commessa: p.stato === 'vinto' }));
+      .slice(0, 15).map((p: any) => ({ id: p.id, nome: p.nome, numero: p.num, data: p.data, cliente: p.cliente, riferimento: p.rif, luogo: p.luogo, stato: p.stato || 'bozza', commessa: p.stato === 'vinto' }));
     return { ok: true, trovati, nota: 'commessa = preventivo vinto' };
   }
 
