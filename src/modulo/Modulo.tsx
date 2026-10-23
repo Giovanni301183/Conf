@@ -11,13 +11,14 @@ const parametri = new URLSearchParams(location.search);
 type Riga = { n: string; taglia: string; tipo: string; prof: string; asse: string; omega: string; lFond: number; lCusc: number };
 type Layout = { url: string; w: number; h: number; nome: string; dxf: Record<string, number> | null };
 type Campi = {
-  cliente: string; rif: string; localita: string; referente: string; rev: string; wp: string; modulo: string; righe: Riga[];
+  cliente: string; rif: string; localita: string; referente: string; email: string; zona: string; rev: string; wp: string; modulo: string; righe: Riga[];
+  resa: string; pagamento: string; consegna: string; validita: string;
   margine: string; margini: Record<string, string>; trasporto: string; posa: string; pieno: string; layout: Layout | null | false;
   prog: Record<string, string>; lat: string; lng: string;
   [componente: string]: any;   // quadri e sensori (centralina, piranometro…): numero di pezzi, vuoto = 0
 };
 const rigaNuova = (taglia = '36'): Riga => ({ n: '', taglia, tipo: 'Agrivoltaico', prof: 'IPE 140', asse: '2,5', omega: '2,0', lFond: 3, lCusc: 2.3 });
-const vuoti = (): Campi => ({ cliente: parametri.get('cliente') || '', rif: '', localita: '', referente: '', rev: '0', wp: '600', modulo: '', righe: [rigaNuova()],
+const vuoti = (): Campi => ({ cliente: parametri.get('cliente') || '', rif: '', localita: '', referente: '', email: '', zona: '', resa: '', pagamento: '', consegna: '', validita: '', rev: '0', wp: '600', modulo: '', righe: [rigaNuova()],
   margine: '', margini: {}, trasporto: '', posa: '', pieno: '', layout: null, prog: {}, lat: '', lng: '' });
 const CATEGORIE_ESP = ['I', 'II', 'III', 'IV', 'V'], CORROSIVITA = ['C1', 'C2', 'C3', 'C4', 'C5', 'CX'];
 
@@ -58,6 +59,7 @@ export function Modulo() {
   const [esito, setEsito] = useState(false);
   const [catAperte, setCatAperte] = useState(false);
   const [sito, setSito] = useState('');           // motivazione della proposta dalla localita'
+  const [spot, setSpot] = useState(''), [spotEsito, setSpotEsito] = useState('');   // prezzo spot e margini ricalcolati
   const id = fatto?.id || parametri.get('id') || '';
 
   useEffect(() => {
@@ -93,6 +95,17 @@ export function Modulo() {
     if (!r.ok) { tg?.showAlert ? tg.showAlert(r.errore) : alert(r.errore); return; }
     cambia({ lat: String(r.lat), lng: String(r.lng), prog: { ...f.prog, categoria_terreno: r.categoria_terreno, classe_corrosivita: r.classe_corrosivita, altitudine_m: r.altitudine_m } });
     setSito('Proposta: ' + r.motivo);
+  }
+
+  // Prezzo spot: il server sposta tutti i margini degli stessi punti finche' il prezzo e' quello scritto.
+  async function calcolaSpot() {
+    const v = Number(spot.replace(/\./g, '').replace(',', '.'));
+    if (!(v > 0)) { tg?.showAlert?.('Scrivi il prezzo totale in euro, es. 250.000'); return; }
+    setBusy('spot');
+    const r = await chiama('spot', { ...f, id: id || undefined, spot: v }).catch(() => ({ ok: false, errore: 'Server non raggiungibile.' }));
+    setBusy('');
+    if (!r.ok) { tg?.showAlert ? tg.showAlert(r.errore) : alert(r.errore); return; }
+    cambia({ margine: r.margine, margini: r.margini }); setSpotEsito(r.testo);
   }
 
   async function caricaLayout(file: File) {
@@ -144,6 +157,10 @@ export function Modulo() {
           <Campo label="Località"><input value={f.localita} onChange={e => cambia({ localita: e.target.value, lat: '', lng: '' })} placeholder="es. Marsala (TP)" /></Campo>
           <Campo label="Referente"><input value={f.referente} onChange={e => cambia({ referente: e.target.value })} /></Campo>
         </div>
+        <div className="due">
+          <Campo label="E-mail referente"><input type="email" value={f.email} onChange={e => cambia({ email: e.target.value })} /></Campo>
+          <Campo label="Zona"><input value={f.zona} onChange={e => cambia({ zona: e.target.value })} placeholder="es. Periferia" /></Campo>
+        </div>
       </section>
 
       <section>
@@ -163,17 +180,20 @@ export function Modulo() {
         <button type="button" className="sec" disabled={busy === 'sito'} onClick={proponi}>{busy === 'sito' ? 'Cerco…' : '📍 Proponi dalla località'}</button>
         {sito ? <p className="muted">{sito}</p> : null}
         <div className="due">
-          {prog('vento_ms', 'decimal', 'Lo inserisci tu')}
-          <Campo label="Categoria di esposizione"><select value={f.prog.categoria_terreno ?? ''} onChange={e => cambiaProg('categoria_terreno', e.target.value)}>
-            <option value="">–</option>{CATEGORIE_ESP.map(c => <option key={c}>{c}</option>)}</select></Campo>
+          {prog('vento_ms', 'decimal', 'Lo inserisci tu')}{prog('vento_protezione_ms', 'decimal')}
         </div>
         <div className="due">
+          <Campo label="Categoria di esposizione"><select value={f.prog.categoria_terreno ?? ''} onChange={e => cambiaProg('categoria_terreno', e.target.value)}>
+            <option value="">–</option>{CATEGORIE_ESP.map(c => <option key={c}>{c}</option>)}</select></Campo>
           {prog('altitudine_m', 'numeric')}
+        </div>
+        <div className="due">
           <Campo label="Corrosività (ISO 9223)"><select value={f.prog.classe_corrosivita ?? ''} onChange={e => cambiaProg('classe_corrosivita', e.target.value)}>
             <option value="">–</option>{CORROSIVITA.map(c => <option key={c}>{c}</option>)}</select></Campo>
+          {prog('pendenza_ns')}
         </div>
-        <div className="due">{prog('pendenza_ns')}{prog('altezza_min_modulo_m', 'decimal')}</div>
-        <div className="due">{prog('infissione_m', 'decimal')}{prog('angolo_rotazione', 'numeric')}</div>
+        <div className="due">{prog('altezza_min_modulo_m', 'decimal')}{prog('infissione_m', 'decimal')}</div>
+        {prog('angolo_rotazione', 'numeric')}
         <div className="due">
           <Campo label="Latitudine"><input inputMode="decimal" value={f.lat} onChange={e => cambia({ lat: e.target.value })} /></Campo>
           <Campo label="Longitudine"><input inputMode="decimal" value={f.lng} onChange={e => cambia({ lng: e.target.value })} /></Campo>
@@ -218,6 +238,11 @@ export function Modulo() {
       <section>
         <h2>Margini</h2>
         <Campo label="Margine generale (%) *" nota="Margine sul prezzo: costo 100 €, margine 20 % → prezzo 125 €."><input inputMode="decimal" value={f.margine} onChange={e => cambia({ margine: e.target.value })} /></Campo>
+        <div className="due">
+          <Campo label="Prezzo spot (€)" nota="Prezzo totale voluto: i margini si spostano tutti degli stessi punti."><input inputMode="decimal" value={spot} onChange={e => { setSpot(e.target.value); setSpotEsito(''); }} placeholder="es. 250.000" /></Campo>
+          <Campo label=" "><button type="button" className="sec" disabled={busy === 'spot'} onClick={calcolaSpot}>{busy === 'spot' ? 'Calcolo…' : 'Calcola margini'}</button></Campo>
+        </div>
+        {spotEsito ? <p className="muted">{spotEsito}</p> : null}
         <button type="button" className="link" onClick={() => setCatAperte(!catAperte)}>{catAperte ? '▾' : '▸'} Margini per categoria (zincatura, struttura…)</button>
         {catAperte ? <div className="due">{cfg.categorie.map((c: string) => (
           <Campo key={c} label={c.charAt(0) + c.slice(1).toLowerCase()}><input inputMode="decimal" value={f.margini[c] ?? ''} placeholder={c === 'LAVORAZIONE' || c === 'ZINCATURA' ? 'come categoria' : 'generale'}
@@ -230,9 +255,18 @@ export function Modulo() {
           <Campo label="Trasporto (€)" nota="0 = escluso"><input inputMode="decimal" value={f.trasporto} onChange={e => cambia({ trasporto: e.target.value })} placeholder="escluso" /></Campo>
           <Campo label="Posa in opera (€)" nota="0 = non inclusa"><input inputMode="decimal" value={f.posa} onChange={e => cambia({ posa: e.target.value })} placeholder="non inclusa" /></Campo>
         </div>
+        <Campo label="Revisione"><input value={f.rev} onChange={e => cambia({ rev: e.target.value })} /></Campo>
+      </section>
+
+      <section>
+        <h2>Condizioni commerciali</h2>
         <div className="due">
-          <Campo label="Prezzo pieno barrato (€)" nota="Facoltativo"><input inputMode="decimal" value={f.pieno} onChange={e => cambia({ pieno: e.target.value })} /></Campo>
-          <Campo label="Revisione"><input value={f.rev} onChange={e => cambia({ rev: e.target.value })} /></Campo>
+          <Campo label="Resa (Incoterms 2020)"><input value={f.resa} onChange={e => cambia({ resa: e.target.value })} placeholder="es. DAP cantiere" /></Campo>
+          <Campo label="Pagamento"><input value={f.pagamento} onChange={e => cambia({ pagamento: e.target.value })} placeholder="Da concordare" /></Campo>
+        </div>
+        <div className="due">
+          <Campo label="Tempi di consegna"><input value={f.consegna} onChange={e => cambia({ consegna: e.target.value })} placeholder="es. 8-10 settimane" /></Campo>
+          <Campo label="Validità offerta"><input value={f.validita} onChange={e => cambia({ validita: e.target.value })} placeholder="es. 30 giorni" /></Campo>
         </div>
       </section>
 

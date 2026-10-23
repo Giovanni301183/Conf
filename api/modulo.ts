@@ -2,12 +2,13 @@
 // Il modulo manda { initData, azione, campi }: initData e' firmato da Telegram con il token del bot e dice chi lo sta usando,
 // quindi qui non serve il segreto di n8n. Il collega deve avere il Telegram collegato all'app (come per la chat).
 // Azioni: dati (opzioni e, con id, i campi di un preventivo salvato), sito (proposta delle condizioni di progetto dalla localita'),
+//         spot (margini che portano al prezzo scritto),
 //         anteprima (calcolo senza salvare), crea (salva e manda l'offerta).
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { MCATS, clone, defaultData, normPrev } from '../src/domain/model.js';
 import { PROGETTO } from '../src/domain/offerta.js';
-import { IMPIANTO, anteprima, opzioni, campiModulo, preventivoBot } from './_preventivo.js';
+import { IMPIANTO, anteprima, opzioni, campiModulo, preventivoBot, spot } from './_preventivo.js';
 import { propostaSito } from './_sito.js';
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -52,6 +53,7 @@ export async function POST(req: Request) {
     }
     if (b.azione === 'sito') return json(200, await propostaSito(String(campi.localita || ''), campi.lat ? Number(campi.lat) : null, campi.lng ? Number(campi.lng) : null));
     if (b.azione === 'anteprima') return json(200, await anteprima(db, campi, oggiISO()));
+    if (b.azione === 'spot') return json(200, await spot(db, campi, oggiISO()));
     if (b.azione === 'crea') return json(200, await preventivoBot(db, { ...campi, azione: 'preventivo', file_id: undefined }, me.email, tu.id, oggiISO()));
     return json(200, fail(`Azione sconosciuta: ${b.azione}`));
   } catch (e) { return json(200, fail((e as Error).message)); }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
-import { anteprima, applica, preventivoBot } from './_preventivo';
+import { anteprima, applica, campiModulo, preventivoBot } from './_preventivo';
 import { verificaInitData } from './modulo';
 import { categoria, corrosivita, zonaVento } from './_sito';
 import { dimensioni, rasterizza } from './_layout';
@@ -17,6 +17,11 @@ describe('preventivo da Telegram: campi', () => {
     expect([P.marg.gen, P.marg.cat.ZINCATURA, P.marg.cat.STRUTTURA, P.offerta.trasporto]).toEqual([18, 10, '', 4000]);
     expect(applica(P, { margine: 100 }, d)).toMatch(/sotto il 100/);
     expect(applica(P, { margini: { LISTINO: 5 } }, d)).toMatch(/sconosciuta/);
+  });
+  it("informazioni generali e condizioni commerciali dell'offerta, anche nel modulo", () => {
+    const P: any = newPrev(), d = defaultData();
+    expect(applica(P, { email: ' mario@rossi.it ', zona: 'Periferia', resa: 'DAP cantiere', pagamento: "30% all'ordine", consegna: '8 settimane', validita: '30 giorni' }, d)).toBeNull();
+    expect(campiModulo(P)).toMatchObject({ email: 'mario@rossi.it', zona: 'Periferia', resa: 'DAP cantiere', pagamento: "30% all'ordine", consegna: '8 settimane', validita: '30 giorni' });
   });
 });
 

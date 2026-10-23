@@ -15,7 +15,7 @@ import { compute } from '../src/domain/compute.js';
 import { eur, fN, fP, fileName } from '../src/domain/format.js';
 import { MCATS, MIN_CUSC, OPT_LCUSC, OPT_LFOND, clone, defRiga, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../src/domain/model.js';
 import { pilastri } from '../src/domain/referenze.js';
-import { testoMargini } from '../src/domain/margini.js';
+import { margineSpot, testoMargini } from '../src/domain/margini.js';
 import { etichetta, nomeVariante, profDa, rigaVariante, variante, type Variante } from '../src/domain/varianti.js';
 import { PROGETTO, compilaPptxBytes, datiOfferta, layoutImg, offPrev } from '../src/domain/offerta.js';
 import { layoutDaTelegram } from './_layout.js';
@@ -31,6 +31,7 @@ const MAX_RIF = 60;   // il riferimento e' il titolo della copertina e della sli
 
 // Opzioni della configurazione di una riga, come nella scheda Configura: [valore salvato, come si scrive].
 // I profili dei pilastri sono quelli spuntati nel listino (opzioni(data)).
+export const OFFERTA_TESTI = ['email', 'zona', 'resa', 'pagamento', 'consegna', 'validita'] as const;
 export const OPZIONI = {
   asse: [['2,5', '2,5 mm'], ['3,0', '3,0 mm']],
   omega: [['2,0', '2,0 mm'], ['1,8', '1,8 mm']],
@@ -82,6 +83,8 @@ export function applica(P: any, b: any, data: any): string | null {
   if (b.localita != null) P.luogo = { ...P.luogo, nome: breve(b.localita, 80) };
   if (b.referente != null) O.referente = breve(b.referente, 80);
   if (!vuoto(b.rev)) O.rev = breve(b.rev, 5);
+  // Informazioni generali e condizioni commerciali dell'offerta: testi brevi, vuoto = «–» (il pagamento «Da concordare»).
+  for (const k of OFFERTA_TESTI) if (b[k] != null) O[k] = breve(b[k], 120);
 
   if (!vuoto(b.righe)) {
     const rr = daJson(b.righe);
@@ -140,7 +143,7 @@ export function campiModulo(P: any) {
     ...Object.fromEntries(IMPIANTO.map(([k, c]) => [k, num(P.imp?.[c]) ? s(P.imp[c]) : ''])),
     prog: Object.fromEntries(PROGETTO.map(([k]) => [k, s(O.prog[k])])), lat: s(P.luogo?.lat), lng: s(P.luogo?.lng),
     margine: s(P.marg?.gen), margini: Object.fromEntries(MCATS.map(c => [c, s(P.marg?.cat?.[c])])),
-    trasporto: s(O.trasporto), posa: s(O.posa), pieno: s(O.pieno),
+    trasporto: s(O.trasporto), posa: s(O.posa), pieno: s(O.pieno), ...Object.fromEntries(OFFERTA_TESTI.map(k => [k, s(O[k])])),
     layout: O.layout ? { url: O.layout, w: O.layoutW, h: O.layoutH, nome: O.layoutNome, dxf: O.dxf } : null,
   };
 }
@@ -231,6 +234,16 @@ async function prepara(db: Db, b: any, oggi: string): Promise<{ errore: string }
 }
 
 /** Anteprima per il modulo: calcolo e testi dell'offerta, senza salvare ne' mandare niente. */
+/** Prezzo spot dal modulo: margini (generale e per categoria, spostati degli stessi punti) che portano il prezzo al valore scritto. */
+export async function spot(db: Db, b: any, oggi: string): Promise<Record<string, unknown>> {
+  const p = await prepara(db, { ...b, azione: 'preventivo', file_id: undefined }, oggi);
+  if ('errore' in p) return fail(p.errore);
+  const r = margineSpot(p.data, p.P, num(b.spot));
+  if ('errore' in r) return fail(r.errore);
+  return { ok: true, margine: String(r.marg.gen), margini: Object.fromEntries(MCATS.map(c => [c, r.marg.cat?.[c] == null ? '' : String(r.marg.cat[c])])),
+    delta: r.delta, prezzo: r.prezzo, testo: `Margini ${r.delta >= 0 ? '+' : ''}${fN(r.delta, 2)} punti → prezzo ${eur(r.prezzo)}` };
+}
+
 export async function anteprima(db: Db, b: any, oggi: string): Promise<Record<string, unknown>> {
   const p = await prepara(db, { ...b, azione: 'preventivo', file_id: undefined }, oggi);
   if ('errore' in p) return fail(p.errore);
