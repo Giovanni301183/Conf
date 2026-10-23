@@ -97,7 +97,7 @@ export function archVarianti(id: string, vv: Variante[]) {
   if (added.length) saveArch(added);
   const t = added.length ? `Create ${added.length} varianti: ${added.map(x => 'N° ' + x.prev.num).join(', ')}` : 'Nessuna variante nuova';
   toast(t + (a.uguali.length ? ` · ${a.uguali[0]} è già il preventivo base` : ''));
-  return t;
+  return { testo: t, ids: added.map(x => x.id) };
 }
 // Rinomina senza aprire il preventivo; se e' quello aperto il nome cambia anche li', senza segnarlo come modificato.
 export function archRename(id: string) {

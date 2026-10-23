@@ -9,7 +9,7 @@
     ],
     "additionalFields": {}
    },
-   "id": "9aba3ee2-9679-4bff-ba8f-49319d059c2a",
+   "id": "82349cc3-6216-4f4c-bd67-956a08ca2854",
    "name": "Telegram Trigger",
    "type": "n8n-nodes-base.telegramTrigger",
    "typeVersion": 1.2,
@@ -29,13 +29,13 @@
     "assignments": {
      "assignments": [
       {
-       "id": "df5cb0b0-0f26-42cd-a91c-f39733e430cb",
+       "id": "de8bcf92-cffa-444e-ae9c-84497f3749d7",
        "name": "url",
        "type": "string",
        "value": "https://conf-git-calendario-giovanne.vercel.app/api/agenda?x-vercel-protection-bypass=INSERISCI_CODICE_BYPASS"
       },
       {
-       "id": "003750a9-168a-4895-9817-0fec535fd4e1",
+       "id": "60a01a25-9cc7-47e6-b098-6a2425a9188d",
        "name": "gruppo",
        "type": "string",
        "value": "INSERISCI_ID_GRUPPO"
@@ -45,7 +45,7 @@
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "29326293-8ebd-4fd5-ad92-117fa6a4a992",
+   "id": "08295c89-9fe0-41e7-acca-0c4e1cba24b6",
    "name": "Impostazioni",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -64,7 +64,7 @@
      },
      "conditions": [
       {
-       "id": "c9316af0-cdb7-4eff-be37-02b92f400c2c",
+       "id": "c46720c0-1d2b-4bfc-83b2-2c60141bbcc6",
        "leftValue": "={{ !!$json.callback_query }}",
        "rightValue": "",
        "operator": {
@@ -78,7 +78,7 @@
     },
     "options": {}
    },
-   "id": "2888ad88-5292-49ec-8c87-28dd706f32ff",
+   "id": "f2755d8e-380b-4528-9023-97fe4b43e7d9",
    "name": "È un pulsante?",
    "type": "n8n-nodes-base.if",
    "typeVersion": 2.2,
@@ -98,7 +98,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: $json.callback_query.data.split(':')[0], id: $json.callback_query.data.split(':')[1], telegram_id: $json.callback_query.from.id }) }}",
     "options": {}
    },
-   "id": "64d1932d-bed2-48f9-83c9-6501f028fa22",
+   "id": "87f7c301-157d-49d3-aab3-14c94a069d1b",
    "name": "Pulsante → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -122,7 +122,7 @@
      "show_alert": "={{ !$json.ok }}"
     }
    },
-   "id": "57da24e0-0d4b-4bdb-b3b8-16d653b2d98c",
+   "id": "4e755c4c-01ae-40d5-8902-50e127718a8d",
    "name": "Risposta al pulsante",
    "type": "n8n-nodes-base.telegram",
    "typeVersion": 1.2,
@@ -147,7 +147,7 @@
      },
      "conditions": [
       {
-       "id": "58cc7ad9-69f5-4003-a852-aace93531ece",
+       "id": "24cb5c02-6f2e-42c7-ae62-be6d997e7053",
        "leftValue": "={{ $('Pulsante → app').item.json.ok }}",
        "rightValue": "",
        "operator": {
@@ -161,7 +161,7 @@
     },
     "options": {}
    },
-   "id": "273ea814-f865-4ef5-829e-8725fceb831e",
+   "id": "2a19d437-ba8c-4b1a-b2e7-87e2a0489d59",
    "name": "Andato a buon fine?",
    "type": "n8n-nodes-base.if",
    "typeVersion": 2.2,
@@ -179,7 +179,7 @@
      "reply_to_message_id": "={{ $('Telegram Trigger').item.json.callback_query.message.message_id }}"
     }
    },
-   "id": "575b9ad4-b1f1-4cc6-8591-920318b5db56",
+   "id": "77f104ff-8bae-4549-9f36-8d76aa8b1030",
    "name": "Avvisa nel gruppo",
    "type": "n8n-nodes-base.telegram",
    "typeVersion": 1.2,
@@ -204,7 +204,7 @@
      },
      "conditions": [
       {
-       "id": "bca05624-2eaf-4618-b97d-00aa3ec2d9eb",
+       "id": "43ab94cf-4370-4560-b384-cfc994f37eea",
        "leftValue": "={{ ['/collega', '/id'].includes(String($json.message?.text || '').trim().split(' ')[0].split('@')[0].toLowerCase()) }}",
        "rightValue": "",
        "operator": {
@@ -218,7 +218,7 @@
     },
     "options": {}
    },
-   "id": "1173cdfb-499e-476a-a022-69f0d26f514f",
+   "id": "f3c94dcf-29c8-4fab-a425-623464f5d2e8",
    "name": "È /collega o /id?",
    "type": "n8n-nodes-base.if",
    "typeVersion": 2.2,
@@ -237,7 +237,7 @@
      },
      "conditions": [
       {
-       "id": "7b5a1144-b3e2-457a-94eb-75aa6b2813e4",
+       "id": "7370db5c-f8f4-4e1f-81cd-17c2bb271524",
        "leftValue": "={{ String($json.message?.text || '').trim().split(' ')[0].split('@')[0].toLowerCase() === '/id' }}",
        "rightValue": "",
        "operator": {
@@ -251,7 +251,7 @@
     },
     "options": {}
    },
-   "id": "1fefd127-eb27-4a9c-b6bc-489d5a995676",
+   "id": "23fe4cc7-cf1d-4d20-a7f3-28077dbeeabc",
    "name": "Quale comando?",
    "type": "n8n-nodes-base.if",
    "typeVersion": 2.2,
@@ -268,7 +268,7 @@
      "appendAttribution": false
     }
    },
-   "id": "bed31ace-064b-4541-bed0-15d991fc9936",
+   "id": "655814e5-26e4-4e28-89fe-42c80a7891b1",
    "name": "Rispondi id",
    "type": "n8n-nodes-base.telegram",
    "typeVersion": 1.2,
@@ -294,7 +294,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'collega', telegram_id: $json.message.from.id, codice: String($json.message.text).split(' ').slice(1).join('').trim() }) }}",
     "options": {}
    },
-   "id": "ca2fa95d-0ab8-48b0-ad0e-66a79d523ca7",
+   "id": "b5a3cc68-6d6d-499f-99b1-653ec00c7ab1",
    "name": "Collega → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -317,7 +317,7 @@
      "appendAttribution": false
     }
    },
-   "id": "eab09270-bf49-45ad-8bc1-435ae0c1bf62",
+   "id": "2c9539c5-960b-435f-9080-b7e011d04f14",
    "name": "Rispondi collega",
    "type": "n8n-nodes-base.telegram",
    "typeVersion": 1.2,
@@ -342,7 +342,7 @@
      },
      "conditions": [
       {
-       "id": "79b47f1e-1be5-4bea-8efe-2a920c17a480",
+       "id": "119eb6c9-e445-4444-8a8b-604492788bda",
        "leftValue": "={{ !!($json.message?.voice || $json.message?.audio) }}",
        "rightValue": "",
        "operator": {
@@ -356,7 +356,7 @@
     },
     "options": {}
    },
-   "id": "5573f9fe-6d12-4420-a5ae-5b170d6860f4",
+   "id": "1156d4da-cd93-4eae-a271-6cee3bbab8fe",
    "name": "È un vocale?",
    "type": "n8n-nodes-base.if",
    "typeVersion": 2.2,
@@ -372,7 +372,7 @@
     "download": true,
     "additionalFields": {}
    },
-   "id": "1f5eff42-5a29-4ae5-8dd8-af8fd85994e8",
+   "id": "cb827709-8b56-40f8-b0a7-1a2a2290ac8e",
    "name": "Scarica audio",
    "type": "n8n-nodes-base.telegram",
    "typeVersion": 1.2,
@@ -395,7 +395,7 @@
      "language": "it"
     }
    },
-   "id": "383f2e23-c369-48de-8a0c-d0a62ae264f6",
+   "id": "b2453758-f7ce-49d4-bf3f-8c5b04479695",
    "name": "Trascrivi",
    "type": "@n8n/n8n-nodes-langchain.openAi",
    "typeVersion": 1.8,
@@ -415,10 +415,10 @@
     "promptType": "define",
     "text": "={{ $json.text ? '[vocale] ' + $json.text : (($('Telegram Trigger').item.json.message.text || $('Telegram Trigger').item.json.message.caption || '') + ($('Telegram Trigger').item.json.message.document ? ' [allegato: file \"' + $('Telegram Trigger').item.json.message.document.file_name + '\", file_id=' + $('Telegram Trigger').item.json.message.document.file_id + ']' : $('Telegram Trigger').item.json.message.photo ? ' [allegato: foto, file_id=' + $('Telegram Trigger').item.json.message.photo[$('Telegram Trigger').item.json.message.photo.length - 1].file_id + ']' : '')) || '(messaggio senza testo: chiedi di scriverlo a parole o con un vocale)' }}",
     "options": {
-     "systemMessage": "=Sei l'assistente dell'agenda di Terranova (strutture tracker per impianti fotovoltaici). Parli in italiano con un collega su Telegram.\nOggi è {{ $now.setZone('Europe/Rome').setLocale('it').toFormat('cccc d LLLL yyyy') }} ({{ $now.setZone('Europe/Rome').toFormat('yyyy-MM-dd') }}), ore {{ $now.setZone('Europe/Rome').toFormat('HH:mm') }}.\n\nCosa fai: registri urgenze, cose da fare, promemoria, scadenze e appuntamenti; leggi l'agenda; segni le voci fatte; le assegni ai colleghi.\nFai anche preventivi: per uno nuovo mandi il modulo da compilare (modulo_preventivo); l'offerta PowerPoint arriva in chat privata, da inoltrare al cliente.\nPrepari bozze di email dagli appunti (email_da_appunto), che l'operatore apre e invia da Gmail.\n\nRegole:\n- Se il messaggio segnala un problema o dice \"urgente\", crea una voce di genere \"urgenza\" (per oggi, salvo data diversa). Titolo breve e chiaro (es. \"Mancano bulloni in cantiere: preparare il materiale\"); i dettagli vanno nella nota.\n- Se cita una commessa, un cliente, un numero di preventivo o un luogo, usa cerca_commesse e collega la voce con preventivo_id. Commessa = preventivo vinto: preferisci quelle. Se ci sono più risultati plausibili chiedi quale, elencando nome e numero. Se non trovi niente, chiedi o crea senza collegamento dicendolo.\n- Categoria (facoltativa): bulloni, viti, dadi, rondelle → BULLONERIA; profili, pali, acciaio, carpenteria → STRUTTURA; motori, attuatori, cuscinetti → ELETTROMECCANICO; quadri, centraline, sensori, cavi → ELETTRONICO.\n- Per assegnare a qualcuno usa colleghi e passa la sua email. \"Me ne occupo io\" = assegnata a chi scrive (usa chi_sono).\n- Date relative (\"domani\", \"lunedì\", \"fra una settimana\") → AAAA-MM-GG. Ora → HH:MM. Senza data per una voce non urgente, chiedi.\n- Non inventare mai id: prendili dagli strumenti. Prima di eliminare chiedi conferma.\n- Se uno strumento risponde ok:false, spiega il problema in parole semplici. Se l'account non è collegato, spiega come collegarlo.\n- I messaggi che iniziano con [vocale] sono la trascrizione di un messaggio vocale: possono contenere errori di trascrizione (nomi, numeri). Prima di salvare, ripeti in una riga cosa hai capito; se un nome di commessa o un numero è dubbio, chiedi conferma.\n- Urgenze e voci assegnate vengono annunciate da sole nel gruppo: non devi farlo tu.\n- Comandi del menu del bot: /oggi = agenda di oggi; /settimana = prossimi 7 giorni; /mie = solo le mie voci; /urgente <testo> = registra un'urgenza; /preventivo <cliente> = modulo per un preventivo nuovo; /aiuto o /start = spiega in poche righe cosa puoi fare e come collegare l'account (/collega CODICE, codice dal pulsante Telegram nell'app).\n- Preventivo nuovo (\"preventivo per Rossi Srl\", /preventivo Rossi): usa SEMPRE modulo_preventivo con il nome del cliente detto dall'operatore, senza fare domande sui dati. L'operatore compila il modulo, controlla l'anteprima e lo invia da lì. Rispondi solo che il pulsante «Compila preventivo» è in chat privata.\n- Per correggere un preventivo già fatto con il modulo usa modulo_preventivo con il suo id (da cerca_commesse). Solo per una modifica piccola e chiara (es. \"metti il margine al 20 %\" sul preventivo 2026/012) usa prepara_preventivo con l'id e i soli campi da cambiare, dopo aver ripetuto la modifica e avuto conferma. Per rimandare l'offerta così com'è usa invia_offerta.\n- Il riferimento (rif) è solo il nome breve dell'impianto, il titolo della copertina: mai note o dati tecnici. Profilo (IPE/IPEA), asse (2,5/3,0 mm), omega (2,0/1,8 mm), fondazione e cuscinetto in metri vanno nei campi delle righe.\n- Layout: se un messaggio ha [allegato: …] è un file o una foto mandati al bot. Se è il layout dell'impianto, mettilo nel preventivo giusto con carica_layout (file_id e nome dall'allegato; se il preventivo non è chiaro chiedi quale, cercandolo con cerca_commesse). Per un preventivo nuovo passa file_id e file_nome a prepara_preventivo: da un DXF i tracker si contano da soli, falli confermare. Il DXF va mandato come file, non come foto. Nell'immagine fatta dal DXF le scritte non compaiono. L'allegato resta valido anche nei messaggi dopo.\n- Email da un appunto (\"manda a Rossi l'aggiornamento della nota sui pali\"): trova l'appunto con cerca_appunti (parole del titolo o della commessa; per una commessa passa anche preventivo_id da cerca_commesse); se ce n'è più di uno plausibile chiedi quale, elencando titolo e data. Poi usa email_da_appunto con l'id, le indicazioni dette (a chi, tono, cose da aggiungere) e l'indirizzo se lo conosci. Email senza appunto (\"preparami una mail a Rossi per dire che il montaggio slitta al 10\"): NON cercare appunti, usa subito email_da_appunto senza id, con il contenuto detto dall'operatore in appunto (e preventivo_id se cita una commessa). La bozza arriva in chat privata con i pulsanti per aprirla nell'app Gmail del telefono o in Gmail dal computer: non riscriverne il testo in chat (nel gruppo mai). Nessuna email parte da sola: la invia l'operatore da Gmail.\n- Più preventivi per lo stesso cliente che cambiano solo il materiale (\"fammi un preventivo IPEA con asse 2,5, uno IPEA con asse 3 e uno IPE con asse 2,5\"): ogni combinazione la dice l'operatore, non aggiungerne e non indovinarne. Serve un preventivo base già salvato con tracker, località e margini: se non c'è manda il modulo (modulo_preventivo) per compilarlo con la prima combinazione e chiedi di riscriverti quando l'ha creato; se c'è, trovalo con cerca_commesse. Ripeti l'elenco delle combinazioni, una per riga, e chiedi conferma; poi usa crea_varianti con l'id del base e l'elenco. Ogni variante diventa un preventivo con il suo numero (successivo) e la sua offerta in chat privata. Riporta il confronto (testo) e gli avvisi.\n- Il listino non si modifica da qui: se te lo chiedono, rispondi che si cambia nell'app (scheda Listino).\n- Dopo un preventivo riporta il riepilogo dello strumento (testo), gli avvisi importanti e se l'offerta è arrivata in privato. Costi e margini solo a chi li ha chiesti: non scriverli mai nel gruppo, lì dì solo che l'offerta è in privato.\n- Rispondi breve, testo semplice senza Markdown. Dopo aver registrato qualcosa, riassumi cosa hai salvato."
+     "systemMessage": "=Sei l'assistente dell'agenda di Terranova (strutture tracker per impianti fotovoltaici). Parli in italiano con un collega su Telegram.\nOggi è {{ $now.setZone('Europe/Rome').setLocale('it').toFormat('cccc d LLLL yyyy') }} ({{ $now.setZone('Europe/Rome').toFormat('yyyy-MM-dd') }}), ore {{ $now.setZone('Europe/Rome').toFormat('HH:mm') }}.\n\nCosa fai: registri urgenze, cose da fare, promemoria, scadenze e appuntamenti; leggi l'agenda; segni le voci fatte; le assegni ai colleghi.\nFai anche preventivi: per uno nuovo mandi il modulo da compilare (modulo_preventivo); l'offerta PowerPoint arriva in chat privata, da inoltrare al cliente.\nPrepari bozze di email dagli appunti (email_da_appunto), che l'operatore apre e invia da Gmail.\n\nRegole:\n- Se il messaggio segnala un problema o dice \"urgente\", crea una voce di genere \"urgenza\" (per oggi, salvo data diversa). Titolo breve e chiaro (es. \"Mancano bulloni in cantiere: preparare il materiale\"); i dettagli vanno nella nota.\n- Se cita una commessa, un cliente, un numero di preventivo o un luogo, usa cerca_commesse e collega la voce con preventivo_id. Commessa = preventivo vinto: preferisci quelle. Se ci sono più risultati plausibili chiedi quale, elencando nome e numero. Se non trovi niente, chiedi o crea senza collegamento dicendolo.\n- Categoria (facoltativa): bulloni, viti, dadi, rondelle → BULLONERIA; profili, pali, acciaio, carpenteria → STRUTTURA; motori, attuatori, cuscinetti → ELETTROMECCANICO; quadri, centraline, sensori, cavi → ELETTRONICO.\n- Per assegnare a qualcuno usa colleghi e passa la sua email. \"Me ne occupo io\" = assegnata a chi scrive (usa chi_sono).\n- Date relative (\"domani\", \"lunedì\", \"fra una settimana\") → AAAA-MM-GG. Ora → HH:MM. Senza data per una voce non urgente, chiedi.\n- Non inventare mai id: prendili dagli strumenti. Prima di eliminare chiedi conferma.\n- Se uno strumento risponde ok:false, spiega il problema in parole semplici. Se l'account non è collegato, spiega come collegarlo.\n- I messaggi che iniziano con [vocale] sono la trascrizione di un messaggio vocale: possono contenere errori di trascrizione (nomi, numeri). Prima di salvare, ripeti in una riga cosa hai capito; se un nome di commessa o un numero è dubbio, chiedi conferma.\n- Urgenze e voci assegnate vengono annunciate da sole nel gruppo: non devi farlo tu.\n- Comandi del menu del bot: /oggi = agenda di oggi; /settimana = prossimi 7 giorni; /mie = solo le mie voci; /urgente <testo> = registra un'urgenza; /preventivo <cliente> = modulo per un preventivo nuovo; /aiuto o /start = spiega in poche righe cosa puoi fare e come collegare l'account (/collega CODICE, codice dal pulsante Telegram nell'app).\n- Preventivo nuovo (\"preventivo per Rossi Srl\", /preventivo Rossi): usa SEMPRE modulo_preventivo con il nome del cliente detto dall'operatore, senza fare domande sui dati. L'operatore compila il modulo, controlla l'anteprima e lo invia da lì. Rispondi solo che il pulsante «Compila preventivo» è in chat privata.\n- Per correggere un preventivo già fatto con il modulo usa modulo_preventivo con il suo id (da cerca_commesse). Solo per una modifica piccola e chiara (es. \"metti il margine al 20 %\" sul preventivo 2026/012) usa prepara_preventivo con l'id e i soli campi da cambiare, dopo aver ripetuto la modifica e avuto conferma. Per rimandare l'offerta così com'è usa invia_offerta.\n- Il riferimento (rif) è solo il nome breve dell'impianto, il titolo della copertina: mai note o dati tecnici. Profilo (IPE/IPEA), asse (2,5/3,0 mm), omega (2,0/1,8 mm), fondazione e cuscinetto in metri vanno nei campi delle righe.\n- Layout: se un messaggio ha [allegato: …] è un file o una foto mandati al bot. Se è il layout dell'impianto, mettilo nel preventivo giusto con carica_layout (file_id e nome dall'allegato; se il preventivo non è chiaro chiedi quale, cercandolo con cerca_commesse). Per un preventivo nuovo passa file_id e file_nome a prepara_preventivo: da un DXF i tracker si contano da soli, falli confermare. Il DXF va mandato come file, non come foto. Nell'immagine fatta dal DXF le scritte non compaiono. L'allegato resta valido anche nei messaggi dopo.\n- Email da un appunto (\"manda a Rossi l'aggiornamento della nota sui pali\"): trova l'appunto con cerca_appunti (parole del titolo o della commessa; per una commessa passa anche preventivo_id da cerca_commesse); se ce n'è più di uno plausibile chiedi quale, elencando titolo e data. Poi usa email_da_appunto con l'id, le indicazioni dette (a chi, tono, cose da aggiungere) e l'indirizzo se lo conosci. Email senza appunto (\"preparami una mail a Rossi per dire che il montaggio slitta al 10\"): NON cercare appunti, usa subito email_da_appunto senza id, con il contenuto detto dall'operatore in appunto (e preventivo_id se cita una commessa). La bozza arriva in chat privata con i pulsanti per aprirla nell'app Gmail del telefono o in Gmail dal computer: non riscriverne il testo in chat (nel gruppo mai). Nessuna email parte da sola: la invia l'operatore da Gmail.\n- Più preventivi per lo stesso cliente che cambiano solo il materiale (\"fammi un preventivo IPEA con asse 2,5, uno IPEA con asse 3 e uno IPE con asse 2,5\"): ogni combinazione la dice l'operatore, non aggiungerne e non indovinarne. Serve un preventivo base già salvato con tracker, località e margini: se non c'è manda il modulo (modulo_preventivo) per compilarlo con la prima combinazione e chiedi di riscriverti quando l'ha creato; se c'è, trovalo con cerca_commesse. Ripeti l'elenco delle combinazioni, una per riga, e chiedi conferma; poi usa crea_varianti con l'id del base e l'elenco. Ogni variante diventa un preventivo con il suo numero (successivo); in chat privata arrivano le offerte PDF del base e di tutte le varianti. Riporta il confronto (testo) e gli avvisi.\n- Il listino non si modifica da qui: se te lo chiedono, rispondi che si cambia nell'app (scheda Listino).\n- Dopo un preventivo riporta il riepilogo dello strumento (testo), gli avvisi importanti e se l'offerta è arrivata in privato. Costi e margini solo a chi li ha chiesti: non scriverli mai nel gruppo, lì dì solo che l'offerta è in privato.\n- Rispondi breve, testo semplice senza Markdown. Dopo aver registrato qualcosa, riassumi cosa hai salvato."
     }
    },
-   "id": "5187414e-009f-4b50-9391-649b7f0f7b50",
+   "id": "8f52bbb6-84cb-4972-8ee9-70d251c29936",
    "name": "Assistente",
    "type": "@n8n/n8n-nodes-langchain.agent",
    "typeVersion": 1.7,
@@ -435,7 +435,7 @@
      "appendAttribution": false
     }
    },
-   "id": "005a335c-dd48-4ab7-a557-53584c4d1ce8",
+   "id": "d7cb3ba3-b44d-4383-8233-25de292a8881",
    "name": "Rispondi",
    "type": "n8n-nodes-base.telegram",
    "typeVersion": 1.2,
@@ -459,7 +459,7 @@
     },
     "options": {}
    },
-   "id": "40b9c926-28d5-4296-b564-780a4e918cd4",
+   "id": "91274f4e-9f84-4571-b2e4-137985c32c59",
    "name": "Modello",
    "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
    "typeVersion": 1.2,
@@ -480,7 +480,7 @@
     "sessionKey": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
     "contextWindowLength": 12
    },
-   "id": "2db04a89-5130-4df4-a459-70cc6c435d5f",
+   "id": "48455d67-f892-43a4-84a7-2f581f7410a7",
    "name": "Memoria",
    "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
    "typeVersion": 1.3,
@@ -501,7 +501,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'chi_sono', telegram_id: $('Telegram Trigger').item.json.message.from.id }) }}",
     "options": {}
    },
-   "id": "d191cf99-ea61-4586-a2b7-e116175b031d",
+   "id": "11c88c11-fdb4-477e-82b1-105c83fbb53a",
    "name": "chi_sono",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -528,7 +528,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'commesse', telegram_id: $('Telegram Trigger').item.json.message.from.id, cerca: $fromAI('cerca', `Parole da cercare, es. Ripo oppure 2026/014`, 'string', \"\") }) }}",
     "options": {}
    },
-   "id": "02fb784b-fbc7-4911-ad28-179ceac9d70c",
+   "id": "421f82dd-7eb8-4e05-8d06-1baa5fa1e3dc",
    "name": "cerca_commesse",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -555,7 +555,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'collega', telegram_id: $('Telegram Trigger').item.json.message.from.id, codice: $fromAI('codice', `Codice di 6 cifre`, 'string') }) }}",
     "options": {}
    },
-   "id": "1918d7de-eab4-4665-8910-c57bccbd347e",
+   "id": "28bf4d46-c12f-49cd-9081-3a41d7b58e17",
    "name": "collega_account",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -582,7 +582,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'colleghi', telegram_id: $('Telegram Trigger').item.json.message.from.id }) }}",
     "options": {}
    },
-   "id": "3d354fe6-f49f-4025-ad00-6a2a8feb3c94",
+   "id": "110aa6a7-fdab-41ff-845b-19451ad8702d",
    "name": "colleghi",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -609,7 +609,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'agenda', telegram_id: $('Telegram Trigger').item.json.message.from.id, da: $fromAI('da', `Data iniziale AAAA-MM-GG (vuoto = oggi)`, 'string', \"\"), a: $fromAI('a', `Data finale AAAA-MM-GG (vuoto = 7 giorni dopo)`, 'string', \"\"), solo_mie: $fromAI('solo_mie', `true per le sole voci create da me o assegnate a me`, 'boolean', false) }) }}",
     "options": {}
    },
-   "id": "4ffd5736-1d04-496c-a748-67cf9a700805",
+   "id": "24bc20df-03e4-4970-bf8b-600496b9b471",
    "name": "leggi_agenda",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -636,7 +636,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'crea', telegram_id: $('Telegram Trigger').item.json.message.from.id, genere: $fromAI('genere', `Uno tra: urgenza, attivita (cosa da fare), promemoria, scadenza, appuntamento`, 'string'), titolo: $fromAI('titolo', `Descrizione breve, massimo 200 caratteri`, 'string'), giorno: $fromAI('giorno', `Data AAAA-MM-GG; vuoto solo per le urgenze (= oggi)`, 'string', \"\"), ora: $fromAI('ora', `Ora HH:MM, vuoto se non indicata`, 'string', \"\"), nota: $fromAI('nota', `Dettagli facoltativi`, 'string', \"\"), categoria: $fromAI('categoria', `Facoltativa: STRUTTURA, BULLONERIA, ELETTROMECCANICO, ELETTRONICO`, 'string', \"\"), preventivo_id: $fromAI('preventivo_id', `id del preventivo o commessa preso da cerca_commesse, vuoto se nessuno`, 'string', \"\"), assegnata_a: $fromAI('assegnata_a', `email del collega presa da colleghi, vuoto se nessuno`, 'string', \"\") }) }}",
     "options": {}
    },
-   "id": "86d560fb-ccb8-4a37-91a0-47051d734e0b",
+   "id": "04bd4984-5138-484d-bb56-ec7e35005ea7",
    "name": "crea_voce",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -663,7 +663,7 @@
     "jsonBody": "={{ JSON.stringify(Object.fromEntries(Object.entries({ azione: 'preventivo', telegram_id: $('Telegram Trigger').item.json.message.from.id, id: $fromAI('id', `Solo per cambiare un preventivo esistente: il suo id; vuoto per uno nuovo`, 'string', \"\"), cliente: $fromAI('cliente', `Nome del cliente (obbligatorio per uno nuovo)`, 'string', \"\"), rif: $fromAI('rif', `Nome breve dell impianto per la copertina, massimo 60 caratteri, mai note o dati tecnici; facoltativo`, 'string', \"\"), righe: $fromAI('righe', `Righe tracker come JSON, es. [{\"n\":40,\"taglia\":36,\"tipo\":\"agrivoltaico\",\"prof\":\"IPE\",\"asse\":2.5,\"omega\":1.8,\"lFond\":3,\"lCusc\":2.3}]; prof, asse, omega, lFond (fondazione m), lCusc (cuscinetto m) facoltativi; vuoto se invariate`, 'string', \"\"), margine: $fromAI('margine', `Margine generale in %, es. 18; vuoto se non detto`, 'string', \"\"), margini: $fromAI('margini', `Margini per categoria come JSON, es. {\"STRUTTURA\":25,\"ZINCATURA\":10}; vuoto se non detti`, 'string', \"\"), trasporto: $fromAI('trasporto', `Prezzo del trasporto in euro per l offerta, 0 = escluso; vuoto se non detto`, 'string', \"\"), posa: $fromAI('posa', `Prezzo della posa in opera in euro, 0 = non inclusa; vuoto se non detto`, 'string', \"\"), wp: $fromAI('wp', `Potenza del modulo in W, es. 600; vuoto se non detta`, 'string', \"\"), modulo: $fromAI('modulo', `Marca e modello del modulo, facoltativo`, 'string', \"\"), localita: $fromAI('localita', `Località dell impianto, facoltativa`, 'string', \"\"), referente: $fromAI('referente', `Referente del cliente, facoltativo`, 'string', \"\"), quadri_campo: $fromAI('quadri_campo', `Numero di quadri di campo, facoltativo`, 'string', \"\"), quadri_generali: $fromAI('quadri_generali', `Numero di quadri generali, facoltativo`, 'string', \"\"), file_id: $fromAI('file_id', `file_id di un allegato con il layout (DXF o foto), facoltativo`, 'string', \"\"), file_nome: $fromAI('file_nome', `Nome del file allegato, es. impianto.dxf; vuoto per una foto`, 'string', \"\") }).filter(([, v]) => v !== '' && v != null))) }}",
     "options": {}
    },
-   "id": "f5c25f1a-57c4-42be-9dc1-ff36a1ad9b89",
+   "id": "074a29ef-9d61-4d6e-86f9-e1949508a57f",
    "name": "prepara_preventivo",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -690,7 +690,7 @@
     "jsonBody": "={{ JSON.stringify(Object.fromEntries(Object.entries({ azione: 'modulo', telegram_id: $('Telegram Trigger').item.json.message.from.id, cliente: $fromAI('cliente', `Nome dell'azienda cliente detto dall'operatore`, 'string', \"\"), id: $fromAI('id', `id del preventivo da correggere, vuoto per uno nuovo`, 'string', \"\") }).filter(([, v]) => v !== '' && v != null))) }}",
     "options": {}
    },
-   "id": "b72303e2-6e8d-4689-829a-dc264ea1ac8f",
+   "id": "79190795-ed19-4c05-a33f-04bc7097d233",
    "name": "modulo_preventivo",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -717,7 +717,7 @@
     "jsonBody": "={{ JSON.stringify(Object.fromEntries(Object.entries({ azione: 'layout', telegram_id: $('Telegram Trigger').item.json.message.from.id, id: $fromAI('id', `id del preventivo`, 'string'), file_id: $fromAI('file_id', `file_id dell'allegato`, 'string'), file_nome: $fromAI('file_nome', `Nome del file allegato; vuoto per una foto`, 'string', \"\") }).filter(([, v]) => v !== '' && v != null))) }}",
     "options": {}
    },
-   "id": "585beb3e-f8f6-4ff7-8222-caca66c4c0d0",
+   "id": "13eed8ef-c04a-4952-8c1d-10326e33d80c",
    "name": "carica_layout",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -744,7 +744,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'offerta', telegram_id: $('Telegram Trigger').item.json.message.from.id, id: $fromAI('id', `id del preventivo`, 'string') }) }}",
     "options": {}
    },
-   "id": "5226df4b-e40a-4f77-a830-c544dd8a7284",
+   "id": "fc3463c1-e65b-476f-9cba-523c28dbfc50",
    "name": "invia_offerta",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -771,7 +771,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'varianti', telegram_id: $('Telegram Trigger').item.json.message.from.id, id: $fromAI('id', `id del preventivo base`, 'string'), varianti: $fromAI('varianti', `Elenco JSON delle combinazioni dette, es. [{\"prof\":\"IPEA\",\"asse\":2.5},{\"prof\":\"IPE\",\"asse\":3}]; prof = famiglia (IPE, IPEA) o codice (IPE 140); asse 2.5 o 3; omega 2 o 1.8; i campi non detti restano quelli del base`, 'string') }) }}",
     "options": {}
    },
-   "id": "6a432eba-eb1c-4859-965d-3ee01d030ab7",
+   "id": "034dbd20-e1da-48e2-a3d0-5d24271f4658",
    "name": "crea_varianti",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -798,7 +798,7 @@
     "jsonBody": "={{ JSON.stringify(Object.fromEntries(Object.entries({ azione: 'appunti', telegram_id: $('Telegram Trigger').item.json.message.from.id, cerca: $fromAI('cerca', `Parole da cercare nel titolo, nel testo o nel nome della commessa`, 'string', \"\"), preventivo_id: $fromAI('preventivo_id', `id della commessa da cerca_commesse, vuoto se nessuna`, 'string', \"\") }).filter(([, v]) => v !== '' && v != null))) }}",
     "options": {}
    },
-   "id": "cf912fd1-5b3d-4720-a1f1-bbbf98afa3e4",
+   "id": "c09e82ec-88f5-4c7e-97c3-326b7ffe3c02",
    "name": "cerca_appunti",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -825,7 +825,7 @@
     "jsonBody": "={{ JSON.stringify(Object.fromEntries(Object.entries({ azione: 'email', telegram_id: $('Telegram Trigger').item.json.message.from.id, id: $fromAI('id', `id dell'appunto da cerca_appunti; vuoto se il contenuto è dettato`, 'string', \"\"), appunto: $fromAI('appunto', `Solo senza id: il contenuto dettato dall'operatore`, 'string', \"\"), richiesta: $fromAI('richiesta', `Indicazioni per la bozza: a chi è rivolta, tono (lei/tu), cose da aggiungere`, 'string', \"\"), a: $fromAI('a', `Indirizzi email dei destinatari separati da virgola, vuoto se non detti`, 'string', \"\"), preventivo_id: $fromAI('preventivo_id', `id della commessa per il contesto, vuoto se nessuna`, 'string', \"\") }).filter(([, v]) => v !== '' && v != null))) }}",
     "options": {}
    },
-   "id": "3271be38-5f1a-429c-ae4b-d1c3ef587758",
+   "id": "108f5386-598c-4cfe-82b2-d8516d8a110f",
    "name": "email_da_appunto",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,
@@ -852,7 +852,7 @@
     "jsonBody": "={{ JSON.stringify(Object.fromEntries(Object.entries({ azione: $fromAI('azione', `Una tra: prendi, risolvi, aggiorna, elimina`, 'string'), telegram_id: $('Telegram Trigger').item.json.message.from.id, id: $fromAI('id', `id della voce`, 'string'), titolo: $fromAI('titolo', `Solo per aggiorna: nuovo titolo, vuoto se invariato`, 'string', \"\"), giorno: $fromAI('giorno', `Solo per aggiorna: nuova data AAAA-MM-GG, vuoto se invariata`, 'string', \"\"), ora: $fromAI('ora', `Solo per aggiorna: nuova ora HH:MM, vuoto se invariata`, 'string', \"\"), nota: $fromAI('nota', `Solo per aggiorna: nuova nota, vuoto se invariata`, 'string', \"\"), assegnata_a: $fromAI('assegnata_a', `Solo per aggiorna: email del nuovo assegnatario, vuoto se invariato`, 'string', \"\") }).filter(([, v]) => v !== '' && v != null))) }}",
     "options": {}
    },
-   "id": "7c3886bd-0837-4b76-858c-6b6eee85e6e9",
+   "id": "3d318ba0-0214-4dd7-b01b-0aaafc7c151a",
    "name": "modifica_voce",
    "type": "n8n-nodes-base.httpRequestTool",
    "typeVersion": 4.2,

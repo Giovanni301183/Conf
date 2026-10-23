@@ -290,19 +290,22 @@ export async function variantiBot(db: Db, b: any, email: string, chat: number): 
     if (!P) uguali.push(etichetta(base));
     else if (!fatte.some(f => etichetta(f) === etichetta(P))) fatte.push(P);
   }
-  const righe = [`📊 Varianti di N° ${base.num} · ${base.cliente || ''}`, `Base: ${rigaVariante(base, compute(data, base))}`];
+  const Rb = compute(data, base), invia = b.invia !== false && b.invia !== 'false';
+  const righe = [`📊 Varianti di N° ${base.num} · ${base.cliente || ''}`, `Base: ${rigaVariante(base, Rb)}`];
   const avvisi: string[] = [];
+  // Prima l'offerta del base, poi quelle delle varianti: in chat arrivano tutte quelle da confrontare.
+  if (invia && fatte.length) { const inv = await inviaOfferta(base, Rb, data, chat); if (inv.errore) avvisi.push(`Offerta N° ${base.num} non inviata: ${inv.errore}`); }
   for (const P of fatte) {
     P._nome = nomeVariante(e.nome, P);
     const R = compute(data, P), errore = await salva(db, P, R, data, email, true);
     if (errore) return fail(`Salvataggio non riuscito dopo ${righe.length - 2} varianti: ${errore}`);
     righe.push(rigaVariante(P, R));
-    if (b.invia !== false && b.invia !== 'false') {
+    if (invia) {
       const inv = await inviaOfferta(P, R, data, chat);
       if (inv.errore) avvisi.push(`Offerta N° ${P.num} non inviata: ${inv.errore}`);
     }
   }
   if (uguali.length) avvisi.push(`${uguali[0]} è già il preventivo base N° ${base.num}: non l'ho duplicato.`);
   return { ok: true, creati: fatte.map(P => ({ id: P._id, numero: P.num, materiale: etichetta(P) })), testo: righe.join('\n'), avvisi,
-    offerte: b.invia === false || b.invia === 'false' ? 'non richieste' : 'mandate nella chat privata con il bot' };
+    offerte: invia ? 'base e varianti mandate nella chat privata con il bot' : 'non richieste' };
 }

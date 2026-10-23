@@ -7,7 +7,7 @@ import { clone } from '../domain/model';
 import { S, commit, save } from '../store/state';
 import { chiediAssistente, online, salvaScadenza } from '../store/remote';
 import { apriGmail } from './Email';
-import { TabellaVarianti } from './Varianti';
+import { TabellaVarianti, scaricaOfferte } from './Varianti';
 import { archVarianti } from '../store/actions';
 
 type Voce = { ruolo: 'tu' | 'ai' | 'err'; testo: string; proposte?: Proposta[] };
@@ -68,7 +68,11 @@ function Card({ p, stato, onFatto }: { p: Proposta; stato?: string; onFatto: (es
     setBusy(true);
     try {
       if (p.tipo === 'sostituzione') { const r = applicaSostituzione(p); onFatto('✓ Fatto: ' + r, `Proposta ${p.id} confermata dall'utente e applicata: ${r}.`); }
-      else if (p.tipo === 'varianti') { const r = archVarianti(p.base, p.varianti); commit(); onFatto('✓ ' + r, `Proposta ${p.id} confermata: ${r}.`); }
+      else if (p.tipo === 'varianti') {
+        const r = archVarianti(p.base, p.varianti); commit();
+        onFatto('✓ ' + r.testo + (r.ids.length ? ' · scarico le offerte' : ''), `Proposta ${p.id} confermata: ${r.testo}; offerte del base e delle varianti scaricate dall'utente.`);
+        if (r.ids.length) scaricaOfferte(p.base, r.ids);
+      }
       else if (p.tipo === 'evento') {
         const e = await salvaScadenza({ titolo: p.titolo, giorno: p.giorno, ora: p.ora, genere: p.genere as any, nota: p.nota });
         if (e) throw new Error(e);

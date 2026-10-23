@@ -2,11 +2,39 @@
 // si vede il confronto dei prezzi e si creano come preventivi nuovi, ciascuno col suo numero.
 // La tabella di confronto la usa anche la proposta dell'assistente.
 import { useState } from 'react';
-import { eur, fN } from '../domain/format';
+import { compute } from '../domain/compute';
+import { download, eur, fN, fileName } from '../domain/format';
+import { clone, normPrev } from '../domain/model';
+import { compilaPptx, datiOfferta, layoutImg, offPrev } from '../domain/offerta';
+import { buildMont } from '../domain/plan';
 import { pilastri } from '../domain/referenze';
 import { SPESSORI, etichetta, type Variante } from '../domain/varianti';
 import { S, commit } from '../store/state';
-import { anteprimaVarianti, archVarianti } from '../store/actions';
+import { anteprimaVarianti, archVarianti, toast } from '../store/actions';
+import { online, pdfOfferta } from '../store/remote';
+
+const MODELLO = `${import.meta.env.BASE_URL}offerta/modello-offerta.pptx`;
+/** Offerte in PDF (senza collegamento: PowerPoint) del base e delle varianti, una dopo l'altra, come le manda il bot.
+ *  La posa vuota prende il totale della scheda Montaggio solo se il base e' il preventivo aperto, uguale per tutte;
+ *  altrimenti risulta "non inclusa", come da Telegram. */
+export async function scaricaOfferte(baseId: string, ids: string[]) {
+  const tutti = [baseId, ...ids], mont = S.prev._id === baseId ? buildMont().tot : 0;
+  let modello: ArrayBuffer;
+  try { const r = await fetch(MODELLO); if (!r.ok) throw new Error(`modello non trovato (${r.status})`); modello = await r.arrayBuffer(); }
+  catch (err) { toast('Offerte non generate: ' + (err as Error).message); return; }
+  const errori: string[] = [];
+  for (const [i, id] of tutti.entries()) {
+    const e = S.arch.find(a => a.id === id); if (!e) continue;
+    const P = normPrev(clone(e.prev)), dati = e.dati || S.data, O = offPrev(P);
+    toast(`Preparo l'offerta ${i + 1} di ${tutti.length}: N° ${P.num || '–'}…`);
+    try {
+      const blob = await compilaPptx(modello.slice(0), datiOfferta(P, compute(dati, P), dati, mont), layoutImg(O));
+      const nome = `Offerta_${P.num ? fileName(P.num) + '_' : ''}${fileName(P.cliente || e.nome || 'cliente')}${O.rev && O.rev !== '0' ? '_rev' + fileName(O.rev) : ''}`;
+      if (online()) download(nome + '.pdf', await pdfOfferta(blob)); else download(nome + '.pptx', blob);
+    } catch (err) { errori.push(`N° ${P.num || '–'}: ${(err as Error).message}`); }
+  }
+  toast(errori.length ? 'Offerte non generate: ' + errori.join('; ') : `Scaricate ${tutti.length} offerte${online() ? ' in PDF' : ''}`);
+}
 
 /** Confronto tra il base e le varianti; l'errore (profilo sconosciuto, …) al posto della tabella. */
 export function TabellaVarianti({ id, vv }: { id: string; vv: Variante[] }) {
@@ -47,7 +75,7 @@ export function ModuloVarianti({ id, chiudi }: { id: string; chiudi: () => void 
       </tbody></table>
       {vv.length > 0 && <div className="wide"><TabellaVarianti id={id} vv={vv} /></div>}
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
-        <button className="btn p" disabled={!vv.length} onClick={() => { archVarianti(id, vv); commit(); chiudi(); }}>
+        <button className="btn p" disabled={!vv.length} onClick={() => { const r = archVarianti(id, vv); commit(); chiudi(); if (r.ids.length) scaricaOfferte(id, r.ids); }}>
           Crea {vv.length || ''} preventiv{vv.length === 1 ? 'o' : 'i'}</button>
         <button className="btn" onClick={chiudi}>Annulla</button>
       </div>
