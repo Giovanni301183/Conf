@@ -76,6 +76,7 @@ Oggi è {{ $now.setZone('Europe/Rome').setLocale('it').toFormat('cccc d LLLL yyy
 
 Cosa fai: registri urgenze, cose da fare, promemoria, scadenze e appuntamenti; leggi l'agenda; segni le voci fatte; le assegni ai colleghi.
 Fai anche preventivi: per uno nuovo mandi il modulo da compilare (modulo_preventivo); l'offerta PowerPoint arriva in chat privata, da inoltrare al cliente.
+Prepari bozze di email dagli appunti (email_da_appunto), che l'operatore apre e invia da Gmail.
 
 Regole:
 - Se il messaggio segnala un problema o dice "urgente", crea una voce di genere "urgenza" (per oggi, salvo data diversa). Titolo breve e chiaro (es. "Mancano bulloni in cantiere: preparare il materiale"); i dettagli vanno nella nota.
@@ -92,6 +93,7 @@ Regole:
 - Per correggere un preventivo già fatto con il modulo usa modulo_preventivo con il suo id (da cerca_commesse). Solo per una modifica piccola e chiara (es. "metti il margine al 20 %" sul preventivo 2026/012) usa prepara_preventivo con l'id e i soli campi da cambiare, dopo aver ripetuto la modifica e avuto conferma. Per rimandare l'offerta così com'è usa invia_offerta.
 - Il riferimento (rif) è solo il nome breve dell'impianto, il titolo della copertina: mai note o dati tecnici. Profilo (IPE/IPEA), asse (2,5/3,0 mm), omega (2,0/1,8 mm), fondazione e cuscinetto in metri vanno nei campi delle righe.
 - Layout: se un messaggio ha [allegato: …] è un file o una foto mandati al bot. Se è il layout dell'impianto, mettilo nel preventivo giusto con carica_layout (file_id e nome dall'allegato; se il preventivo non è chiaro chiedi quale, cercandolo con cerca_commesse). Per un preventivo nuovo passa file_id e file_nome a prepara_preventivo: da un DXF i tracker si contano da soli, falli confermare. Il DXF va mandato come file, non come foto. Nell'immagine fatta dal DXF le scritte non compaiono. L'allegato resta valido anche nei messaggi dopo.
+- Email da un appunto ("manda a Rossi l'aggiornamento della nota sui pali"): trova l'appunto con cerca_appunti (parole del titolo o della commessa; per una commessa passa anche preventivo_id da cerca_commesse); se ce n'è più di uno plausibile chiedi quale, elencando titolo e data. Poi usa email_da_appunto con l'id, le indicazioni dette (a chi, tono, cose da aggiungere) e l'indirizzo se lo conosci. Se l'operatore detta lui il contenuto, passalo come appunto senza id. La bozza arriva in chat privata con il pulsante «Apri in Gmail»: non riscriverne il testo in chat (nel gruppo mai). Nessuna email parte da sola: la invia l'operatore da Gmail.
 - Il listino non si modifica da qui: se te lo chiedono, rispondi che si cambia nell'app (scheda Listino).
 - Dopo un preventivo riporta il riepilogo dello strumento (testo), gli avvisi importanti e se l'offerta è arrivata in privato. Costi e margini solo a chi li ha chiesti: non scriverli mai nel gruppo, lì dì solo che l'offerta è in privato.
 - Rispondi breve, testo semplice senza Markdown. Dopo aver registrato qualcosa, riassumi cosa hai salvato."""
@@ -180,6 +182,15 @@ chat = [
          + " }).filter(([, v]) => v !== '' && v != null))"),
     tool('invia_offerta', [1880, 860], "Manda nella chat privata di chi scrive l'offerta PowerPoint di un preventivo dell'archivio, così com'è salvato (id da cerca_commesse).",
          "{ azione: 'offerta', telegram_id: " + TID + ', id: ' + fa('id', 'id del preventivo') + ' }'),
+    tool('cerca_appunti', [2240, 860], "Cerca gli appunti (note dei documenti e note delle voci d'agenda) per parole e/o commessa. Ogni risultato ha id, fonte, titolo, data, commessa ed estratto.",
+         "Object.fromEntries(Object.entries({ azione: 'appunti', telegram_id: " + TID + ', cerca: ' + fa('cerca', 'Parole da cercare nel titolo, nel testo o nel nome della commessa', 'string', '')
+         + ', preventivo_id: ' + fa('preventivo_id', 'id della commessa da cerca_commesse, vuoto se nessuna', 'string', '') + " }).filter(([, v]) => v !== '' && v != null))"),
+    tool('email_da_appunto', [2360, 860], "Scrive con l'AI la bozza di un'email di aggiornamento da un appunto e la manda nella chat privata di chi scrive, con il pulsante «Apri in Gmail». Non invia l'email.",
+         "Object.fromEntries(Object.entries({ azione: 'email', telegram_id: " + TID + ', id: ' + fa('id', "id dell'appunto da cerca_appunti; vuoto se il contenuto è dettato", 'string', '')
+         + ', appunto: ' + fa('appunto', "Solo senza id: il contenuto dettato dall'operatore", 'string', '')
+         + ', richiesta: ' + fa('richiesta', 'Indicazioni per la bozza: a chi è rivolta, tono (lei/tu), cose da aggiungere', 'string', '')
+         + ', a: ' + fa('a', 'Indirizzi email dei destinatari separati da virgola, vuoto se non detti', 'string', '')
+         + ', preventivo_id: ' + fa('preventivo_id', 'id della commessa per il contesto, vuoto se nessuna', 'string', '') + " }).filter(([, v]) => v !== '' && v != null))"),
     tool('modifica_voce', [1520, 860], 'Agisce su una voce esistente (id da leggi_agenda o crea_voce). azione: prendi (me ne occupo io), risolvi (fatta), aggiorna (cambia i campi indicati), elimina.',
          'Object.fromEntries(Object.entries({ azione: ' + fa('azione', 'Una tra: prendi, risolvi, aggiorna, elimina')
          + ', telegram_id: ' + TID + ', id: ' + fa('id', 'id della voce')
@@ -203,7 +214,7 @@ chat_conn = {
     'Modello': {'ai_languageModel': [[{'node': 'Assistente', 'type': 'ai_languageModel', 'index': 0}]]},
     'Memoria': {'ai_memory': [[{'node': 'Assistente', 'type': 'ai_memory', 'index': 0}]]},
     **{t: {'ai_tool': [[{'node': 'Assistente', 'type': 'ai_tool', 'index': 0}]]}
-       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account', 'prepara_preventivo', 'invia_offerta', 'carica_layout', 'modulo_preventivo']},
+       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account', 'prepara_preventivo', 'invia_offerta', 'carica_layout', 'modulo_preventivo', 'cerca_appunti', 'email_da_appunto']},
 }
 
 # ---------- Flusso 2: avvisi e riepilogo ----------

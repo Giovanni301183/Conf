@@ -4,12 +4,14 @@
 // Azioni: collega, chi_sono, commesse, colleghi, agenda, crea, aggiorna, prendi, risolvi, elimina (per un collega abbinato);
 //         modulo (pulsante in chat privata che apre il modulo del preventivo, pagina modulo.html: vedi modulo.ts);
 //         preventivo, offerta, layout (preventivo creato o cambiato da Telegram e offerta PowerPoint in chat privata: vedi _preventivo.ts);
+//         appunti, email (cerca un appunto e ne manda in chat privata la bozza di email scritta dall'AI, da aprire in Gmail: vedi _email.ts);
 //         riepilogo, annuncio (del sistema: riepilogo del mattino e avviso nel gruppo di una voce nuova).
 // Regole come nell'app: crea chiunque; modifica ed elimina l'autore o un amministratore; chi ha la voce assegnata la segna fatta;
 // un'urgenza o una voce senza assegnatario la puo' prendere chiunque.
 // Gli errori "di dialogo" tornano con status 200 e { ok: false, errore }: cosi' l'assistente li legge e li spiega.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { preventivoBot } from './_preventivo.js';
+import { linkGmail, scriviBozza } from './_email.js';
 
 export const GENERI = ['attivita', 'promemoria', 'scadenza', 'appuntamento', 'urgenza'] as const;
 export const CATEGORIE = ['STRUTTURA', 'BULLONERIA', 'ELETTROMECCANICO', 'ELETTRONICO'] as const;
@@ -146,6 +148,62 @@ async function apriModulo(b: any, chat: number, origine: string) {
   return { ok: true, testo: 'Ti ho mandato in privato il pulsante «Compila preventivo».' };
 }
 
+/** Appunti (note dei documenti e note delle voci d'agenda) che contengono tutte le parole cercate, i più recenti prima. */
+async function cercaAppunti(db: Db, b: any) {
+  const pid = String(b.preventivo_id ?? '').trim();
+  let qd = db.from('documenti').select('id, titolo, testo, preventivo_id, creato').eq('tipo', 'nota');
+  let qv = db.from('scadenze').select('id, titolo, nota, giorno, preventivo_id').not('nota', 'is', null);
+  if (pid) { qd = qd.eq('preventivo_id', pid); qv = qv.eq('preventivo_id', pid); }
+  const [{ data: dd, error }, { data: vv }, ctx] = await Promise.all([
+    qd.order('creato', { ascending: false }).limit(300), qv.order('giorno', { ascending: false }).limit(300), contesto(db)]);
+  if (error) return fail(error.message);
+  const comm = (id: string | null) => (id ? ctx.commesse.get(id)?.nome || null : null);
+  const tutti = [
+    ...(dd || []).map((d: any) => ({ id: d.id, fonte: 'documenti', titolo: d.titolo, testo: d.testo || '', data: String(d.creato).slice(0, 10), commessa: comm(d.preventivo_id) })),
+    ...(vv || []).map((v: any) => ({ id: v.id, fonte: 'agenda', titolo: v.titolo, testo: v.nota || '', data: v.giorno, commessa: comm(v.preventivo_id) })),
+  ].sort((a, x) => x.data.localeCompare(a.data));
+  const parole = norm(String(b.cerca ?? '')).split(/\s+/).filter(Boolean);
+  const trovati = tutti.filter(a => { const t = norm([a.titolo, a.testo, a.commessa].join(' ')); return parole.every(w => t.includes(w)); })
+    .slice(0, 10).map(({ testo, ...a }) => ({ ...a, estratto: testo.length > 300 ? testo.slice(0, 300) + '…' : testo }));
+  return { ok: true, trovati };
+}
+
+/** Bozza di email da un appunto (id da cercaAppunti) o da un testo dettato, mandata nella chat privata con il pulsante che la apre in Gmail. */
+async function emailDaAppunto(db: Db, b: any, io: Me, chat: number) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return fail('Sul server manca TELEGRAM_BOT_TOKEN: non posso mandare la bozza.');
+  const id = String(b.id ?? '').trim();
+  let ap = { titolo: '', testo: String(b.appunto ?? '').trim() }, pid: string | null = null, voce: { titolo: string; giorno: string } | null = null;
+  if (id) {
+    // Gli id sono uuid: uno che non lo e' non trova niente (l'errore si ignora).
+    const { data: d } = await db.from('documenti').select('titolo, testo, preventivo_id, scadenza_id').eq('id', id).eq('tipo', 'nota').maybeSingle();
+    const { data: v } = d ? { data: null } : await db.from('scadenze').select('titolo, nota, giorno, preventivo_id').eq('id', id).maybeSingle();
+    if (!d && !v) return fail("Appunto non trovato: cercalo prima con l'azione appunti e usa il suo id.");
+    ap = d ? { titolo: d.titolo, testo: d.testo || '' } : { titolo: v!.titolo, testo: v!.nota || '' };
+    pid = (d || v)!.preventivo_id;
+    if (d?.scadenza_id) voce = (await db.from('scadenze').select('titolo, giorno').eq('id', d.scadenza_id).maybeSingle()).data;
+    else if (v) voce = { titolo: v.titolo, giorno: v.giorno };
+  } else if (!ap.testo) return fail("Serve l'appunto: l'id di uno trovato con appunti, oppure il testo da cui scrivere l'email.");
+  if (!pid && b.preventivo_id) pid = String(b.preventivo_id).trim();
+  const p = pid ? (await db.from('preventivi').select('nome, cliente, rif, num:prev->>num').eq('id', pid).maybeSingle()).data as any : null;
+  const ctxEmail = [p && `commessa "${p.nome}"${p.num ? ` (N° ${p.num})` : ''}${p.cliente ? `, cliente ${p.cliente}` : ''}${p.rif ? `, riferimento ${p.rif}` : ''}`,
+    voce && `voce d'agenda "${voce.titolo}" del ${voce.giorno}`].filter(Boolean).join('; ');
+
+  const r = await scriviBozza({ ...ap, contesto: ctxEmail, richiesta: String(b.richiesta ?? '') }, io.nome || io.email.split('@')[0]);
+  if ('errore' in r) return fail(r.errore);
+  const a = String(b.a ?? '').trim();
+  // Un indirizzo troppo lungo puo' non passare come pulsante: allora il link porta solo destinatari e oggetto, il testo si copia dal messaggio.
+  let link = linkGmail(io.email, a, r.oggetto, r.testo);
+  const lungo = link.length > 2000;
+  if (lungo) link = linkGmail(io.email, a, r.oggetto, '');
+  const msg = [`✉️ Bozza email${a ? ' per ' + a : ''}`, `Oggetto: ${r.oggetto}`, '', r.testo, '',
+    lungo ? 'Il testo è lungo: in Gmail incollalo copiandolo da qui.' : 'Rileggila in Gmail prima di premere Invia.'].join('\n').slice(0, 4000);
+  const t = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chat_id: chat, text: msg, reply_markup: { inline_keyboard: [[{ text: '✉️ Apri in Gmail', url: link }]] } }) });
+  if (!t.ok) return fail(t.status === 403 ? 'Non posso scriverti in privato: apri la chat con il bot e premi Avvia, poi riprova.' : 'Telegram non ha accettato il messaggio con la bozza.');
+  return { ok: true, oggetto: r.oggetto, testo: `Ti ho mandato in privato la bozza «${r.oggetto}» con il pulsante «Apri in Gmail».` };
+}
+
 export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''): Promise<Record<string, unknown>> {
   const oggi = oggiISO(adesso), az = String(b.azione || '');
 
@@ -191,6 +249,8 @@ export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''):
 
   if (az === 'modulo') return apriModulo(b, tid, origine);
   if (az === 'preventivo' || az === 'offerta' || az === 'layout') return preventivoBot(db, b, io.email, tid, oggi);
+  if (az === 'appunti') return cercaAppunti(db, b);
+  if (az === 'email') return emailDaAppunto(db, b, io, tid);
 
   if (az === 'colleghi') {
     const { data } = await db.from('utenti').select('email, nome').eq('attivo', true).order('nome');
