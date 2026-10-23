@@ -34,6 +34,15 @@ export const PROGETTO = [
   ['classe_corrosivita', 'Classe di corrosività', 'C3'], ['pendenza_ns', 'Pendenza N-S', '3 %'], ['altezza_min_modulo_m', 'Altezza minima modulo (m)', '2,10'],
   ['infissione_m', 'Infissione (m)', '1,80'], ['angolo_rotazione', 'Angolo di rotazione (±°)', '55'],
 ] as const;
+// Campi obbligatori dell'offerta: [chiave nel modello, etichetta, dove si compila]. Vuoti vanno segnati «non disponibile» (prev.offerta.nd),
+// altrimenti dall'app l'offerta non si genera.
+export const OBBLIGATORI: readonly (readonly [string, string, string])[] = [
+  ['referente', 'Referente del cliente', 'Intestazione'], ['email_referente', 'E-mail del referente', 'Intestazione'], ['zona', 'Zona', 'Intestazione'],
+  ['localita', 'Località', 'Configura'], ['coordinate', 'Coordinate', 'Configura'], ['modulo_modello', 'Modello del modulo', 'Configura'],
+  ...PROGETTO.map(([k, l]) => [k, l, 'Dati di progetto'] as const),
+  ['resa', 'Resa', 'Condizioni commerciali'], ['consegna', 'Tempi di consegna', 'Condizioni commerciali'], ['validita', "Validità dell'offerta", 'Condizioni commerciali'],
+];
+export const ND = 'Non disponibile';
 export function offPrev(P: any) {
   if (!P.offerta) P.offerta = defOfferta();
   const o = P.offerta;
@@ -49,6 +58,8 @@ export type DatiOfferta = {
   righe: { n: number; taglia: string }[];
   prezzi: { label: string; value: string; strike?: string; nota?: string }[];
   avvisi: string[];
+  mancanti: string[];                                  // campi obbligatori vuoti e non segnati «non disponibile»
+  senza: string[];                                     // segnaposto senza valore: nel modello resta solo «–» o «Non disponibile», senza unità
 };
 const euro = (v: number) => fN(v, 2);
 const isTrasporto = (l: any) => /traspor/i.test(l.desc || '');
@@ -107,11 +118,18 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
     inclusi: cfg.inclusi.map((v: string) => String(v).trim()).filter(Boolean).map((voce: string) => ({ voce })),
   };
 
-  // Campi descrittivi vuoti: nel PowerPoint «–» (gli altri segnaposto vuoti restano vuoti, es. la nota della posa).
-  const vuoti = [['referente', 'referente'], ['email_referente', 'e-mail del referente'], ['zona', 'zona'], ['localita', 'località'], ['localita_zona', 'località'],
-    ['resa', 'resa'], ['consegna', 'tempi di consegna'], ['validita', "validità dell'offerta"], ['coordinate', 'coordinate'], ['modulo_modello', 'modello del modulo'], ...PROGETTO.map(([k, l]) => [k, l.toLowerCase()])]
-    .filter(([k]) => !campi[k]).map(([k, l]) => { campi[k] = '–'; return l; });
+  // Campi obbligatori vuoti: «Non disponibile» se segnati così, altrimenti «–» e l'app non genera l'offerta
+  // (gli altri segnaposto vuoti restano vuoti, es. la nota della posa).
+  const nd = O.nd || {}, mancanti: string[] = [], senza: string[] = [];
+  for (const [k, l] of OBBLIGATORI) {
+    if (campi[k]) continue;
+    if (!nd[k]) mancanti.push(l);
+    campi[k] = nd[k] ? ND : '–'; senza.push(k);
+  }
+  if (!campi.localita_zona) { campi.localita_zona = nd.localita ? ND : '–'; senza.push('localita_zona'); }
   if (!campi.numero_offerta) campi.numero_offerta = '–';
+  // Segnaposto scritti a mano nelle voci incluse che il modello non conosce: nel PDF spariscono, meglio dirlo.
+  const ignoti = [...new Set<string>(cfg.inclusi.join(' ').match(/\{\{[^{}]*\}\}/g) || [])].filter(t => !(t.slice(2, -2) in campi));
 
   if (!P.num) avvisi.push("Il preventivo non ha ancora un numero: salvalo per assegnarlo (in copertina comparirebbe «–»).");
   if (!P.cliente) avvisi.push('Manca il cliente (Configura → Commessa).');
@@ -119,7 +137,8 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
   if (!(R.prezzo > 0)) avvisi.push('Il prezzo di vendita è zero.');
   if (R.total > 0 && R.prezzo - R.total < 0.5) avvisi.push("Margine 0 %: nell'offerta il prezzo di vendita è uguale al costo. Imposta il margine qui sotto (Prezzi) o nella scheda Margini.");
   if (!O.layout) avvisi.push('Nessun layout caricato: la slide del layout resterà vuota, senza disegno.');
-  if (vuoti.length) avvisi.push(`Campi vuoti nell'offerta (${[...new Set(vuoti)].join(', ')}): compariranno come «–».`);
+  if (mancanti.length) avvisi.push(`Da compilare o segnare «non disponibile»: ${mancanti.join(', ')}.`);
+  if (ignoti.length) avvisi.push(`Nelle voci incluse ${ignoti.join(', ')} non ${ignoti.length > 1 ? 'sono campi' : 'è un campo'} del modello: nell'offerta ${ignoti.length > 1 ? 'spariranno' : 'sparirà'}.`);
   if (O.dxf) {
     const diff = [...new Set([...Object.keys(O.dxf), ...righe.map(r => r.taglia)])]
       .filter(t => (O.dxf![t] || 0) !== (perTaglia.get(t) || 0)).map(t => `${t} moduli: DXF ${O.dxf![t] || 0}, preventivo ${perTaglia.get(t) || 0}`);
@@ -131,11 +150,15 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
     { label: 'Posa in opera', value: posa > 0 ? `€ ${campi.costo_posa} + IVA` : 'Non inclusa', nota: [O.posaNota, O.posaModo].filter(Boolean).join(' · ') || undefined },
     { label: 'Prezzo per kWp', value: `${campi.prezzo_kwp} €/kWp` },
   ];
-  return { campi, liste, paragrafi, righe, prezzi, avvisi };
+  return { campi, liste, paragrafi, righe, prezzi, avvisi, mancanti, senza };
 }
+/** Errore da mostrare se l'offerta non si può generare (campi obbligatori), altrimenti ''. */
+export const bloccoOfferta = (D: DatiOfferta) =>
+  D.mancanti.length ? `compila o segna «non disponibile» in Invia preventivo: ${D.mancanti.join(', ')}` : '';
 
 /* ---------- Compilazione del PowerPoint ---------- */
 const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const unesc = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 const reEsc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Paragrafo che contiene il testo indicato (non attraversa altri paragrafi).
 const paraRe = (t: string) => new RegExp(`<a:p>(?:(?!<a:p>)[\\s\\S])*?${reEsc(t)}[\\s\\S]*?</a:p>`);
@@ -191,6 +214,11 @@ async function compila(modello: ArrayBuffer | Uint8Array, D: DatiOfferta, layout
   for (const n of slides) {
     let x = await zip.file(n)!.async('string');
     const orig = x;
+    // Segnaposto spezzati da PowerPoint su più pezzi di testo (succede ritoccando il modello): il paragrafo si riunisce in uno.
+    x = x.replace(/<a:p>(?:(?!<a:p>)[\s\S])*?<\/a:p>/g, p => {
+      const t = [...p.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(m => m[1]).join('');
+      return (t.match(/\{\{[^{}]*\}\}/g) || []).some(s => !p.includes(s)) ? paraText(p, unesc(t)) : p;
+    });
     for (const [nome, items] of Object.entries(D.liste)) x = righeForme(x, nome, items, D.campi);
     // Blocchi ripetuti: il paragrafo con {{#nome}}…{{/nome}} si ricopia per ogni elemento (e sparisce se la lista è vuota).
     for (const [nome, items] of Object.entries(D.liste)) {
@@ -226,7 +254,11 @@ async function compila(modello: ArrayBuffer | Uint8Array, D: DatiOfferta, layout
         x = x.replace(pm[0], pic);
       }
     }
+    // Campo senza valore: via anche unità e prefissi del suo pezzo di testo («– mm», «cat. –» → «Non disponibile»).
+    for (const k of D.senza) x = x.replace(new RegExp(String.raw`<a:t>[^<]*\{\{${k}\}\}[^<]*</a:t>`, 'g'), `<a:t>${esc(D.campi[k])}</a:t>`);
     x = tokens(x, D.campi);
+    // Nessun segnaposto deve arrivare nel PDF: quelli sconosciuti spariscono.
+    x = x.replace(/<a:t>[^<]*<\/a:t>/g, t => t.replace(/\{\{[^{}<]*\}\}/g, ''));
     if (x !== orig) zip.file(n, x);
   }
   // Il tipo dell'immagine deve essere dichiarato (il .png di solito c'e' gia').

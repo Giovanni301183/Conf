@@ -260,6 +260,19 @@ export async function salvaNota(n: { id?: string; titolo: string; testo: string;
   if (error) return dbErr(error.message);
   await loadDocumenti(); return '';
 }
+/** Nota assegnata a un collega: diventa una voce «Da fare» per il collega (annunciata su Telegram come le altre voci assegnate),
+ *  con il testo della nota; la nota, se non è già di un'altra voce e la si può modificare, resta allegata alla voce. */
+export async function assegnaNota(d: Documento, a: string, giorno: string): Promise<string> {
+  if (!supabase) return 'Le note si assegnano solo con il server.';
+  const { data, error } = await supabase.from('scadenze').insert({ giorno, genere: 'attivita', titolo: d.titolo.trim().slice(0, 200), nota: (d.testo || '').trim().slice(0, 2000) || null,
+    preventivo_id: d.preventivo_id || null, assegnata_a: a }).select('id').single();
+  if (error) return error.message;
+  if (!d.scadenza_id && puoGestireDoc(d)) {
+    const { error: e2 } = await supabase.from('documenti').update({ scadenza_id: data.id }).eq('id', d.id);
+    if (e2) return 'Voce creata, ma la nota non è stata allegata: ' + dbErr(e2.message);
+  }
+  await Promise.all([loadScadenze(), loadDocumenti()]); return '';
+}
 export async function aggiornaDoc(id: string, patch: Partial<Pick<Documento, 'titolo' | 'cartella' | 'testo'>>): Promise<string> {
   const { error } = await supabase!.from('documenti').update(patch).eq('id', id);
   if (error) return dbErr(error.message);

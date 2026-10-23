@@ -1,12 +1,19 @@
 // Email di aggiornamento da un appunto (nota dei documenti o nota di un evento): prima si danno all'AI le indicazioni
 // (a chi, cosa dire in più, tono), poi l'AI scrive la bozza, la si corregge qui
 // e si apre già compilata nel Gmail di chi è collegato. I destinatari usati l'ultima volta per la stessa commessa restano in questo browser.
+// Dopo l'apertura si può lasciare in agenda un promemoria «Attesa risposta», da spuntare quando la risposta arriva.
 import { useState } from 'react';
-import { S } from '../store/state';
-import { bozzaEmail, cloud } from '../store/remote';
+import { ATTESA, traGiorniLavorativi } from '../domain/calendario';
+import { dFmt, dToday, isoDay } from '../domain/plan';
+import { S, commit } from '../store/state';
+import { toast } from '../store/actions';
+import { bozzaEmail, cloud, salvaScadenza } from '../store/remote';
 
 const leggiA = (k: string) => { try { return localStorage.getItem('email-a:' + k) || ''; } catch { return ''; } };
 const ricordaA = (k: string, a: string) => { try { localStorage.setItem('email-a:' + k, a); } catch { /* solo una comodità */ } };
+// Giorni lavorativi di attesa: 1 se non scelto, poi l'ultimo usato da chi scrive (in questo browser).
+const leggiGiorni = () => { try { const n = parseInt(localStorage.getItem('email-attesa') || '', 10); return n >= 0 && n <= 60 ? n : 1; } catch { return 1; } };
+const ricordaGiorni = (n: number) => { try { localStorage.setItem('email-attesa', String(n)); } catch { /* solo una comodità */ } };
 
 /** Commessa e voce d'agenda in una riga, per dare all'AI il contesto dell'appunto. */
 export function contestoEmail(preventivo_id?: string | null, scadenza_id?: string | null) {
@@ -22,18 +29,40 @@ export function apriGmail(a: string, oggetto: string, testo: string) {
   window.open(`https://mail.google.com/mail/u/${encodeURIComponent(me)}/?${q.toString().replace(/\+/g, '%20')}`, '_blank');
 }
 
-/** chiave = commessa o voce a cui legare i destinatari ricordati. */
-export function ModuloEmail({ titolo, testo: appunto, contesto, chiave, chiudi }: { titolo: string; testo: string; contesto: string; chiave: string; chiudi: () => void }) {
+/** chiave = commessa o voce a cui legare i destinatari ricordati; preventivo = commessa del promemoria «Attesa risposta». */
+export function ModuloEmail({ titolo, testo: appunto, contesto, chiave, chiudi, preventivo = null, richiesta0 = '' }:
+  { titolo: string; testo: string; contesto: string; chiave: string; chiudi: () => void; preventivo?: string | null; richiesta0?: string }) {
   const [a, setA] = useState(() => leggiA(chiave)), [oggetto, setOggetto] = useState(''), [testo, setTesto] = useState('');
-  const [richiesta, setRichiesta] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState('');
+  const [richiesta, setRichiesta] = useState(richiesta0), [busy, setBusy] = useState(false), [err, setErr] = useState('');
+  const [aperta, setAperta] = useState(false), [giorni, setGiorni] = useState(leggiGiorni);
   const scrivi = async () => {
     setBusy(true); setErr('');
     try { const r = await bozzaEmail({ titolo, testo: appunto, contesto, richiesta }); setOggetto(r.oggetto); setTesto(r.testo); }
     catch (e) { setErr((e as Error).message); }
     setBusy(false);
   };
-  const apri = () => { ricordaA(chiave, a.trim()); apriGmail(a, oggetto, testo); chiudi(); };
+  const apri = () => { ricordaA(chiave, a.trim()); apriGmail(a, oggetto, testo); setAperta(true); };
+  const attendi = async () => {
+    const n = Math.max(0, Math.min(60, Math.round(giorni) || 0)), g = traGiorniLavorativi(n), chi = a.split(',')[0].trim() || 'destinatario';
+    setBusy(true);
+    const e = await salvaScadenza({ genere: 'promemoria', giorno: isoDay(g), titolo: (ATTESA + chi + (oggetto ? ' — ' + oggetto : '')).slice(0, 200), preventivo_id: preventivo,
+      nota: `Email del ${dFmt(dToday())} a ${a.trim() || '—'}. Spunta quando arriva la risposta.` });
+    setBusy(false);
+    if (e) { toast('Promemoria non salvato: ' + e); return; }
+    ricordaGiorni(n); toast(`Ti ricordo la risposta il ${dFmt(g)}`); commit(); chiudi();
+  };
   const pronta = !!(oggetto || testo);
+  if (aperta) return (
+    <div className="cform">
+      <p className="wide" style={{ margin: 0 }}><b>Hai mandato l'email da Gmail?</b> Se aspetti una risposta, la metto in agenda: quando arriva, spunti la voce.</p>
+      <label className="f">Ricordamelo tra (giorni lavorativi)<input type="number" min={0} max={60} value={giorni} onChange={e => setGiorni(+e.target.value)} />
+        <span className="muted small">{giorni > 0 ? 'il ' + dFmt(traGiorniLavorativi(Math.min(60, Math.max(0, Math.round(giorni) || 0)))) : 'oggi'} · il numero resta come predefinito</span></label>
+      <div className="wide" style={{ display: 'flex', gap: 8 }}>
+        <button className="btn p" disabled={busy} onClick={attendi}>{busy ? 'Salvo…' : 'Sì, aspetto risposta'}</button>
+        <button className="btn" onClick={chiudi}>No, non serve</button>
+      </div>
+    </div>
+  );
   return (
     <div className="cform">
       <label className="f wide">Indicazioni per l'AI <span className="muted small">(facoltativo: a chi è rivolta, cosa aggiungere, tono)</span>

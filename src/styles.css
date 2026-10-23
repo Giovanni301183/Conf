@@ -287,6 +287,9 @@ select.ssel{padding:3px 8px;font-size:12.5px;border-left:4px solid var(--sc)}
 .chip{border:1px solid var(--line);background:#fff;border-radius:20px;padding:4px 11px 4px 5px;font:inherit;font-size:12.5px;cursor:pointer;display:inline-flex;gap:6px;align-items:center;color:var(--ink2)}
 .chip i{font-style:normal;display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--sc);color:#fff;font-size:10px}
 .chip:hover{border-color:var(--sc)}.chip.on{border-color:var(--sc);box-shadow:0 0 0 2px var(--sc) inset;color:var(--ink);font-weight:600}
+label.f.manca input{border-color:var(--warn);box-shadow:0 0 0 1px var(--warn) inset}
+.ndck{display:inline-flex;gap:5px;align-items:center;font-size:12px;color:var(--muted);font-weight:400;cursor:pointer}.ndck input{width:auto;margin:0}
+mark{background:#fde68a;color:inherit;border-radius:2px;padding:0 1px}
 .ktiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:20px}
 .ktile{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;box-shadow:var(--sh)}
 .ktile small{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { compute } from '../domain/compute';
 import { download, eur, fN, fileName } from '../domain/format';
 import { clone, normPrev } from '../domain/model';
-import { compilaPptx, datiOfferta, layoutImg, offPrev } from '../domain/offerta';
+import { bloccoOfferta, compilaPptx, datiOfferta, layoutImg, offPrev } from '../domain/offerta';
 import { buildMont } from '../domain/plan';
 import { pilastri } from '../domain/referenze';
 import { SPESSORI, etichetta, type Variante } from '../domain/varianti';
@@ -29,7 +29,9 @@ export async function scaricaOfferte(baseId: string, ids: string[]) {
     const P = normPrev(clone(e.prev)), dati = e.dati || S.data, O = offPrev(P);
     toast(`Preparo l'offerta ${i + 1} di ${tutti.length}: N° ${P.num || '–'}…`);
     try {
-      const blob = await compilaPptx(modello.slice(0), datiOfferta(P, compute(dati, P), dati, mont), layoutImg(O));
+      const D = datiOfferta(P, compute(dati, P), dati, mont), blocco = bloccoOfferta(D);
+      if (blocco) throw new Error(blocco);
+      const blob = await compilaPptx(modello.slice(0), D, layoutImg(O));
       const nome = `Offerta_${P.num ? fileName(P.num) + '_' : ''}${fileName(P.cliente || e.nome || 'cliente')}${O.rev && O.rev !== '0' ? '_rev' + fileName(O.rev) : ''}`;
       if (online()) download(nome + '.pdf', await pdfOfferta(blob)); else download(nome + '.pptx', blob);
     } catch (err) { errori.push(`N° ${P.num || '–'}: ${(err as Error).message}`); }

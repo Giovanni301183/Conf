@@ -110,9 +110,10 @@ export function newPrev(){return {cliente:'',rif:'',data:new Date().toISOString(
   modulo:{marca:'',wp:600},righe:[{...defRiga(),n:0}],
   imp:{quadA:0,quadGen:0,box:0,piran:0,anem:0,termAria:0,termCont:0},extra:[],marg:defMarg(),gantt:defGantt(),mont:defMontPrev(),
   stato:'bozza',luogo:defLuogo(),offerta:defOfferta()};}
-// Dati dell'offerta da inviare (scheda Invia preventivo): intestazione, prezzi (pieno barrato, trasporto, posa), layout, dati di progetto.
+// Dati dell'offerta da inviare (scheda Invia preventivo): intestazione, prezzi (pieno barrato, trasporto, posa), layout, dati di progetto;
+// nd = campi obbligatori segnati «non disponibile».
 export function defOfferta(){return {nome:'',rev:'0',data:'',referente:'',email:'',zona:'',resa:'',pagamento:'',consegna:'',validita:'',pieno:'',trasporto:'',posa:'',posaNota:'',posaModo:'',
-  layout:'',layoutW:0,layoutH:0,layoutNome:'',dxf:null as null|Record<string,number>,prog:{} as Record<string,string>,inviata:''};}
+  layout:'',layoutW:0,layoutH:0,layoutNome:'',dxf:null as null|Record<string,number>,prog:{} as Record<string,string>,nd:{} as Record<string,boolean>,inviata:''};}
 // Stato commerciale del preventivo: [chiave, etichetta, colore, simbolo]. Il colore non basta mai da solo: c'e' sempre etichetta e simbolo.
 export const STATI=[['bozza','Bozza','#8a969c','○'],['inviato','Inviato','#2f6fb0','➜'],['vinto','Vinto','#2e8b57','✓'],['perso','Perso','#c0453a','✕'],['alternativa','Non scelta','#a8946a','⊘']] as const;
 export const statoOf=k=>STATI.find(s=>s[0]===k)||STATI[0];

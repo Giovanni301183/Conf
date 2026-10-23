@@ -4,7 +4,7 @@ import { DateInp, Fold, Inp, TabTools } from '../components/ui';
 import { eur, fP } from '../domain/format';
 import { disegna, immagineInPng, leggiDxf } from '../domain/dxf';
 import { fDate, fN, fileName, download } from '../domain/format';
-import { GARANZIE0, INCLUSI0, PROGETTO, compilaPptx, datiOfferta, layoutImg, offCfg, offPrev } from '../domain/offerta';
+import { GARANZIE0, INCLUSI0, OBBLIGATORI, PROGETTO, bloccoOfferta, compilaPptx, datiOfferta, layoutImg, offCfg, offPrev, type DatiOfferta } from '../domain/offerta';
 import { buildMont } from '../domain/plan';
 import { R, S, commit, save } from '../store/state';
 import { archPatch, archSave, isDirty, toast } from '../store/actions';
@@ -34,6 +34,14 @@ function ProponiSito() {
   </div>;
 }
 
+// Campo obbligatorio: compilato oppure segnato «non disponibile» (in rosso finché non è nessuna delle due).
+function Obbl({ D, k, l, path, ph }: { D: DatiOfferta; k: string; l: string; path: string; ph?: string }) {
+  const O = offPrev(S.prev), manca = D.mancanti.includes(OBBLIGATORI.find(o => o[0] === k)![1]);
+  return <label className={`f${manca ? ' manca' : ''}`}>{l}<Inp path={path} type="txt" ph={O.nd[k] ? 'non disponibile' : ph} />
+    <span className="ndck"><input type="checkbox" checked={!!O.nd[k]} onChange={e => { O.nd[k] = e.target.checked; save(); commit(); }} /> non disponibile</span></label>;
+}
+const ndAll = (keys: string[]) => { const O = offPrev(S.prev); keys.forEach(k => { O.nd[k] = true; }); save(); commit(); };
+
 const MODELLO = `${import.meta.env.BASE_URL}offerta/modello-offerta.pptx`;
 const oggi = () => new Date().toISOString().slice(0, 10);
 
@@ -61,10 +69,13 @@ export function Invia() {
   const D = datiOfferta(P, R, S.data, mont);
   const [busy, setBusy] = useState('');
   const traspAuto = R.lines.filter((l: any) => l.riga === 'extra' && /traspor/i.test(l.desc || '')).reduce((s: number, l: any) => s + l.prezzo, 0);
+  const manc = OBBLIGATORI.filter(o => D.mancanti.includes(o[1]));
   const inclusiDefault = cfg.inclusi.join('\n') === INCLUSI0.join('\n') && JSON.stringify(cfg.garanzie) === JSON.stringify(GARANZIE0);
 
   // Il PDF si fa sul server (ConvertAPI) dal PowerPoint compilato qui.
   async function scarica(pdf: boolean) {
+    const blocco = bloccoOfferta(D);
+    if (blocco) { toast('Offerta non generata: ' + blocco); return; }
     setBusy(pdf ? 'pdf' : 'pptx');
     try {
       const r = await fetch(MODELLO); if (!r.ok) throw new Error(`modello non trovato (${r.status})`);
@@ -95,6 +106,16 @@ export function Invia() {
 
       <Fold id="in-ck" step={1} title="Controllo dei dati" sum={D.avvisi.length ? <span style={{ color: 'var(--warn)' }}>{D.avvisi.length} da verificare</span> : '✓ Tutto pronto'}>{() => <>
         {D.avvisi.length ? <div className="warn" style={{ marginTop: 0 }}>{D.avvisi.map((a, i) => <div key={i}>{a}</div>)}</div> : <p className="hint">Tutti i dati necessari ci sono.</p>}
+        {manc.length ? <>
+          <h3>Campi obbligatori</h3>
+          <p className="hint">Finché questi campi non sono compilati o segnati «non disponibile», l'offerta non si genera. Nel PDF i campi non disponibili compaiono come «Non disponibile».</p>
+          <div className="wrap"><table><tbody>
+            <tr><th>Campo</th><th>Dove si compila</th><th></th></tr>
+            {manc.map(([k, l, dove]) => <tr key={k}><td>{l}</td><td className="small">{dove === 'Configura' ? <a href="#" onClick={e => { e.preventDefault(); S.ui.tab = 'config'; commit(); }}>Configura</a> : 'qui sotto, ' + dove}</td>
+              <td className="acts"><button className="btn s" onClick={() => ndAll([k])}>Non disponibile</button></td></tr>)}
+          </tbody></table></div>
+          {manc.length > 1 && <div className="toolbar"><button className="btn s" onClick={() => { if (confirm(`Segnare come «non disponibile» tutti i ${manc.length} campi mancanti?`)) ndAll(manc.map(o => o[0])); }}>Segna tutti non disponibili</button></div>}
+        </> : null}
         <div className="meta">
           <div>Offerta n.<b>{D.campi.numero_offerta} rev. {D.campi.revisione}</b></div><div>Cliente<b>{P.cliente || '–'}</b></div>
           <div>Potenza<b>{D.campi.potenza_kwp} kWp</b></div><div>Modulo<b>{D.campi.potenza_modulo_w} W</b></div>
@@ -111,9 +132,9 @@ export function Invia() {
           <label className="f">Revisione<Inp path="prev.offerta.rev" type="txt" /></label>
           <label className="f">Data dell'offerta<DateInp path="prev.offerta.data" /><span className="muted small">{O.data ? '' : `vuota = data del preventivo (${fDate(P.data)})`}</span></label>
           <label className="f">Nome dell'impianto<Inp path="prev.offerta.nome" type="txt" ph={P.rif || P.cliente || 'es. Impianto agrivoltaico Foggia'} /></label>
-          <label className="f">Referente del cliente<Inp path="prev.offerta.referente" type="txt" ph="Nome e cognome" /></label>
-          <label className="f">E-mail del referente<Inp path="prev.offerta.email" type="txt" ph="nome@cliente.it" /></label>
-          <label className="f">Zona<Inp path="prev.offerta.zona" type="txt" ph="es. Periferia, Zona industriale" /></label>
+          <Obbl D={D} k="referente" l="Referente del cliente" path="prev.offerta.referente" ph="Nome e cognome" />
+          <Obbl D={D} k="email_referente" l="E-mail del referente" path="prev.offerta.email" ph="nome@cliente.it" />
+          <Obbl D={D} k="zona" l="Zona" path="prev.offerta.zona" ph="es. Periferia, Zona industriale" />
         </div>
       </>}</Fold>
 
@@ -140,9 +161,9 @@ export function Invia() {
       </>}</Fold>
 
       <Fold id="in-prog" step={4} title="Dati di progetto" sum={`${PROGETTO.filter(([k]) => String(O.prog[k] ?? '').trim()).length} di ${PROGETTO.length} compilati`}>{() => <>
-        <p className="hint">Slide "Dati di progetto". Località, coordinate e modello del modulo vengono da Configura (<b>{P.luogo?.nome || 'località non indicata'}</b> · <b>{P.modulo?.marca || 'modulo non indicato'}</b>). I campi vuoti compaiono come «–».</p>
+        <p className="hint">Slide "Dati di progetto". Località, coordinate e modello del modulo vengono da Configura (<b>{P.luogo?.nome || 'località non indicata'}</b> · <b>{P.modulo?.marca || 'modulo non indicato'}</b>). Ogni campo va compilato o segnato «non disponibile».</p>
         <ProponiSito />
-        <div className="grid">{PROGETTO.map(([k, l, ph]) => <label key={k} className="f">{l}<Inp path={`prev.offerta.prog.${k}`} type="txt" ph={'es. ' + ph} /></label>)}</div>
+        <div className="grid">{PROGETTO.map(([k, l, ph]) => <Obbl key={k} D={D} k={k} l={l} path={`prev.offerta.prog.${k}`} ph={'es. ' + ph} />)}</div>
       </>}</Fold>
 
       <Fold id="in-prz" step={5} title="Prezzi nell'offerta" sum={D.prezzi.map(c => `${c.label}: ${c.value}`).join(' · ')}>{() => <>
@@ -165,12 +186,12 @@ export function Invia() {
       </>}</Fold>
 
       <Fold id="in-comm" step={6} title="Condizioni commerciali" sum={`Pagamento: ${D.campi.pagamento} · validità ${D.campi.validita}`}>{() => <>
-        <p className="hint">Slide «Condizioni commerciali». Valuta (EUR) e prezzi IVA esclusa sono fissi; i campi vuoti compaiono come «–» (il pagamento come «Da concordare»).</p>
+        <p className="hint">Slide «Condizioni commerciali». Valuta (EUR) e prezzi IVA esclusa sono fissi; resa, consegna e validità vanno compilate o segnate «non disponibile» (il pagamento vuoto diventa «Da concordare»).</p>
         <div className="grid">
-          <label className="f">Resa (Incoterms 2020)<Inp path="prev.offerta.resa" type="txt" ph="es. DAP cantiere, EXW Marsala" /></label>
+          <Obbl D={D} k="resa" l="Resa (Incoterms 2020)" path="prev.offerta.resa" ph="es. DAP cantiere, EXW Marsala" />
           <label className="f">Condizioni di pagamento<Inp path="prev.offerta.pagamento" type="txt" ph="Da concordare" /></label>
-          <label className="f">Tempi di consegna<Inp path="prev.offerta.consegna" type="txt" ph="es. 8-10 settimane dall'ordine" /></label>
-          <label className="f">Validità dell'offerta<Inp path="prev.offerta.validita" type="txt" ph="es. 30 giorni" /></label>
+          <Obbl D={D} k="consegna" l="Tempi di consegna" path="prev.offerta.consegna" ph="es. 8-10 settimane dall'ordine" />
+          <Obbl D={D} k="validita" l="Validità dell'offerta" path="prev.offerta.validita" ph="es. 30 giorni" />
         </div>
       </>}</Fold>
 

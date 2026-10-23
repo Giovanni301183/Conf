@@ -5,13 +5,13 @@ import { CARTELLE, LIMITE_MB, cartellaPer, cerca, documentiDi, estensione, fByte
 import { S, commit } from '../store/state';
 import { toast } from '../store/actions';
 import { ModuloEmail, contestoEmail } from '../components/Email';
-import { aggiornaDoc, caricaFile, ricaricaDocumenti, cloud, eliminaDoc, linkAnteprime, linkDoc, online, puoGestireDoc, salvaNota } from '../store/remote';
+import { aggiornaDoc, assegnaNota, caricaFile, ricaricaDocumenti, cloud, eliminaDoc, linkAnteprime, linkDoc, mioEmail, online, puoGestireDoc, salvaNota } from '../store/remote';
 
 const nomeDi = (email: string) => cloud.colleghi.find(u => u.email === email)?.nome || email.split('@')[0];
 const quandoDoc = (iso: string) => new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 // Il link si chiede al server dopo il clic: la finestra si apre subito (altrimenti il browser la blocca) e poi riceve l'indirizzo.
-async function apriFile(d: Documento, scarica = false) {
+export async function apriFile(d: Documento, scarica = false) {
   const w = scarica ? null : window.open('', '_blank');
   try {
     const u = await linkDoc(d, scarica);
@@ -52,11 +52,35 @@ function ModuloNota({ n, set, chiudi, dove }: { n: Nota; set: (n: Nota) => void;
   );
 }
 
+// Assegnazione di una nota a un collega: chi e per quando (oggi se non si sceglie).
+function Assegna({ d, chiudi }: { d: Documento; chiudi: () => void }) {
+  const [a, setA] = useState(''), [giorno, setGiorno] = useState(() => new Date().toLocaleDateString('sv-SE')), [busy, setBusy] = useState(false);
+  const fai = async () => {
+    setBusy(true); const e = await assegnaNota(d, a, giorno); setBusy(false);
+    if (e) { toast('Nota non assegnata: ' + e); return; }
+    toast(`Nota assegnata a ${nomeDi(a)}: la trova nell'agenda`); chiudi(); commit();
+  };
+  return (
+    <div className="cform">
+      <label className="f">Assegna a<select value={a} autoFocus onChange={e => setA(e.target.value)}>
+        <option value="">— scegli —</option>{cloud.colleghi.map(u => <option key={u.email} value={u.email}>{u.nome || u.email}{u.email === mioEmail() ? ' (io)' : ''}</option>)}</select></label>
+      <label className="f">Entro il<input type="date" value={giorno} onChange={e => setGiorno(e.target.value)} /></label>
+      <p className="hint wide" style={{ margin: 0 }}>Diventa una voce «Da fare» nell'agenda di chi scegli, con il testo della nota, e viene annunciata nel gruppo Telegram.</p>
+      <div className="wide" style={{ display: 'flex', gap: 8 }}>
+        <button className="btn p" disabled={busy || !a || !giorno} onClick={fai}>{busy ? 'Assegno…' : 'Assegna'}</button>
+        <button className="btn" onClick={chiudi}>Annulla</button>
+      </div>
+    </div>
+  );
+}
+
 function Voce({ d, thumb, onEdit, conVoce }: { d: Documento; thumb?: string; onEdit: (n: Nota) => void; conVoce: boolean }) {
-  const [email, setEmail] = useState(false);
+  const [email, setEmail] = useState(false), [ass, setAss] = useState(false);
   const mio = puoGestireDoc(d), voce = conVoce && d.scadenza_id ? S.scad.find(s => s.id === d.scadenza_id) : null;
+  // Voci assegnate nate da questa nota: quella a cui è allegata, o con lo stesso titolo e la stessa commessa.
+  const per = d.tipo !== 'nota' ? [] : S.scad.filter(s => s.assegnata_a && (s.id === d.scadenza_id || (s.titolo === d.titolo.trim() && (s.preventivo_id || null) === (d.preventivo_id || null))));
   const meta = [nomeCartella(d.cartella), d.tipo === 'file' ? fByte(d.dimensione) : '', 'da ' + nomeDi(d.creato_da), quandoDoc(d.creato), d.modificato ? 'modificata' : '',
-    voce ? 'voce d\'agenda: ' + voce.titolo : ''].filter(Boolean).join(' · ');
+    voce ? 'voce d\'agenda: ' + voce.titolo : '', ...per.map(s => `assegnata a ${nomeDi(s.assegnata_a!)}${s.fatto ? ' ✓ fatto' : ''}`)].filter(Boolean).join(' · ');
   return (<>
     <div className="ditem">
       {d.tipo === 'nota' ? <span className="dico nota" aria-hidden>✎</span>
@@ -69,6 +93,7 @@ function Voce({ d, thumb, onEdit, conVoce }: { d: Documento; thumb?: string; onE
       </div>
       <div className="dact">
         {d.tipo === 'file' && <button className="btn s" onClick={() => apriFile(d, true)}>Scarica</button>}
+        {d.tipo === 'nota' && online() && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la nota a un collega: diventa una voce «Da fare» nella sua agenda">👤 Assegna</button>}
         {d.tipo === 'nota' && !email && <button className="btn s" onClick={() => setEmail(true)} title="Scrivi un'email di aggiornamento da questo appunto">✉ Email</button>}
         {mio && <select className="dsel" value={d.cartella} onChange={e => sposta(d, e.target.value as Cartella)} title="Sposta in un'altra cartella">
           {CARTELLE.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
@@ -78,8 +103,9 @@ function Voce({ d, thumb, onEdit, conVoce }: { d: Documento; thumb?: string; onE
         {mio && <button className="btn x" onClick={() => togli(d)} title="Elimina">✕</button>}
       </div>
     </div>
+    {ass && <Assegna d={d} chiudi={() => setAss(false)} />}
     {email && <ModuloEmail titolo={d.titolo} testo={d.testo || ''} contesto={contestoEmail(d.preventivo_id, d.scadenza_id)}
-      chiave={d.preventivo_id || d.scadenza_id || ''} chiudi={() => setEmail(false)} />}
+      chiave={d.preventivo_id || d.scadenza_id || ''} preventivo={d.preventivo_id} chiudi={() => setEmail(false)} />}
   </>);
 }
 

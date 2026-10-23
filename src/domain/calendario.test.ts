@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { RICHIAMO, agenda, allarmi, dateCommessa, daPianificare, mia, voci, type Scadenza } from './calendario';
+import { ATTESA, RICHIAMO, agenda, inAttesa, traGiorniLavorativi, allarmi, dateCommessa, daPianificare, mia, voci, type Scadenza } from './calendario';
 import { newPrev } from './model';
 import { dNum } from './plan';
 import { R, S } from '../store/state';
@@ -63,5 +63,19 @@ describe('calendario', () => {
     expect(a.urgenze.map(v => v.s!.id)).toEqual(['u1', 'u2']);
     expect(a.scadute).toEqual([]); expect(a.prossime.map(v => v.s!.id)).toEqual(['n']);
     expect(agenda(vv, oggi).arretrate.map(v => v.s!.id)).toEqual(['u1', 'u2']);
+  });
+});
+
+describe('attesa risposta email', () => {
+  it('giorni lavorativi: salta weekend e festivi', () => {
+    const ven = dNum('2026-10-23')!;
+    expect(traGiorniLavorativi(0, ven)).toBe(ven);
+    expect(traGiorniLavorativi(1, ven)).toBe(dNum('2026-10-26'));
+    expect(traGiorniLavorativi(1, dNum('2026-10-30')!)).toBe(dNum('2026-11-02'));   // 1 novembre festivo, di domenica
+    expect(traGiorniLavorativi(1, dNum('2026-12-24')!)).toBe(dNum('2026-12-28'));   // Natale e Santo Stefano
+  });
+  it('riconosce il promemoria dal titolo', () => {
+    const s = { genere: 'promemoria', titolo: ATTESA + 'rossi@x.it' } as Scadenza;
+    expect([inAttesa(s), inAttesa({ ...s, genere: 'attivita' }), inAttesa({ ...s, titolo: 'Richiamare' })]).toEqual([true, false, false]);
   });
 });

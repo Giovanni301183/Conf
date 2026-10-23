@@ -6,7 +6,7 @@ import { compute } from './compute';
 import { leggiDxf, tagliaDa } from './dxf';
 import { fN } from './format';
 import { defaultData, newPrev } from './model';
-import { compilaPptx, datiOfferta } from './offerta';
+import { OBBLIGATORI, bloccoOfferta, compilaPptx, datiOfferta, offCfg } from './offerta';
 
 const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'), c => c.charCodeAt(0));
 
@@ -102,6 +102,37 @@ describe('offerta', () => {
     expect(testo).toContain('Non inclusa');
     expect(testo).toContain('Offerta n. – rev. 1');
     expect(testo).toContain('Su richiesta');
+  });
+
+  it('campi obbligatori: mancanti bloccano, «non disponibile» compare senza unità', async () => {
+    const P = prev();
+    let D = datiOfferta(P, compute(defaultData(), P), defaultData(), 0);
+    expect(D.mancanti).toContain('Peso modulo (kg)');
+    expect(bloccoOfferta(D)).toMatch(/non disponibile.*Referente del cliente/);
+    for (const [k] of OBBLIGATORI) P.offerta.nd[k] = true;
+    P.offerta.prog.vento_ms = '27';
+    D = datiOfferta(P, compute(defaultData(), P), defaultData(), 0);
+    expect([D.mancanti, bloccoOfferta(D)]).toEqual([[], '']);
+    const { testo } = await compila(P);
+    expect(testo).toContain('Peso: Non disponibile');
+    expect(testo).toContain('Terreno (Eurocodice): Non disponibile');
+    expect(testo).toContain('27 m/s');
+    expect(testo).not.toMatch(/Non disponibile ?(kg|mm|m\b|°)/);
+  });
+
+  it('segnaposto spezzati dal PowerPoint o sconosciuti non arrivano nel PDF', async () => {
+    const P = prev(); P.offerta.prog.modulo_tipo = 'bifacciale';
+    const D0 = defaultData(); offCfg(D0).inclusi = ['Voce con {{campo_inventato}}'];
+    const D = datiOfferta(P, compute(D0, P), D0, 0);
+    expect(D.avvisi.join(' ')).toContain('{{campo_inventato}}');
+    const zip = await JSZip.loadAsync(readFileSync('public/offerta/modello-offerta.pptx'));
+    const s5 = await zip.file('ppt/slides/slide5.xml')!.async('string');
+    expect(s5).toContain('<a:t>{{modulo_tipo}}</a:t>');
+    zip.file('ppt/slides/slide5.xml', s5.replace('<a:t>{{modulo_tipo}}</a:t>', '<a:t>{{modulo_</a:t></a:r><a:r><a:rPr lang="it-IT"/><a:t>tipo}}</a:t>'));
+    const out = await JSZip.loadAsync(await (await compilaPptx(await zip.generateAsync({ type: 'arraybuffer' }), D)).arrayBuffer());
+    const xml = (await Promise.all(Object.keys(out.files).filter(n => /slides\/slide\d+\.xml$/.test(n)).map(n => out.file(n)!.async('string')))).join('');
+    expect(xml.replace(/<[^>]+>/g, '')).toContain('bifacciale');
+    expect(xml.replace(/descr="[^"]*"/g, '')).not.toMatch(/\{\{|\}\}/);
   });
 });
 

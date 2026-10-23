@@ -2,7 +2,7 @@
 // inserite a mano, dettaglio del giorno scelto. Si nasconde e si rimette con un pulsante (scelta ricordata in questo browser);
 // nascosto restano gli allarmi in breve.
 import { useState } from 'react';
-import { CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, mia, oraBreve, perGiorno, voci, type Genere, type Scadenza, type Voce } from '../domain/calendario';
+import { CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, inAttesa, mia, oraBreve, perGiorno, voci, type Genere, type Scadenza, type Voce } from '../domain/calendario';
 import { Fold } from '../components/ui';
 import { StatoSel } from './Cruscotto';
 import { eStato } from '../domain/kpi';
@@ -30,6 +30,13 @@ const togli = async (s: Scadenza) => {
   if (!confirm(`Eliminare "${s.titolo}"?`)) return;
   const e = await eliminaScadenza(s.id); if (e) toast('Voce non eliminata: ' + e); commit();
 };
+// Risposta a un'email arrivata: la voce «Attesa risposta» diventa fatta, con la nota facoltativa su cosa hanno risposto.
+async function risposta(s: Scadenza) {
+  const n = prompt('Risposta arrivata. Cosa hanno risposto? (facoltativo)', '');
+  if (n === null) return;
+  const nota = [s.nota, n.trim() && `Risposta del ${dFmt(dToday())}: ${n.trim()}`].filter(Boolean).join('\n');
+  const e = await salvaScadenza({ ...s, nota, fatto: true }); if (e) toast('Voce non aggiornata: ' + e); commit();
+}
 // Voci visibili: con "Le mie" solo quelle create da me o assegnate a me.
 const vociVisibili = () => { const vv = voci(S.arch, S.scad), me = mioEmail(); return S.ui.calMie && me ? vv.filter(v => mia(v, me)) : vv; };
 /** Voci scadute e non fatte, per il numerino sulla voce Home del menu. */
@@ -38,7 +45,7 @@ export const nScadute = () => { const a = allarmi(vociVisibili(), dToday()); ret
 function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean }) {
   const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s);
   // Allegati della voce (file e note): la graffetta mostra quanti sono e apre l'elenco sotto la voce.
-  const [email, setEmail] = useState(false), [all, setAll] = useState(false), nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
+  const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [all, setAll] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
   return (<>
     <div className={`cvoce ${s?.fatto ? 'fatto' : ''}`} style={{ '--vc': c } as React.CSSProperties}>
       {s ? <input type="checkbox" checked={s.fatto} disabled={!spunta} onChange={() => segna(s)} title={spunta ? 'Fatto' : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
@@ -51,12 +58,14 @@ function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?
       </div>
       {v.tipo === 'richiamo' && v.prevId && <StatoSel id={v.prevId} k="inviato" />}
       {v.prevId && <button className="btn s" onClick={() => apri(v.prevId!)}>Apri</button>}
-      {s && online() && !email && <button className="btn s" onClick={() => setEmail(true)} title="Scrivi un'email di aggiornamento da questa voce">✉ Email</button>}
+      {attesa && spunta && <button className="btn s p" onClick={() => risposta(s!)} title="Segna la voce come fatta, con una nota su cosa hanno risposto">Risposta arrivata</button>}
+      {s && online() && !email && <button className="btn s" onClick={() => setEmail(attesa ? 'sollecito' : 'email')} title={attesa ? 'Scrivi un sollecito cortese' : "Scrivi un'email di aggiornamento da questa voce"}>{attesa ? '✉ Sollecita' : '✉ Email'}</button>}
       {docOk && <button className={`btn s${all ? ' on' : ''}`} onClick={() => setAll(!all)} title="File e note allegati alla voce">📎{nAll ? ' ' + nAll : ''}</button>}
       {mio && onEdit && <><button className="btn s" onClick={() => onEdit(s)}>Modifica</button><button className="btn x" onClick={() => togli(s)} title="Elimina">✕</button></>}
     </div>
     {email && s && <div className="callegati"><ModuloEmail titolo={s.titolo} testo={s.nota || ''} contesto={contestoEmail(s.preventivo_id, s.id)}
-      chiave={s.preventivo_id || s.id} chiudi={() => setEmail(false)} /></div>}
+      chiave={s.preventivo_id || s.id} preventivo={s.preventivo_id} chiudi={() => setEmail('')}
+      richiesta0={email === 'sollecito' ? 'Sollecito cortese: non abbiamo ancora ricevuto risposta alla nostra email.' : ''} /></div>}
     {all && s && <div className="callegati"><DocPanel scadenza={s.id} preventivo={s.preventivo_id} compatto /></div>}
   </>);
 }

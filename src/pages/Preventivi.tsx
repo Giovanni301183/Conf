@@ -5,6 +5,7 @@ import { ModuloVarianti, scaricaOfferte } from '../components/Varianti';
 import { eStato, testo } from '../domain/kpi';
 import { Cruscotto, StatoSel } from './Cruscotto';
 import { Mappa } from './Mappa';
+import { Cerca } from './Cerca';
 import { CalendarioHome } from './Calendario';
 import { eur, fDate, fN } from '../domain/format';
 import { KEY_DRAFT, S, commit, load } from '../store/state';
@@ -29,13 +30,13 @@ export function Preventivi() {
         <div><h2>Archivio preventivi</h2>
           <p className="hint" style={{ margin: 0 }}>{n} preventiv{n === 1 ? 'o salvato' : 'i salvati'} {cloud.session ? "nell'archivio condiviso" : 'in questo browser'}. Ogni preventivo conserva anche il listino usato.</p></div>
         <span className="sp" />
-        <Seg path="ui.av" opts={[['elenco', 'Elenco'], ['kpi', 'Cruscotto'], ['mappa', 'Mappa']]} />
+        <Seg path="ui.av" opts={[['elenco', 'Elenco'], ['kpi', 'Cruscotto'], ['mappa', 'Mappa'], ['cerca', 'Cerca']]} />
         {S.ui.av === 'elenco' && <input placeholder="Cerca per nome, cliente, commessa…" value={S.ui.aq} onChange={e => { S.ui.aq = e.target.value; commit(); }} style={{ width: 260 }} />}
         <button className="btn" onClick={run(() => archSave(false))}>Salva preventivo corrente</button>
         <button className="btn p" onClick={run(newPreventivo)}>+ Nuovo preventivo</button>
       </div></div>
 
-      {S.ui.av === 'kpi' ? <Cruscotto /> : S.ui.av === 'mappa' ? <Mappa /> : <>
+      {S.ui.av === 'kpi' ? <Cruscotto /> : S.ui.av === 'mappa' ? <Mappa /> : S.ui.av === 'cerca' ? <Cerca /> : <>
       {cloud.locali.length > 0 && (
         <div className="card head"><div className="headrow">
           <div><h2>Preventivi solo in questo browser</h2><p className="hint" style={{ margin: 0 }}>

@@ -5,7 +5,7 @@
 import { S, withPrev } from '../store/state';
 import { eStato } from './kpi';
 import { clone, normPrev } from './model';
-import { AUTO, buildGantt, buildLavor, buildMontGantt, dNum, dToday, montDrv } from './plan';
+import { AUTO, buildGantt, buildLavor, buildMontGantt, dNum, dToday, isWork, montDrv } from './plan';
 
 export type Genere = 'attivita' | 'promemoria' | 'scadenza' | 'appuntamento' | 'urgenza';
 export interface Scadenza {
@@ -26,9 +26,14 @@ export const GENERI: Record<Genere, [string, string]> = {
 };
 // Categoria facoltativa (come le categorie del listino), utile soprattutto per le urgenze.
 export const CATEGORIE = ['STRUTTURA', 'BULLONERIA', 'ELETTROMECCANICO', 'ELETTRONICO'];
+// Email mandata e risposta attesa: un promemoria con questo titolo (nessun genere nuovo nel database), da spuntare quando la risposta arriva.
+export const ATTESA = '✉ Attesa risposta · ';
+export const inAttesa = (s?: Scadenza | null) => !!s && s.genere === 'promemoria' && s.titolo.startsWith(ATTESA);
+/** Giorno (numero) tra n giorni lavorativi da oggi: 0 = oggi. */
+export const traGiorniLavorativi = (n: number, da = dToday()) => { let g = da; for (let i = 0; i < n; i++) do g++; while (!isWork(g)); return g; };
 export const urgente = (v: Voce) => v.s?.genere === 'urgenza' && !v.s.fatto;
 /** Etichetta e colore di una voce: per le voci a mano conta il genere. */
-export const aspetto = (v: Voce): [string, string] => (v.s ? GENERI[v.s.genere] || GENERI.attivita : TIPI[v.tipo]);
+export const aspetto = (v: Voce): [string, string] => (inAttesa(v.s) ? ['In attesa di risposta', GENERI.promemoria[1]] : v.s ? GENERI[v.s.genere] || GENERI.attivita : TIPI[v.tipo]);
 export const oraBreve = (s?: Scadenza) => (s?.ora ? s.ora.slice(0, 5) : '');
 /** "Le mie": voci a mano create da me o assegnate a me (le date delle commesse restano per tutti). */
 export const mia = (v: Voce, me: string) => !v.s || v.s.creato_da === me || v.s.assegnata_a === me;
