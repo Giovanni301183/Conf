@@ -169,7 +169,7 @@ async function cercaAppunti(db: Db, b: any) {
 }
 
 /** Bozza di email da un appunto (id da cercaAppunti) o da un testo dettato, mandata nella chat privata con il pulsante che la apre in Gmail. */
-async function emailDaAppunto(db: Db, b: any, io: Me, chat: number) {
+async function emailDaAppunto(db: Db, b: any, io: Me, chat: number, origine: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return fail('Sul server manca TELEGRAM_BOT_TOKEN: non posso mandare la bozza.');
   const id = String(b.id ?? '').trim();
@@ -192,16 +192,21 @@ async function emailDaAppunto(db: Db, b: any, io: Me, chat: number) {
   const r = await scriviBozza({ ...ap, contesto: ctxEmail, richiesta: String(b.richiesta ?? '') }, io.nome || io.email.split('@')[0]);
   if ('errore' in r) return fail(r.errore);
   const a = String(b.a ?? '').trim();
-  // Un indirizzo troppo lungo puo' non passare come pulsante: allora il link porta solo destinatari e oggetto, il testo si copia dal messaggio.
-  let link = linkGmail(io.email, a, r.oggetto, r.testo);
-  const lungo = link.length > 2000;
-  if (lungo) link = linkGmail(io.email, a, r.oggetto, '');
+  // Telefono: pagina ponte che apre l'app di posta con la mail compilata (mailto). Computer: Gmail sul web.
+  const posta = (testo: string) => {
+    const q = new URLSearchParams({ a, su: r.oggetto, body: testo }), by = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    if (process.env.VERCEL_ENV === 'preview' && by) q.set('x-vercel-protection-bypass', by);   // l'anteprima Vercel e' protetta
+    return `${origine}/api/posta?${q.toString().replace(/\+/g, '%20')}`;
+  };
+  // Un indirizzo troppo lungo puo' non passare come pulsante: allora i link portano solo destinatari e oggetto, il testo si copia dal messaggio.
+  const lungo = Math.max(posta(r.testo).length, linkGmail(io.email, a, r.oggetto, r.testo).length) > 2000, corpo = lungo ? '' : r.testo;
   const msg = [`✉️ Bozza email${a ? ' per ' + a : ''}`, `Oggetto: ${r.oggetto}`, '', r.testo, '',
-    lungo ? 'Il testo è lungo: in Gmail incollalo copiandolo da qui.' : 'Rileggila in Gmail prima di premere Invia.'].join('\n').slice(0, 4000);
+    lungo ? 'Il testo è lungo: incollalo nella mail copiandolo da qui.' : 'Rileggila prima di premere Invia.'].join('\n').slice(0, 4000);
   const t = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chat_id: chat, text: msg, reply_markup: { inline_keyboard: [[{ text: '✉️ Apri in Gmail', url: link }]] } }) });
+    body: JSON.stringify({ chat_id: chat, text: msg, reply_markup: { inline_keyboard: [
+      [{ text: "📱 Apri nell'app di posta", url: posta(corpo) }], [{ text: '💻 Apri in Gmail (computer)', url: linkGmail(io.email, a, r.oggetto, corpo) }]] } }) });
   if (!t.ok) return fail(t.status === 403 ? 'Non posso scriverti in privato: apri la chat con il bot e premi Avvia, poi riprova.' : 'Telegram non ha accettato il messaggio con la bozza.');
-  return { ok: true, oggetto: r.oggetto, testo: `Ti ho mandato in privato la bozza «${r.oggetto}» con il pulsante «Apri in Gmail».` };
+  return { ok: true, oggetto: r.oggetto, testo: `Ti ho mandato in privato la bozza «${r.oggetto}» con i pulsanti per aprirla nell'app di posta o in Gmail.` };
 }
 
 export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''): Promise<Record<string, unknown>> {
@@ -250,7 +255,7 @@ export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''):
   if (az === 'modulo') return apriModulo(b, tid, origine);
   if (az === 'preventivo' || az === 'offerta' || az === 'layout') return preventivoBot(db, b, io.email, tid, oggi);
   if (az === 'appunti') return cercaAppunti(db, b);
-  if (az === 'email') return emailDaAppunto(db, b, io, tid);
+  if (az === 'email') return emailDaAppunto(db, b, io, tid, origine);
 
   if (az === 'colleghi') {
     const { data } = await db.from('utenti').select('email, nome').eq('attivo', true).order('nome');
