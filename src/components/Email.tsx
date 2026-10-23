@@ -1,6 +1,7 @@
-// Email di aggiornamento da un appunto (nota dei documenti o nota di un evento): l'AI scrive la bozza, la si corregge qui
+// Email di aggiornamento da un appunto (nota dei documenti o nota di un evento): prima si danno all'AI le indicazioni
+// (a chi, cosa dire in più, tono), poi l'AI scrive la bozza, la si corregge qui
 // e si apre già compilata nel Gmail di chi è collegato. I destinatari usati l'ultima volta per la stessa commessa restano in questo browser.
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { S } from '../store/state';
 import { bozzaEmail, cloud } from '../store/remote';
 
@@ -31,23 +32,29 @@ export function ModuloEmail({ titolo, testo: appunto, contesto, chiave, chiudi }
     catch (e) { setErr((e as Error).message); }
     setBusy(false);
   };
-  useEffect(() => { scrivi(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const apri = () => { ricordaA(chiave, a.trim()); apriGmail(a, oggetto, testo); chiudi(); };
+  const pronta = !!(oggetto || testo);
   return (
     <div className="cform">
+      <label className="f wide">Indicazioni per l'AI <span className="muted small">(facoltativo: a chi è rivolta, cosa aggiungere, tono)</span>
+        <textarea rows={3} value={richiesta} autoFocus placeholder="es. al cliente Rossi, dagli del lei, aggiungi che il montaggio parte il 10 novembre"
+          onChange={e => setRichiesta(e.target.value)} /></label>
+      {!pronta && <div className="wide" style={{ display: 'flex', gap: 8 }}>
+        <button className="btn p" disabled={busy} onClick={scrivi}>{busy ? 'Scrivo la bozza…' : 'Prepara bozza'}</button>
+        <button className="btn" onClick={chiudi}>Annulla</button>
+      </div>}
+      {err && <div className="warn wide">Bozza non scritta: {err}</div>}
+      {pronta && <>
       <label className="f wide">A <span className="muted small">(più indirizzi separati da virgola; puoi aggiungerli anche in Gmail)</span>
         <input value={a} placeholder="cliente@esempio.it" onChange={e => setA(e.target.value)} /></label>
       <label className="f wide">Oggetto<input value={oggetto} disabled={busy} onChange={e => setOggetto(e.target.value)} /></label>
       <label className="f wide">Testo<textarea rows={10} value={busy ? 'Scrivo la bozza…' : testo} disabled={busy} onChange={e => setTesto(e.target.value)} /></label>
-      <label className="f wide">Indicazioni per l'AI <span className="muted small">(facoltativo, poi «Riscrivi»)</span>
-        <input value={richiesta} placeholder="es. più breve, dai del tu, rivolta al fornitore" onChange={e => setRichiesta(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); scrivi(); } }} /></label>
-      {err && <div className="warn wide">Bozza non scritta: {err}</div>}
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
         <button className="btn p" disabled={busy || !testo.trim()} onClick={apri}>Apri in Gmail</button>
-        <button className="btn" disabled={busy} onClick={scrivi}>{busy ? 'Scrivo…' : 'Riscrivi'}</button>
+        <button className="btn" disabled={busy} onClick={scrivi} title="Riscrive la bozza con le indicazioni qui sopra">{busy ? 'Scrivo…' : 'Riscrivi'}</button>
         <button className="btn" onClick={chiudi}>Annulla</button>
       </div>
+      </>}
     </div>
   );
 }

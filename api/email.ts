@@ -20,7 +20,8 @@ const SCHEMA = {
 const sistema = (mittente: string) => `Sei l'assistente di Terranova S.r.l. (strutture per fotovoltaico, serre e agricoltura).
 Trasforma l'appunto interno che ti passo in un'email di aggiornamento professionale in italiano, da mandare a clienti, fornitori o colleghi.
 Regole:
-- Usa solo le informazioni dell'appunto e del contesto: non inventare date, quantità, prezzi o impegni.
+- Usa solo le informazioni dell'appunto, del contesto e delle indicazioni dell'utente: non inventare date, quantità, prezzi o impegni.
+- Le indicazioni dell'utente (destinatario, cose da aggiungere, tono) hanno la precedenza sull'appunto.
 - Tono cordiale e diretto, frasi brevi; elenco puntato con "- " solo se ci sono più punti distinti.
 - Togli abbreviazioni e note personali che non devono arrivare al destinatario.
 - Se l'appunto indica a chi è rivolto, saluta di conseguenza; altrimenti usa "Buongiorno,".
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
   if (!titolo.trim() && !testo.trim()) return json(400, { error: "L'appunto è vuoto." });
   const mittente = row.nome || me.split('@')[0];
   const domanda = [contesto && `Contesto: ${contesto}`, `Titolo dell'appunto: ${titolo}`, `Appunto:\n${testo || '(solo titolo)'}`,
-    richiesta && `Indicazioni per l'email: ${richiesta}`].filter(Boolean).join('\n\n');
+    richiesta && `Indicazioni dell'utente per l'email: ${richiesta}`].filter(Boolean).join('\n\n');
 
   try {
     const r = await new Anthropic().beta.messages.create({
