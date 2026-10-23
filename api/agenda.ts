@@ -192,7 +192,7 @@ async function emailDaAppunto(db: Db, b: any, io: Me, chat: number, origine: str
   const r = await scriviBozza({ ...ap, contesto: ctxEmail, richiesta: String(b.richiesta ?? '') }, io.nome || io.email.split('@')[0]);
   if ('errore' in r) return fail(r.errore);
   const a = String(b.a ?? '').trim();
-  // Telefono: pagina ponte che apre l'app di posta con la mail compilata (mailto). Computer: Gmail sul web.
+  // Telefono: pagina ponte che apre l'app Gmail con la mail compilata (vedi posta.ts). Computer: Gmail sul web.
   const posta = (testo: string) => {
     const q = new URLSearchParams({ a, su: r.oggetto, body: testo }), by = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
     if (process.env.VERCEL_ENV === 'preview' && by) q.set('x-vercel-protection-bypass', by);   // l'anteprima Vercel e' protetta
@@ -204,9 +204,9 @@ async function emailDaAppunto(db: Db, b: any, io: Me, chat: number, origine: str
     lungo ? 'Il testo è lungo: incollalo nella mail copiandolo da qui.' : 'Rileggila prima di premere Invia.'].join('\n').slice(0, 4000);
   const t = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ chat_id: chat, text: msg, reply_markup: { inline_keyboard: [
-      [{ text: "📱 Apri nell'app di posta", url: posta(corpo) }], [{ text: '💻 Apri in Gmail (computer)', url: linkGmail(io.email, a, r.oggetto, corpo) }]] } }) });
+      [{ text: '📱 Apri in Gmail (telefono)', url: posta(corpo) }], [{ text: '💻 Apri in Gmail (computer)', url: linkGmail(io.email, a, r.oggetto, corpo) }]] } }) });
   if (!t.ok) return fail(t.status === 403 ? 'Non posso scriverti in privato: apri la chat con il bot e premi Avvia, poi riprova.' : 'Telegram non ha accettato il messaggio con la bozza.');
-  return { ok: true, oggetto: r.oggetto, testo: `Ti ho mandato in privato la bozza «${r.oggetto}» con i pulsanti per aprirla nell'app di posta o in Gmail.` };
+  return { ok: true, oggetto: r.oggetto, testo: `Ti ho mandato in privato la bozza «${r.oggetto}» con i pulsanti per aprirla in Gmail, dal telefono o dal computer.` };
 }
 
 export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''): Promise<Record<string, unknown>> {
