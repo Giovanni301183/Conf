@@ -1,17 +1,44 @@
 // Assistente con AI (Claude, via /api/assistente): pannello chat a destra. Le modifiche arrivano come proposte
 // con Conferma e Annulla; solo la conferma cambia listino, distinte o calendario, con gli stessi strumenti dell'app.
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { datiPerAssistente, type Proposta } from '../domain/assistente';
+import { datiPerAssistente, type Appunto, type Proposta } from '../domain/assistente';
 import { sostituisci } from '../domain/referenze';
 import { clone } from '../domain/model';
 import { S, commit, save } from '../store/state';
 import { chiediAssistente, online, salvaScadenza } from '../store/remote';
+import { apriGmail } from './Email';
 
 type Voce = { ruolo: 'tu' | 'ai' | 'err'; testo: string; proposte?: Proposta[] };
 const cap = (g: string) => g.charAt(0) + g.slice(1).toLowerCase();
 const giorno = (d: string) => new Date(d + 'T12:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
 // Dettatura col riconoscimento vocale del browser (Chrome/Edge): il testo va nella casella, si invia a mano.
 const Riconoscimento: any = typeof window !== 'undefined' ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition : undefined;
+
+/** Appunti per l'assistente: note dei documenti e note degli eventi, i più recenti prima, con il nome della commessa. */
+function appunti(): Appunto[] {
+  const comm = (id?: string | null) => (id && S.arch.find(a => a.id === id)?.nome) || '';
+  const note = S.docs.filter(d => d.tipo === 'nota').map(d => ({ quando: String(d.creato || '').slice(0, 10), commessa: comm(d.preventivo_id), titolo: d.titolo, testo: (d.testo || '').slice(0, 2000) }));
+  const eventi = S.scad.filter(x => x.nota).map(x => ({ quando: x.giorno, commessa: comm(x.preventivo_id), titolo: 'Evento: ' + x.titolo, testo: String(x.nota).slice(0, 2000) }));
+  return [...note, ...eventi].sort((a, b) => b.quando.localeCompare(a.quando)).slice(0, 300);
+}
+
+function CardEmail({ p, stato, onFatto }: { p: Extract<Proposta, { tipo: 'email' }>; stato?: string; onFatto: (esito: string, nota: string) => void }) {
+  const [a, setA] = useState(p.a), [oggetto, setOggetto] = useState(p.oggetto), [testo, setTesto] = useState(p.testo);
+  return (
+    <div className="aicard">
+      <b>Email di aggiornamento</b>
+      {stato ? <><div>{oggetto}</div><div className="aiesito">{stato}</div></> : <>
+        <input className="aiin" value={a} placeholder="A: cliente@esempio.it (anche dopo, in Gmail)" onChange={e => setA(e.target.value)} />
+        <input className="aiin" value={oggetto} placeholder="Oggetto" onChange={e => setOggetto(e.target.value)} />
+        <textarea className="aiin" rows={8} value={testo} onChange={e => setTesto(e.target.value)} />
+        <div className="aibtn">
+          <button className="btn p s" disabled={!testo.trim()} onClick={() => { apriGmail(a, oggetto, testo); onFatto('✓ Aperta in Gmail: controlla e premi Invia', `Proposta ${p.id}: email aperta in Gmail dall'utente (non sappiamo se l'ha inviata).`); }}>Apri in Gmail</button>
+          <button className="btn s" onClick={() => onFatto('Annullata', `Proposta ${p.id} annullata dall'utente.`)}>Annulla</button>
+        </div>
+      </>}
+    </div>
+  );
+}
 
 /** Applica una sostituzione confermata: crea i codici nuovi copiando i vecchi, poi cambia le righe delle distinte. */
 function applicaSostituzione(p: Extract<Proposta, { tipo: 'sostituzione' }>): string {
@@ -34,11 +61,12 @@ function applicaSostituzione(p: Extract<Proposta, { tipo: 'sostituzione' }>): st
 
 function Card({ p, stato, onFatto }: { p: Proposta; stato?: string; onFatto: (esito: string, nota: string) => void }) {
   const [busy, setBusy] = useState(false);
+  if (p.tipo === 'email') return <CardEmail p={p} stato={stato} onFatto={onFatto} />;
   const conferma = async () => {
     setBusy(true);
     try {
       if (p.tipo === 'sostituzione') { const r = applicaSostituzione(p); onFatto('✓ Fatto: ' + r, `Proposta ${p.id} confermata dall'utente e applicata: ${r}.`); }
-      else {
+      else if (p.tipo === 'evento') {
         const e = await salvaScadenza({ titolo: p.titolo, giorno: p.giorno, ora: p.ora, genere: p.genere as any, nota: p.nota });
         if (e) throw new Error(e);
         commit(); onFatto('✓ Evento aggiunto al calendario', `Proposta ${p.id} confermata: evento creato nel calendario.`);
@@ -100,7 +128,7 @@ export function Assistente() {
     setTesto(''); setVoci(v => [...v, { ruolo: 'tu', testo: t }]); setBusy(true);
     try {
       const nota = note.current.length ? `[Dall'app] ${note.current.join(' ')}` : '';
-      const r = await chiediAssistente({ messages: conv.current, testo: t, nota, dati: datiPerAssistente(S.data) });
+      const r = await chiediAssistente({ messages: conv.current, testo: t, nota, dati: datiPerAssistente(S.data, appunti()) });
       conv.current = r.messages; note.current = [];
       setVoci(v => [...v, { ruolo: 'ai', testo: r.testo, proposte: r.proposte }]);
     } catch (err) { setVoci(v => [...v, { ruolo: 'err', testo: (err as Error).message }]); }
@@ -116,7 +144,8 @@ export function Assistente() {
         <button className="btn x" onClick={() => setAperto(false)} title="Chiudi">✕</button></div>
       <div className="aibody">
         {!voci.length && <div className="muted aihint">Chiedimi di cambiare articoli nelle distinte o di aggiungere un evento. Per esempio:
-          <ul><li>«Nel pilastro motore sostituisci bullone, dado e rondella M16 con M20»</li><li>«Aggiungi un evento domani alle 17: riunione con Rossi»</li></ul>
+          <ul><li>«Nel pilastro motore sostituisci bullone, dado e rondella M16 con M20»</li><li>«Aggiungi un evento domani alle 17: riunione con Rossi»</li>
+            <li>«Scrivi un'email di aggiornamento al cliente con gli appunti della commessa Rossi»</li></ul>
           Prima di cambiare qualcosa ti mostro la proposta: decidi tu se confermarla.</div>}
         {voci.map((v, i) => <div key={i} className={'aimsg ' + v.ruolo}>
           {v.testo && <div className="aitxt">{v.testo}</div>}

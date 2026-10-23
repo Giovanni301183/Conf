@@ -11,8 +11,12 @@ export interface DatiAssistente {
   listino: { c: string; d: string; cat: string; sub: string; t: string }[];
   template: { g: string; c: string; d?: string; L?: unknown; qa?: string; qb?: string }[];
   sizes: Record<string, { assi: { c: string; d?: string; L?: unknown; q?: string }[] }>;
+  // Appunti (note dei documenti e note degli eventi), per scrivere email di aggiornamento.
+  appunti?: Appunto[];
 }
-export const datiPerAssistente = (data: any): DatiAssistente => ({
+export interface Appunto { quando: string; commessa: string; titolo: string; testo: string }
+export const datiPerAssistente = (data: any, appunti: Appunto[] = []): DatiAssistente => ({
+  appunti,
   listino: data.listino.map((x: any) => ({ c: x.c, d: x.d, cat: x.cat, sub: x.sub, t: x.t })),
   template: data.template.map((r: any) => ({ g: r.g, c: r.c, d: r.d, L: r.L, qa: r.qa, qb: r.qb })),
   sizes: Object.fromEntries(Object.entries<any>(data.sizes).map(([k, s]) => [k, { assi: s.assi.map((a: any) => ({ c: a.c, d: a.d, L: a.L, q: a.q })) }])),
@@ -21,7 +25,8 @@ export const datiPerAssistente = (data: any): DatiAssistente => ({
 export interface Coppia { da: string; a: string; descrizione_nuovo: string | null; peso_kg: number | null; costo: number | null }
 export type Proposta =
   | { id: string; tipo: 'sostituzione'; coppie: Coppia[]; gruppi: string[]; righe: { g: string; da: string; a: string; n: number; taglie: string[] }[]; nuovi: string[] }
-  | { id: string; tipo: 'evento'; titolo: string; giorno: string; ora: string | null; genere: string; nota: string | null };
+  | { id: string; tipo: 'evento'; titolo: string; giorno: string; ora: string | null; genere: string; nota: string | null }
+  | { id: string; tipo: 'email'; a: string; oggetto: string; testo: string };
 
 const s = (description: string) => ({ type: 'string', description });
 const ns = (description: string) => ({ type: ['string', 'null'], description });
@@ -41,6 +46,11 @@ export const TOOLS = [
   { name: 'proponi_evento', description: "Prepara un evento nel calendario della Home. Non lo crea: l'utente conferma nell'app.",
     input_schema: obj({ titolo: s('Titolo breve'), giorno: s('Data AAAA-MM-GG'), ora: ns('Ora HH:MM, o null se senza ora'),
       genere: { type: 'string', enum: GENERI_EVENTO, description: 'attivita = da fare, promemoria, scadenza, appuntamento, urgenza' }, nota: ns('Nota facoltativa') }) },
+  { name: 'cerca_appunti', description: 'Cerca negli appunti (note dei documenti e note degli eventi del calendario) per commessa, cliente o parole del testo. Testo vuoto = gli ultimi appunti. Ritorna data, commessa, titolo e testo.',
+    input_schema: obj({ testo: s('Parole da cercare, anche vuoto') }) },
+  { name: 'proponi_email', description: "Prepara un'email di aggiornamento. Non la invia: l'utente la vede, la può correggere e la apre già compilata nel suo Gmail.",
+    input_schema: obj({ a: ns('Indirizzi email dei destinatari separati da virgola, solo se l\'utente li ha detti; altrimenti null'),
+      oggetto: s('Oggetto breve, con il riferimento della commessa se c\'è'), testo: s('Corpo in testo semplice, con saluto iniziale e chiusura "Cordiali saluti,"') }) },
 ].map(t => ({ ...t, strict: true }));
 
 const norm = (x: string) => x.toUpperCase().replace(/\s+/g, ' ').trim();
@@ -83,6 +93,18 @@ export function esegui(nome: string, input: any, D: DatiAssistente, id: string):
     return { testo: "Proposta pronta: l'utente la vede con i pulsanti Conferma e Annulla. Non dire che è già creata.",
       proposta: { id, tipo: 'evento', titolo, giorno, ora, genere, nota: input.nota ? String(input.nota).slice(0, 500) : null } };
   }
+  if (nome === 'cerca_appunti') {
+    const parole = norm(String(input.testo || '')).split(' ').filter(Boolean), tutti = D.appunti || [];
+    const trovati = tutti.filter(x => { const t = norm(`${x.commessa} ${x.titolo} ${x.testo}`); return parole.every(p => t.includes(p)); }).slice(0, 15);
+    return { testo: trovati.length ? trovati.map(x => `[${x.quando}${x.commessa ? ' · ' + x.commessa : ''}] ${x.titolo}${x.testo ? '\n' + x.testo : ''}`).join('\n\n')
+      : tutti.length ? 'Nessun appunto trovato: prova con altre parole.' : 'Non ci sono appunti.' };
+  }
+  if (nome === 'proponi_email') {
+    const oggetto = String(input.oggetto || '').trim().slice(0, 300), testo = String(input.testo || '').trim().slice(0, 20_000);
+    if (!testo) return { testo: "Manca il testo dell'email.", errore: true };
+    return { testo: "Bozza pronta: l'utente la vede, può correggerla e aprirla in Gmail per inviarla. Non dire che è già inviata.",
+      proposta: { id, tipo: 'email', a: input.a ? String(input.a).trim().slice(0, 1000) : '', oggetto, testo } };
+  }
   return { testo: `Strumento sconosciuto: ${nome}`, errore: true };
 }
 
@@ -94,13 +116,15 @@ Oggi è ${f} (${iso}), ora italiana.
 
 Puoi aiutare a:
 - cambiare articoli nelle distinte base (es. sostituire bullone, dado e rondella M16 con M20 nel pilastro motore);
-- aggiungere eventi al calendario della Home.
+- aggiungere eventi al calendario della Home;
+- scrivere email di aggiornamento a partire dagli appunti (note dei documenti e degli eventi).
 
 Come lavori:
 - Prima di proporre una sostituzione guarda le righe del gruppo con righe_distinta e cerca i codici con cerca_articoli: usa solo codici che esistono davvero. Per "bullone, dado e rondella" trova tutti e tre i codici usati nel gruppo.
 - Se il codice nuovo non esiste nel listino, proponi un nome sullo stile dei codici esistenti (es. 10BZM16X60 → 10BZM20X60) e dillo chiaramente: verrà creato copiando la voce vecchia, con peso e prezzo da completare se non li conosci.
 - Se nel gruppo c'è un codice simile ma diverso da quello detto (es. l'utente dice M16x25 ma il gruppo usa M16x60), fallo notare e chiedi, invece di indovinare.
-- Le modifiche le fai solo con proponi_sostituzione e proponi_evento: preparano una proposta che l'utente conferma con un pulsante. Non dire mai che una modifica è fatta finché l'app non lo conferma.
+- Le modifiche le fai solo con proponi_sostituzione, proponi_evento e proponi_email: preparano una proposta che l'utente conferma con un pulsante. Non dire mai che una modifica è fatta finché l'app non lo conferma.
 - Per un evento servono titolo, data e, se detta, l'ora. Se manca il titolo chiedilo. Un'ora da 1 a 7 senza "di mattina" intendila del pomeriggio (es. "alle 5" = 17:00) e dillo.
+- Per un'email trova prima gli appunti giusti con cerca_appunti, poi proponila con proponi_email. Usa solo quello che c'è negli appunti: non inventare date, quantità, prezzi o impegni. Tono cordiale e professionale, testo semplice senza markdown. L'email parte dal Gmail dell'utente, che preme Invia.
 - Se una richiesta non riguarda queste cose, dillo in una frase.`;
 }

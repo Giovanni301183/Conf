@@ -26,4 +26,14 @@ describe('strumenti dell\'assistente', () => {
     expect(esegui('proponi_evento', { titolo: 'Riunione', giorno: 'domani', ora: null, genere: 'attivita', nota: null }, D, 't7').errore).toBe(true);
     expect(esegui('proponi_evento', { titolo: '', giorno: '2026-10-22', ora: '5', genere: 'attivita', nota: null }, D, 't8').errore).toBe(true);
   });
+  it("cerca negli appunti e propone un'email senza inviarla", () => {
+    const A = datiPerAssistente(defaultData(), [
+      { quando: '2026-10-22', commessa: 'Rossi Agrivoltaico', titolo: 'Telefonata', testo: 'Consegna pali spostata a lunedì' },
+      { quando: '2026-10-20', commessa: 'Bianchi', titolo: 'Sopralluogo', testo: 'Terreno ok' }]);
+    const r = esegui('cerca_appunti', { testo: 'rossi pali' }, A, 't9').testo;
+    expect(r).toContain('Consegna pali'); expect(r).not.toContain('Terreno');
+    expect(esegui('cerca_appunti', { testo: '' }, A, 't10').testo).toContain('Sopralluogo');
+    expect(esegui('proponi_email', { a: null, oggetto: 'Aggiornamento', testo: 'Buongiorno, …' }, A, 't11').proposta).toMatchObject({ tipo: 'email', a: '', oggetto: 'Aggiornamento' });
+    expect(esegui('proponi_email', { a: 'x@y.it', oggetto: 'X', testo: ' ' }, A, 't12').errore).toBe(true);
+  });
 });

@@ -10,7 +10,8 @@ import { DAY, dDate, dFmt, dToday, isWork, isoDay, monday } from '../domain/plan
 import { S, commit } from '../store/state';
 import { archOpen, toast } from '../store/actions';
 import { DocPanel, docNonDisponibili } from './Documenti';
-import { cloud, eliminaScadenza, mioEmail, puoModificare, puoSpuntare, salvaScadenza, spuntaScadenza } from '../store/remote';
+import { ModuloEmail, contestoEmail } from '../components/Email';
+import { cloud, eliminaScadenza, mioEmail, online, puoModificare, puoSpuntare, salvaScadenza, spuntaScadenza } from '../store/remote';
 
 const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 const meseNome = (y: number, m: number) => new Date(Date.UTC(y, m, 1)).toLocaleDateString('it-IT', { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -37,7 +38,7 @@ export const nScadute = () => { const a = allarmi(vociVisibili(), dToday()); ret
 function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean }) {
   const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s);
   // Allegati della voce (file e note): la graffetta mostra quanti sono e apre l'elenco sotto la voce.
-  const [all, setAll] = useState(false), nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
+  const [email, setEmail] = useState(false), [all, setAll] = useState(false), nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
   return (<>
     <div className={`cvoce ${s?.fatto ? 'fatto' : ''}`} style={{ '--vc': c } as React.CSSProperties}>
       {s ? <input type="checkbox" checked={s.fatto} disabled={!spunta} onChange={() => segna(s)} title={spunta ? 'Fatto' : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
@@ -50,9 +51,12 @@ function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?
       </div>
       {v.tipo === 'richiamo' && v.prevId && <StatoSel id={v.prevId} k="inviato" />}
       {v.prevId && <button className="btn s" onClick={() => apri(v.prevId!)}>Apri</button>}
+      {s && online() && !email && <button className="btn s" onClick={() => setEmail(true)} title="Scrivi un'email di aggiornamento da questa voce">✉ Email</button>}
       {docOk && <button className={`btn s${all ? ' on' : ''}`} onClick={() => setAll(!all)} title="File e note allegati alla voce">📎{nAll ? ' ' + nAll : ''}</button>}
       {mio && onEdit && <><button className="btn s" onClick={() => onEdit(s)}>Modifica</button><button className="btn x" onClick={() => togli(s)} title="Elimina">✕</button></>}
     </div>
+    {email && s && <div className="callegati"><ModuloEmail titolo={s.titolo} testo={s.nota || ''} contesto={contestoEmail(s.preventivo_id, s.id)}
+      chiave={s.preventivo_id || s.id} chiudi={() => setEmail(false)} /></div>}
     {all && s && <div className="callegati"><DocPanel scadenza={s.id} preventivo={s.preventivo_id} compatto /></div>}
   </>);
 }

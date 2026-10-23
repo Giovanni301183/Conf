@@ -541,3 +541,4 @@ table.arch td input{width:100%;max-width:260px}
 .callegati .ditem:first-of-type{border-top:0}
 .callegati .ditem .dact{width:100%;justify-content:flex-start}
 @media (max-width:760px){.dgrid{grid-template-columns:1fr}.dcart{position:static;flex-direction:row;flex-wrap:wrap}.ditem .dact{width:100%;justify-content:flex-start}}
+.aiin{display:block;width:100%;box-sizing:border-box;margin:4px 0;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;resize:vertical}
