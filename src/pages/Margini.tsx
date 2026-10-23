@@ -1,20 +1,15 @@
 // Scheda Margini: margine generale e per categoria, prezzo di vendita.
 import { Fold, Inp, Seg, TabTools } from '../components/ui';
-import { tot } from '../domain/compute';
 import { eur, fN, fP } from '../domain/format';
+import { perCategoria } from '../domain/margini';
 import { LAV_CAT, MCATS, ZINC_CAT, normPrev, num } from '../domain/model';
 import { R, S } from '../store/state';
 
 export function Margini() {
   const P = normPrev(S.prev), M = P.marg, C = R.total, V = R.prezzo, mg = V - C, ric = M.modo === 'ricarico';
   const wpS = (x: number) => (R.kwp ? fN(x / (R.kwp * 1000), 4) : '–');
-  const byCat: Record<string, { c: number; p: number }> = {};
-  const add = (k: string, c: number, p: number) => { (byCat[k] ??= { c: 0, p: 0 }); byCat[k].c += c; byCat[k].p += p; };
   // Lavorazione e zincatura si contano a parte, nella loro categoria: le altre categorie mostrano il costo senza di esse.
-  for (const l of R.lines) {
-    add(l.cat, tot(l) - l.lav - l.zinc, l.prezzo - l.pLav - l.pZinc);
-    if (l.lav) add(LAV_CAT, l.lav, l.pLav); if (l.zinc) add(ZINC_CAT, l.zinc, l.pZinc);
-  }
+  const byCat = perCategoria(R);
   const own = MCATS.filter(c => M.cat[c] !== '' && M.cat[c] != null);
   const sum = (k: string) => R.lines.filter(l => l.riga === k).reduce((s, l) => s + l.prezzo, 0), pImp = sum('imp'), pEx = sum('extra');
   return (

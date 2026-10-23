@@ -4,6 +4,7 @@
 // lo calcola e manda l'offerta. "offerta" rimanda l'offerta PowerPoint di un preventivo gia' salvato, cosi' com'e'.
 // "layout" mette nel preventivo il DXF o l'immagine mandati al bot (file_id di Telegram); anche "preventivo" accetta file_id.
 // Da un DXF si contano i tracker: un preventivo nuovo senza righe le prende da li' (agrivoltaico).
+// "margini" manda in chat privata il riepilogo dei margini di un preventivo salvato, come la scheda Margini dell'app.
 // "varianti" crea copie di un preventivo salvato cambiando solo il materiale (profilo, asse, omega): vedi src/domain/varianti.ts.
 // Il listino non si tocca mai da qui: un preventivo nuovo usa quello condiviso, uno esistente il listino salvato con lui.
 // L'offerta arriva in PDF nella chat privata con il bot (mai nel gruppo: ci sono i prezzi), con TELEGRAM_BOT_TOKEN e CONVERTAPI_TOKEN su Vercel.
@@ -14,6 +15,7 @@ import { compute } from '../src/domain/compute.js';
 import { eur, fN, fP, fileName } from '../src/domain/format.js';
 import { MCATS, MIN_CUSC, OPT_LCUSC, OPT_LFOND, clone, defRiga, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../src/domain/model.js';
 import { pilastri } from '../src/domain/referenze.js';
+import { testoMargini } from '../src/domain/margini.js';
 import { etichetta, nomeVariante, profDa, rigaVariante, variante, type Variante } from '../src/domain/varianti.js';
 import { PROGETTO, compilaPptxBytes, datiOfferta, layoutImg, offPrev } from '../src/domain/offerta.js';
 import { layoutDaTelegram } from './_layout.js';
@@ -308,4 +310,18 @@ export async function variantiBot(db: Db, b: any, email: string, chat: number): 
   if (uguali.length) avvisi.push(`${uguali[0]} è già il preventivo base N° ${base.num}: non l'ho duplicato.`);
   return { ok: true, creati: fatte.map(P => ({ id: P._id, numero: P.num, materiale: etichetta(P) })), testo: righe.join('\n'), avvisi,
     offerte: invia ? 'base e varianti mandate nella chat privata con il bot' : 'non richieste' };
+}
+
+/** Riepilogo dei margini di un preventivo salvato (id), calcolato con il suo listino e mandato nella chat privata: mai nel gruppo. */
+export async function marginiBot(db: Db, b: any, chat: number): Promise<Record<string, unknown>> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return fail('Sul server manca TELEGRAM_BOT_TOKEN: non posso mandare i margini.');
+  const id = String(b.id ?? '').trim();
+  const { data: e } = id ? await db.from('preventivi').select('id, nome, prev, dati').eq('id', id).maybeSingle() : { data: null };
+  if (!e) return fail('Preventivo non trovato: cercalo con cerca_commesse e usa il suo id.');
+  const P = normPrev(clone(e.prev)); P._nome = e.nome;
+  const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chat_id: chat, text: testoMargini(P, compute(e.dati, P)) }) });
+  if (!r.ok) return fail(r.status === 403 ? 'Non posso scriverti in privato: apri la chat con il bot e premi Avvia, poi riprova.' : 'Telegram non ha accettato il messaggio con i margini.');
+  return { ok: true, testo: `Ti ho mandato in privato i margini del preventivo N° ${P.num || '–'}.` };
 }

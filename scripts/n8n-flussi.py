@@ -90,6 +90,7 @@ Regole:
 - Urgenze e voci assegnate vengono annunciate da sole nel gruppo: non devi farlo tu.
 - Comandi del menu del bot: /oggi = agenda di oggi; /settimana = prossimi 7 giorni; /mie = solo le mie voci; /urgente <testo> = registra un'urgenza; /preventivo <cliente> = modulo per un preventivo nuovo; /aiuto o /start = spiega in poche righe cosa puoi fare e come collegare l'account (/collega CODICE, codice dal pulsante Telegram nell'app).
 - Preventivo di un cliente già fatto ("mandami il preventivo di Rossi", "dammi l'offerta per Rossi", "il preventivo 2026/014"): cercalo con cerca_commesse e manda il PDF con invia_offerta. Se ce n'è più di uno, elenca numero, nome, data e stato e chiedi quale (o se li vuole tutti: allora invia_offerta per ognuno). Se non ce n'è nessuno, dillo e chiedi se ne vuole fare uno nuovo.
+- Margini e costi di un preventivo ("che margine ha il preventivo di Rossi?", "mandami i margini del 2026/014"): trova il preventivo con cerca_commesse e usa margini_preventivo, che li manda in chat privata. Non riscrivere margini e costi in chat (nel gruppo mai): di' solo che sono arrivati in privato.
 - Nel dubbio tra "uno già fatto" e "uno nuovo" (es. solo "preventivo per Rossi"), cerca prima con cerca_commesse: se Rossi ha già preventivi, chiedi se vuole uno di quelli o uno nuovo.
 - Preventivo nuovo ("fammi un preventivo per Rossi Srl", "prepara un preventivo", /preventivo Rossi): usa SEMPRE modulo_preventivo con il nome del cliente detto dall'operatore, senza fare domande sui dati. L'operatore compila il modulo, controlla l'anteprima e lo invia da lì. Rispondi solo che il pulsante «Compila preventivo» è in chat privata.
 - Per correggere un preventivo già fatto con il modulo usa modulo_preventivo con il suo id (da cerca_commesse). Solo per una modifica piccola e chiara (es. "metti il margine al 20 %" sul preventivo 2026/012) usa prepara_preventivo con l'id e i soli campi da cambiare, dopo aver ripetuto la modifica e avuto conferma. Per rimandare l'offerta così com'è usa invia_offerta.
@@ -185,6 +186,8 @@ chat = [
          + " }).filter(([, v]) => v !== '' && v != null))"),
     tool('invia_offerta', [1880, 860], "Manda nella chat privata di chi scrive l'offerta in PDF di un preventivo dell'archivio, così com'è salvato (id da cerca_commesse). Usalo quando chiede un preventivo già fatto.",
          "{ azione: 'offerta', telegram_id: " + TID + ', id: ' + fa('id', 'id del preventivo') + ' }'),
+    tool('margini_preventivo', [2600, 860], "Manda nella chat privata di chi scrive il riepilogo dei margini di un preventivo dell'archivio (id da cerca_commesse), come la scheda Margini dell'app: costo, margine e prezzo per categoria, totale, €/Wp e prezzo per tracker.",
+         "{ azione: 'margini', telegram_id: " + TID + ', id: ' + fa('id', 'id del preventivo') + ' }'),
     tool('crea_varianti', [2480, 860], "Crea varianti di un preventivo salvato (id da cerca_commesse) che cambiano solo il materiale su tutte le righe: profilo dei pilastri, spessore dell'asse, spessore dell'omega. Ogni variante è un preventivo nuovo con il suo numero e la sua offerta in chat privata. Restituisce i preventivi creati, il confronto dei prezzi (testo) e gli avvisi.",
          "{ azione: 'varianti', telegram_id: " + TID + ', id: ' + fa('id', 'id del preventivo base')
          + ', varianti: ' + fa('varianti', 'Elenco JSON delle combinazioni dette, es. [{"prof":"IPEA","asse":2.5},{"prof":"IPE","asse":3}]; prof = famiglia (IPE, IPEA) o codice (IPE 140); asse 2.5 o 3; omega 2 o 1.8; i campi non detti restano quelli del base') + ' }'),
@@ -220,7 +223,7 @@ chat_conn = {
     'Modello': {'ai_languageModel': [[{'node': 'Assistente', 'type': 'ai_languageModel', 'index': 0}]]},
     'Memoria': {'ai_memory': [[{'node': 'Assistente', 'type': 'ai_memory', 'index': 0}]]},
     **{t: {'ai_tool': [[{'node': 'Assistente', 'type': 'ai_tool', 'index': 0}]]}
-       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account', 'prepara_preventivo', 'invia_offerta', 'carica_layout', 'modulo_preventivo', 'cerca_appunti', 'email_da_appunto', 'crea_varianti']},
+       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account', 'prepara_preventivo', 'invia_offerta', 'carica_layout', 'modulo_preventivo', 'cerca_appunti', 'email_da_appunto', 'crea_varianti', 'margini_preventivo']},
 }
 
 # ---------- Flusso 2: avvisi e riepilogo ----------
