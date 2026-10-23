@@ -1,7 +1,7 @@
 // Home: calendario in cima (si nasconde), poi archivio dei preventivi salvati, bozza recuperabile, backup su file; cruscotto KPI e mappa.
 import { Fragment, useState } from 'react';
 import { Fold, Seg } from '../components/ui';
-import { ModuloVarianti } from '../components/Varianti';
+import { ModuloVarianti, scaricaOfferte } from '../components/Varianti';
 import { eStato, testo } from '../domain/kpi';
 import { Cruscotto, StatoSel } from './Cruscotto';
 import { Mappa } from './Mappa';
@@ -73,7 +73,8 @@ export function Preventivi() {
                     <button className="btn s" onClick={run(() => archDup(e.id))} title="Duplica">Duplica</button>
                     <button className="btn s" onClick={() => setVarId(varId === e.id ? null : e.id)} title="Altri preventivi uguali con profilo o asse diversi">Varianti</button>
                     <button className="btn s" onClick={run(() => archRename(e.id))} title="Cambia il nome del preventivo">Rinomina</button>
-                    <button className="btn s" onClick={() => archDl(e.id)} title="Scarica come file">Scarica</button>
+                    <button className="btn s" onClick={() => scaricaOfferte(e.id, [])} title="Scarica l'offerta del preventivo in PDF, così com'è salvato">PDF</button>
+                    <button className="btn s" onClick={() => archDl(e.id)} title="Copia di sicurezza del preventivo (.json), da reimportare in Backup e trasferimento: non è un PDF">Backup</button>
                     {isAdmin() && <button className="btn s del" onClick={run(() => archDel(e.id))} title="Elimina il preventivo (solo amministratore)">Elimina</button>}
                   </td>
                 </tr>

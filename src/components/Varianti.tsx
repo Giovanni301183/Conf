@@ -14,7 +14,8 @@ import { anteprimaVarianti, archVarianti, toast } from '../store/actions';
 import { online, pdfOfferta } from '../store/remote';
 
 const MODELLO = `${import.meta.env.BASE_URL}offerta/modello-offerta.pptx`;
-/** Offerte in PDF (senza collegamento: PowerPoint) del base e delle varianti, una dopo l'altra, come le manda il bot.
+/** Offerte in PDF (senza collegamento: PowerPoint) del base e delle varianti, una dopo l'altra, come le manda il bot;
+ *  senza varianti, la sola offerta del preventivo (pulsante PDF dell'archivio).
  *  La posa vuota prende il totale della scheda Montaggio solo se il base e' il preventivo aperto, uguale per tutte;
  *  altrimenti risulta "non inclusa", come da Telegram. */
 export async function scaricaOfferte(baseId: string, ids: string[]) {
@@ -33,7 +34,8 @@ export async function scaricaOfferte(baseId: string, ids: string[]) {
       if (online()) download(nome + '.pdf', await pdfOfferta(blob)); else download(nome + '.pptx', blob);
     } catch (err) { errori.push(`N° ${P.num || '–'}: ${(err as Error).message}`); }
   }
-  toast(errori.length ? 'Offerte non generate: ' + errori.join('; ') : `Scaricate ${tutti.length} offerte${online() ? ' in PDF' : ''}`);
+  toast(errori.length ? `Offert${tutti.length === 1 ? 'a' : 'e'} non generat${tutti.length === 1 ? 'a' : 'e'}: ` + errori.join('; ')
+    : `${tutti.length === 1 ? "Scaricata l'offerta" : `Scaricate ${tutti.length} offerte`}${online() ? ' in PDF' : ' (PowerPoint: il PDF serve il collegamento)'}`);
 }
 
 /** Confronto tra il base e le varianti; l'errore (profilo sconosciuto, …) al posto della tabella. */
