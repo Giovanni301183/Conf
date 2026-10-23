@@ -60,6 +60,7 @@ input.n{text-align:right;font-variant-numeric:tabular-nums}
 .btn.p{background:var(--acc);border-color:var(--acc);color:#fff}
 .btn.p:hover{background:var(--acc2);color:#fff}
 .btn.s{padding:3px 10px;font-size:12px}
+.btn.del{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,transparent)}.btn.del:hover{background:var(--bad);border-color:var(--bad);color:#fff}
 .btn.x{border:0;color:#b5b0a6;padding:2px 7px;background:none;font-size:13px}.btn.x:hover{color:var(--bad)}
 .wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
 table{border-collapse:collapse;width:100%}
