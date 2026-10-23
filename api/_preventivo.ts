@@ -4,6 +4,7 @@
 // lo calcola e manda l'offerta. "offerta" rimanda l'offerta PowerPoint di un preventivo gia' salvato, cosi' com'e'.
 // "layout" mette nel preventivo il DXF o l'immagine mandati al bot (file_id di Telegram); anche "preventivo" accetta file_id.
 // Da un DXF si contano i tracker: un preventivo nuovo senza righe le prende da li' (agrivoltaico).
+// "varianti" crea copie di un preventivo salvato cambiando solo il materiale (profilo, asse, omega): vedi src/domain/varianti.ts.
 // Il listino non si tocca mai da qui: un preventivo nuovo usa quello condiviso, uno esistente il listino salvato con lui.
 // L'offerta arriva in PDF nella chat privata con il bot (mai nel gruppo: ci sono i prezzi), con TELEGRAM_BOT_TOKEN e CONVERTAPI_TOKEN su Vercel.
 import { readFile } from 'node:fs/promises';
@@ -13,6 +14,7 @@ import { compute } from '../src/domain/compute.js';
 import { eur, fN, fP, fileName } from '../src/domain/format.js';
 import { MCATS, MIN_CUSC, OPT_LCUSC, OPT_LFOND, clone, defRiga, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../src/domain/model.js';
 import { pilastri } from '../src/domain/referenze.js';
+import { etichetta, nomeVariante, profDa, rigaVariante, variante, type Variante } from '../src/domain/varianti.js';
 import { PROGETTO, compilaPptxBytes, datiOfferta, layoutImg, offPrev } from '../src/domain/offerta.js';
 import { layoutDaTelegram } from './_layout.js';
 import { inPdf } from './_pdf.js';
@@ -37,15 +39,6 @@ export const IMPIANTO = [['quadri_campo', 'quadA', 'quadri di campo'], ['quadri_
   ['centralina', 'box', 'centraline meteo'], ['piranometro', 'piran', 'piranometri'], ['anemometro', 'anem', 'anemometri'],
   ['temp_aria', 'termAria', "sensori di temperatura dell'aria"], ['temp_pannello', 'termCont', 'sensori di temperatura dei pannelli']] as const;
 export const opzioni = (data: any) => ({ prof: pilastri(data), ...OPZIONI });
-// Profilo detto o scritto: il codice esatto ("IPE 180", "hea160") o la sola famiglia ("IPE") se nel listino ce n'e' uno solo.
-const norm = (v: unknown) => String(v).toUpperCase().replace(/[\s.]/g, '');
-function profDa(v: unknown, data: any): string {
-  const pp = pilastri(data).map(([c]) => c), x = norm(v);
-  const esatto = pp.find(c => norm(c) === x); if (esatto) return esatto;
-  const fam = pp.filter(c => norm(c).replace(/[\d,x]+$/i, '') === x);
-  if (fam.length === 1) return fam[0];
-  throw new Error(fam.length ? `Profilo "${v}": quale? ${fam.join(' o ')}.` : `Profilo "${v}" sconosciuto: ${pp.join(', ')}.`);
-}
 const vicino = (lista: number[], v: number) => lista.find(x => Math.abs(x - v) < 1e-6);
 
 /** Una riga tracker dai campi detti o scritti nel modulo; i dati tecnici non detti restano quelli predefiniti. Stringa = errore. */
@@ -246,23 +239,28 @@ export async function anteprima(db: Db, b: any, oggi: string): Promise<Record<st
     avvisi: [...new Set([...R.warn, ...avvisi])] };
 }
 
+/** Salva il preventivo nell'archivio; uno nuovo prende id e il numero successivo. Ritorna l'errore, se c'e'. */
+async function salva(db: Db, P: any, R: any, data: any, email: string, nuovo: boolean): Promise<string | null> {
+  if (nuovo) {
+    const { data: nn } = await db.from('preventivi').select('num:prev->>num');
+    P.num = numSucc(P, (nn || []).map((x: any) => ({ prev: { num: x.num } })));
+    P._id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); P._nome = P._nome || [P.cliente, P.rif].filter(Boolean).join(' · ');
+  }
+  const riga: Record<string, unknown> = { id: P._id, nome: P._nome, cliente: P.cliente, rif: P.rif, data: P.data, salvato: new Date().toISOString(),
+    totale: R.total, prezzo: R.prezzo, kwp: R.kwp, n_tracker: R.nTracker, righe: righeTxt(P), prev: P, dati: data, modificato_da: email };
+  if (nuovo) riga.creato_da = email;
+  const { error } = await db.from('preventivi').upsert(riga);
+  return error ? error.message : null;
+}
+
 export async function preventivoBot(db: Db, b: any, email: string, chat: number, oggi: string): Promise<Record<string, unknown>> {
   const p = await prepara(db, b, oggi);
   if ('errore' in p) return fail(p.errore);
   const { P, data, nuovo, daDxf } = p, R = compute(data, P);
 
   if (b.azione !== 'offerta') {
-    const salvato = new Date().toISOString();
-    if (nuovo) {
-      const { data: nn } = await db.from('preventivi').select('num:prev->>num');
-      P.num = numSucc(P, (nn || []).map((x: any) => ({ prev: { num: x.num } })));
-      P._id = 'p' + Date.now().toString(36); P._nome = [P.cliente, P.rif].filter(Boolean).join(' · ');
-    }
-    const riga: Record<string, unknown> = { id: P._id, nome: P._nome, cliente: P.cliente, rif: P.rif, data: P.data, salvato,
-      totale: R.total, prezzo: R.prezzo, kwp: R.kwp, n_tracker: R.nTracker, righe: righeTxt(P), prev: P, dati: data, modificato_da: email };
-    if (nuovo) riga.creato_da = email;
-    const { error } = await db.from('preventivi').upsert(riga);
-    if (error) return fail(error.message);
+    const errore = await salva(db, P, R, data, email, nuovo);
+    if (errore) return fail(errore);
   }
 
   const testo = riepilogo(P, R);
@@ -270,4 +268,41 @@ export async function preventivoBot(db: Db, b: any, email: string, chat: number,
   const inv = await inviaOfferta(P, R, data, chat);
   return { ok: true, id: P._id, numero: P.num, nuovo, testo, avvisi: daDxf ? [daDxf, ...inv.avvisi] : inv.avvisi,
     offerta: inv.errore ? `non inviata: ${inv.errore}` : 'inviata nella chat privata con il bot' };
+}
+
+/** Varianti di un preventivo salvato (id): una copia per ogni materiale detto, ciascuna con il suo numero e la sua offerta
+ *  in chat privata, piu' il confronto. Una variante uguale al base non si ricrea: conta il base. */
+export async function variantiBot(db: Db, b: any, email: string, chat: number): Promise<Record<string, unknown>> {
+  const id = String(b.id ?? '').trim();
+  if (!id) return fail('Serve il preventivo base: cercalo con cerca_commesse, oppure crealo prima con il modulo.');
+  const { data: e } = await db.from('preventivi').select('id, nome, prev, dati').eq('id', id).maybeSingle();
+  if (!e) return fail('Preventivo non trovato: cercalo con cerca_commesse e usa il suo id.');
+  const base = normPrev(clone(e.prev)), data = e.dati;
+  base._id = e.id; base._nome = e.nome;
+  const vv = daJson(b.varianti) as Variante[];
+  if (!Array.isArray(vv) || !vv.length) return fail('Varianti non leggibili: servono profilo e/o asse per ognuna, es. [{"prof":"IPEA","asse":2.5}].');
+  if (vv.length > 8) return fail('Al massimo 8 varianti per volta.');
+  // Prima si controllano tutte: se una non va, non si crea niente.
+  const fatte: any[] = [], uguali: string[] = [];
+  for (const v of vv) {
+    let P: any;
+    try { P = variante(base, v, data); } catch (x) { return fail((x as Error).message); }
+    if (!P) uguali.push(etichetta(base));
+    else if (!fatte.some(f => etichetta(f) === etichetta(P))) fatte.push(P);
+  }
+  const righe = [`📊 Varianti di N° ${base.num} · ${base.cliente || ''}`, `Base: ${rigaVariante(base, compute(data, base))}`];
+  const avvisi: string[] = [];
+  for (const P of fatte) {
+    P._nome = nomeVariante(e.nome, P);
+    const R = compute(data, P), errore = await salva(db, P, R, data, email, true);
+    if (errore) return fail(`Salvataggio non riuscito dopo ${righe.length - 2} varianti: ${errore}`);
+    righe.push(rigaVariante(P, R));
+    if (b.invia !== false && b.invia !== 'false') {
+      const inv = await inviaOfferta(P, R, data, chat);
+      if (inv.errore) avvisi.push(`Offerta N° ${P.num} non inviata: ${inv.errore}`);
+    }
+  }
+  if (uguali.length) avvisi.push(`${uguali[0]} è già il preventivo base N° ${base.num}: non l'ho duplicato.`);
+  return { ok: true, creati: fatte.map(P => ({ id: P._id, numero: P.num, materiale: etichetta(P) })), testo: righe.join('\n'), avvisi,
+    offerte: b.invia === false || b.invia === 'false' ? 'non richieste' : 'mandate nella chat privata con il bot' };
 }

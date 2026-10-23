@@ -3,14 +3,14 @@
 //   { azione, telegram_id, ...campi }
 // Azioni: collega, chi_sono, commesse, colleghi, agenda, crea, aggiorna, prendi, risolvi, elimina (per un collega abbinato);
 //         modulo (pulsante in chat privata che apre il modulo del preventivo, pagina modulo.html: vedi modulo.ts);
-//         preventivo, offerta, layout (preventivo creato o cambiato da Telegram e offerta PowerPoint in chat privata: vedi _preventivo.ts);
+//         preventivo, offerta, layout, varianti (preventivo creato o cambiato da Telegram, sue varianti di materiale e offerte in chat privata: vedi _preventivo.ts);
 //         appunti, email (cerca un appunto e ne manda in chat privata la bozza di email scritta dall'AI, da aprire in Gmail: vedi _email.ts);
 //         riepilogo, annuncio (del sistema: riepilogo del mattino e avviso nel gruppo di una voce nuova).
 // Regole come nell'app: crea chiunque; modifica ed elimina l'autore o un amministratore; chi ha la voce assegnata la segna fatta;
 // un'urgenza o una voce senza assegnatario la puo' prendere chiunque.
 // Gli errori "di dialogo" tornano con status 200 e { ok: false, errore }: cosi' l'assistente li legge e li spiega.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { preventivoBot } from './_preventivo.js';
+import { preventivoBot, variantiBot } from './_preventivo.js';
 import { linkGmail, scriviBozza } from './_email.js';
 
 export const GENERI = ['attivita', 'promemoria', 'scadenza', 'appuntamento', 'urgenza'] as const;
@@ -254,6 +254,7 @@ export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''):
 
   if (az === 'modulo') return apriModulo(b, tid, origine);
   if (az === 'preventivo' || az === 'offerta' || az === 'layout') return preventivoBot(db, b, io.email, tid, oggi);
+  if (az === 'varianti') return variantiBot(db, b, io.email, tid);
   if (az === 'appunti') return cercaAppunti(db, b);
   if (az === 'email') return emailDaAppunto(db, b, io, tid, origine);
 

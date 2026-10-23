@@ -4,6 +4,7 @@ import { compute } from '../domain/compute';
 import { MIN_CUSC, clone, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../domain/model';
 import { download, fileName } from '../domain/format';
 import { AUTO } from '../domain/plan';
+import { etichetta, nomeVariante, variante, type Variante } from '../domain/varianti';
 import { KEY_ARCH, KEY_DRAFT, KEY_PREV, R, S, commit, getP, load, save, setP, store, unstore } from './state';
 import { delArch, isAdmin, online, pushArch } from './remote';
 
@@ -68,6 +69,34 @@ export function archDup(id: string) {
   const c = clone(e); c.id = 'p' + Date.now().toString(36); c.nome = e.nome + ' (copia)'; c.salvato = new Date().toISOString(); c.prev._id = c.id; c.prev._nome = c.nome;
   c.prev.num = nextNum(c.prev);
   S.arch.unshift(c); saveArch([c]);
+}
+/** Anteprima delle varianti di un preventivo dell'archivio: copie calcolate col listino salvato, senza salvarle. Errore = eccezione. */
+export function anteprimaVarianti(id: string, vv: Variante[]) {
+  const e = S.arch.find(a => a.id === id); if (!e) throw new Error('preventivo base non trovato in archivio');
+  const base = normPrev(clone(e.prev)), dati = e.dati || S.data;
+  base._id = e.id; base._nome = e.nome;
+  const fatte: any[] = [], uguali: string[] = [];
+  for (const v of vv) {
+    const P = variante(base, v, dati);
+    if (!P) uguali.push(etichetta(base));
+    else if (!fatte.some(f => etichetta(f) === etichetta(P))) fatte.push(P);
+  }
+  return { e, base, dati, uguali, varianti: fatte.map(P => ({ P, R: compute(dati, P) })), R: compute(dati, base) };
+}
+// Ogni variante e' un preventivo nuovo, con il numero successivo e lo stesso listino del base.
+export function archVarianti(id: string, vv: Variante[]) {
+  const a = anteprimaVarianti(id, vv), added: any[] = [];
+  a.varianti.forEach(({ P, R: r }, i) => {
+    const c = 'p' + Date.now().toString(36) + i;
+    P._id = c; P._nome = nomeVariante(a.e.nome, P); P.num = nextNum(P);
+    S.arch.unshift({ id: c, nome: P._nome, cliente: P.cliente, rif: P.rif, data: P.data, salvato: new Date().toISOString(),
+      totale: r.total, prezzo: r.prezzo, kwp: r.kwp, nTracker: r.nTracker, righe: righeTxt(P), prev: P, dati: clone(a.dati) });
+    added.push(S.arch[0]);
+  });
+  if (added.length) saveArch(added);
+  const t = added.length ? `Create ${added.length} varianti: ${added.map(x => 'N° ' + x.prev.num).join(', ')}` : 'Nessuna variante nuova';
+  toast(t + (a.uguali.length ? ` · ${a.uguali[0]} è già il preventivo base` : ''));
+  return t;
 }
 // Rinomina senza aprire il preventivo; se e' quello aperto il nome cambia anche li', senza segnarlo come modificato.
 export function archRename(id: string) {

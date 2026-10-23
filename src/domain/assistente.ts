@@ -13,10 +13,13 @@ export interface DatiAssistente {
   sizes: Record<string, { assi: { c: string; d?: string; L?: unknown; q?: string }[] }>;
   // Appunti (note dei documenti e note degli eventi), per scrivere email di aggiornamento.
   appunti?: Appunto[];
+  // Preventivi dell'archivio (per le varianti di materiale) e id di quello aperto, se salvato.
+  preventivi?: { id: string; num: string; nome: string; cliente: string }[];
+  aperto?: string | null;
 }
 export interface Appunto { quando: string; commessa: string; titolo: string; testo: string }
-export const datiPerAssistente = (data: any, appunti: Appunto[] = []): DatiAssistente => ({
-  appunti,
+export const datiPerAssistente = (data: any, appunti: Appunto[] = [], preventivi: DatiAssistente['preventivi'] = [], aperto: string | null = null): DatiAssistente => ({
+  appunti, preventivi, aperto,
   listino: data.listino.map((x: any) => ({ c: x.c, d: x.d, cat: x.cat, sub: x.sub, t: x.t })),
   template: data.template.map((r: any) => ({ g: r.g, c: r.c, d: r.d, L: r.L, qa: r.qa, qb: r.qb })),
   sizes: Object.fromEntries(Object.entries<any>(data.sizes).map(([k, s]) => [k, { assi: s.assi.map((a: any) => ({ c: a.c, d: a.d, L: a.L, q: a.q })) }])),
@@ -26,7 +29,8 @@ export interface Coppia { da: string; a: string; descrizione_nuovo: string | nul
 export type Proposta =
   | { id: string; tipo: 'sostituzione'; coppie: Coppia[]; gruppi: string[]; righe: { g: string; da: string; a: string; n: number; taglie: string[] }[]; nuovi: string[] }
   | { id: string; tipo: 'evento'; titolo: string; giorno: string; ora: string | null; genere: string; nota: string | null }
-  | { id: string; tipo: 'email'; a: string; oggetto: string; testo: string };
+  | { id: string; tipo: 'email'; a: string; oggetto: string; testo: string }
+  | { id: string; tipo: 'varianti'; base: string; nome: string; varianti: { prof: string | null; asse: number | null; omega: number | null }[] };
 
 const s = (description: string) => ({ type: 'string', description });
 const ns = (description: string) => ({ type: ['string', 'null'], description });
@@ -51,6 +55,10 @@ export const TOOLS = [
   { name: 'proponi_email', description: "Prepara un'email di aggiornamento. Non la invia: l'utente la vede, la può correggere e la apre già compilata nel suo Gmail.",
     input_schema: obj({ a: ns('Indirizzi email dei destinatari separati da virgola, solo se l\'utente li ha detti; altrimenti null'),
       oggetto: s('Oggetto breve, con il riferimento della commessa se c\'è'), testo: s('Corpo in testo semplice, con saluto iniziale e chiusura "Cordiali saluti,"') }) },
+  { name: 'proponi_varianti', description: "Prepara altri preventivi uguali a uno dell'archivio che cambiano solo il materiale su tutte le righe (profilo dei pilastri, spessore dell'asse, spessore dell'omega): uno per ogni combinazione detta dall'utente. Non crea niente: l'utente vede il confronto dei prezzi e conferma; ognuno diventa un preventivo con il numero successivo.",
+    input_schema: obj({ preventivo: ns('Numero (es. 2026/014) o nome del preventivo base; null = quello aperto'),
+      varianti: { type: 'array', items: obj({ prof: ns('Profilo: famiglia (IPE, IPEA) o codice (IPE 140); null = come il base'),
+        asse: nn('Spessore asse in mm: 2.5 o 3; null = come il base'), omega: nn('Spessore omega in mm: 2 o 1.8; null = come il base') }), description: "Le combinazioni dette dall'utente, una per preventivo" } }) },
 ].map(t => ({ ...t, strict: true }));
 
 const norm = (x: string) => x.toUpperCase().replace(/\s+/g, ' ').trim();
@@ -105,6 +113,15 @@ export function esegui(nome: string, input: any, D: DatiAssistente, id: string):
     return { testo: "Bozza pronta: l'utente la vede, può correggerla e aprirla in Gmail per inviarla. Non dire che è già inviata.",
       proposta: { id, tipo: 'email', a: input.a ? String(input.a).trim().slice(0, 1000) : '', oggetto, testo } };
   }
+  if (nome === 'proponi_varianti') {
+    const pp = D.preventivi || [], q = norm(String(input.preventivo || ''));
+    const e = !q ? pp.find(x => x.id === D.aperto) : pp.find(x => norm(x.num) === q) || pp.find(x => norm(x.nome) === q) || pp.find(x => norm(`${x.nome} ${x.cliente}`).includes(q));
+    if (!e) return { testo: q ? `Preventivo "${input.preventivo}" non trovato in archivio: chiedi il numero.` : 'Nessun preventivo salvato aperto: chiedi il numero del preventivo base (o di salvare quello aperto).', errore: true };
+    const varianti = (input.varianti || []).map((v: any) => ({ prof: v.prof || null, asse: v.asse ?? null, omega: v.omega ?? null }));
+    if (!varianti.length || varianti.length > 8) return { testo: 'Servono da 1 a 8 combinazioni.', errore: true };
+    return { testo: `Proposta pronta per N° ${e.num} (${e.nome}): l'utente vede il confronto dei prezzi con Conferma e Annulla. Non dire che sono già creati.`,
+      proposta: { id, tipo: 'varianti', base: e.id, nome: `N° ${e.num} · ${e.nome}`, varianti } };
+  }
   return { testo: `Strumento sconosciuto: ${nome}`, errore: true };
 }
 
@@ -117,13 +134,15 @@ Oggi è ${f} (${iso}), ora italiana.
 Puoi aiutare a:
 - cambiare articoli nelle distinte base (es. sostituire bullone, dado e rondella M16 con M20 nel pilastro motore);
 - aggiungere eventi al calendario della Home;
-- scrivere email di aggiornamento a partire dagli appunti (note dei documenti e degli eventi).
+- scrivere email di aggiornamento a partire dagli appunti (note dei documenti e degli eventi);
+- preparare più preventivi uguali per lo stesso cliente che cambiano solo il materiale (es. IPEA con asse 2,5, IPE con asse 3).
 
 Come lavori:
 - Prima di proporre una sostituzione guarda le righe del gruppo con righe_distinta e cerca i codici con cerca_articoli: usa solo codici che esistono davvero. Per "bullone, dado e rondella" trova tutti e tre i codici usati nel gruppo.
 - Se il codice nuovo non esiste nel listino, proponi un nome sullo stile dei codici esistenti (es. 10BZM16X60 → 10BZM20X60) e dillo chiaramente: verrà creato copiando la voce vecchia, con peso e prezzo da completare se non li conosci.
 - Se nel gruppo c'è un codice simile ma diverso da quello detto (es. l'utente dice M16x25 ma il gruppo usa M16x60), fallo notare e chiedi, invece di indovinare.
-- Le modifiche le fai solo con proponi_sostituzione, proponi_evento e proponi_email: preparano una proposta che l'utente conferma con un pulsante. Non dire mai che una modifica è fatta finché l'app non lo conferma.
+- Varianti di materiale: le combinazioni le dice l'utente, una per preventivo; non aggiungerne e non indovinarne. Il base è il preventivo aperto, se non ne indica un altro (numero o nome). Profilo, asse e omega non detti restano quelli del base.
+- Le modifiche le fai solo con proponi_sostituzione, proponi_evento, proponi_email e proponi_varianti: preparano una proposta che l'utente conferma con un pulsante. Non dire mai che una modifica è fatta finché l'app non lo conferma.
 - Per un evento servono titolo, data e, se detta, l'ora. Se manca il titolo chiedilo. Un'ora da 1 a 7 senza "di mattina" intendila del pomeriggio (es. "alle 5" = 17:00) e dillo.
 - Per un'email trova prima gli appunti giusti con cerca_appunti, poi proponila con proponi_email. Usa solo quello che c'è negli appunti: non inventare date, quantità, prezzi o impegni. Tono cordiale e professionale, testo semplice senza markdown. L'email parte dal Gmail dell'utente, che preme Invia.
 - Se una richiesta non riguarda queste cose, dillo in una frase.`;

@@ -7,6 +7,8 @@ import { clone } from '../domain/model';
 import { S, commit, save } from '../store/state';
 import { chiediAssistente, online, salvaScadenza } from '../store/remote';
 import { apriGmail } from './Email';
+import { TabellaVarianti } from './Varianti';
+import { archVarianti } from '../store/actions';
 
 type Voce = { ruolo: 'tu' | 'ai' | 'err'; testo: string; proposte?: Proposta[] };
 const cap = (g: string) => g.charAt(0) + g.slice(1).toLowerCase();
@@ -66,6 +68,7 @@ function Card({ p, stato, onFatto }: { p: Proposta; stato?: string; onFatto: (es
     setBusy(true);
     try {
       if (p.tipo === 'sostituzione') { const r = applicaSostituzione(p); onFatto('✓ Fatto: ' + r, `Proposta ${p.id} confermata dall'utente e applicata: ${r}.`); }
+      else if (p.tipo === 'varianti') { const r = archVarianti(p.base, p.varianti); commit(); onFatto('✓ ' + r, `Proposta ${p.id} confermata: ${r}.`); }
       else if (p.tipo === 'evento') {
         const e = await salvaScadenza({ titolo: p.titolo, giorno: p.giorno, ora: p.ora, genere: p.genere as any, nota: p.nota });
         if (e) throw new Error(e);
@@ -80,6 +83,9 @@ function Card({ p, stato, onFatto }: { p: Proposta; stato?: string; onFatto: (es
         <b>Sostituzione nelle distinte</b>
         <ul>{p.righe.map((r, i) => <li key={i}>{cap(r.g)}: <code>{r.da}</code> → <code>{r.a}</code> ×{r.n}{r.taglie.length ? ` (taglie ${r.taglie.join(', ')})` : ''}</li>)}</ul>
         {p.nuovi.length > 0 && <div className="muted">Nuovi nel listino: {p.nuovi.join(', ')}. Controlla poi peso e prezzo.</div>}
+      </> : p.tipo === 'varianti' ? <>
+        <b>Varianti di {p.nome}</b>
+        <TabellaVarianti id={p.base} vv={p.varianti} />
       </> : <>
         <b>Nuovo evento</b>
         <div>{p.titolo}</div>
@@ -128,7 +134,8 @@ export function Assistente() {
     setTesto(''); setVoci(v => [...v, { ruolo: 'tu', testo: t }]); setBusy(true);
     try {
       const nota = note.current.length ? `[Dall'app] ${note.current.join(' ')}` : '';
-      const r = await chiediAssistente({ messages: conv.current, testo: t, nota, dati: datiPerAssistente(S.data, appunti()) });
+      const r = await chiediAssistente({ messages: conv.current, testo: t, nota, dati: datiPerAssistente(S.data, appunti(),
+        S.arch.map(e => ({ id: e.id, num: e.prev?.num || '', nome: e.nome, cliente: e.cliente || '' })), S.prev._id || null) });
       conv.current = r.messages; note.current = [];
       setVoci(v => [...v, { ruolo: 'ai', testo: r.testo, proposte: r.proposte }]);
     } catch (err) { setVoci(v => [...v, { ruolo: 'err', testo: (err as Error).message }]); }
@@ -145,7 +152,8 @@ export function Assistente() {
       <div className="aibody">
         {!voci.length && <div className="muted aihint">Chiedimi di cambiare articoli nelle distinte o di aggiungere un evento. Per esempio:
           <ul><li>«Nel pilastro motore sostituisci bullone, dado e rondella M16 con M20»</li><li>«Aggiungi un evento domani alle 17: riunione con Rossi»</li>
-            <li>«Scrivi un'email di aggiornamento al cliente con gli appunti della commessa Rossi»</li></ul>
+            <li>«Scrivi un'email di aggiornamento al cliente con gli appunti della commessa Rossi»</li>
+            <li>«Dal preventivo aperto fammene uno IPEA con asse 2,5 e uno IPE con asse 3»</li></ul>
           Prima di cambiare qualcosa ti mostro la proposta: decidi tu se confermarla.</div>}
         {voci.map((v, i) => <div key={i} className={'aimsg ' + v.ruolo}>
           {v.testo && <div className="aitxt">{v.testo}</div>}

@@ -1,5 +1,7 @@
 // Home: calendario in cima (si nasconde), poi archivio dei preventivi salvati, bozza recuperabile, backup su file; cruscotto KPI e mappa.
+import { Fragment, useState } from 'react';
 import { Fold, Seg } from '../components/ui';
+import { ModuloVarianti } from '../components/Varianti';
 import { eStato, testo } from '../domain/kpi';
 import { Cruscotto, StatoSel } from './Cruscotto';
 import { Mappa } from './Mappa';
@@ -19,6 +21,7 @@ export function Preventivi() {
   const list = S.arch.filter(e => !q || testo(e).includes(q));
   const dr = load(KEY_DRAFT);
   const n = S.arch.length;
+  const [varId, setVarId] = useState<string | null>(null);
   return (
     <>
       <CalendarioHome />
@@ -59,19 +62,23 @@ export function Preventivi() {
             {list.map(e => {
               const cur = S.prev._id === e.id;
               return (
-                <tr key={e.id} className={cur ? 'cur' : ''}>
-                  <td><b>{e.nome}</b>{nDoc(e.id) ? <span className="muted small" title="Documenti e note"> · 📎 {nDoc(e.id)}</span> : null}{cur && <> <span className="tag on">aperto{isDirty() ? ' · modificato' : ''}</span></>}<div className="muted small">{e.prev?.num ? <>N° {e.prev.num} · </> : null}{e.cliente || '–'}</div></td>
+                <Fragment key={e.id}>
+                <tr className={cur ? 'cur' : ''}>
+                  <td><b>{e.nome}</b>{nDoc(e.id) ? <span className="muted small" title="Documenti e note"> · 📎 {nDoc(e.id)}</span> : null}{cur && <> <span className="tag on">aperto{isDirty() ? ' · modificato' : ''}</span></>}<div className="muted small">{e.prev?.num ? <>N° {e.prev.num} · </> : null}{e.cliente || '–'}{e.prev?.variante?.num ? <> · variante di N° {e.prev.variante.num}</> : null}</div></td>
                   <td>{e.rif || '–'}<div className="muted small">{fDate(e.data)}</div></td>
                   <td><StatoSel id={e.id} k={eStato(e)} /></td><td className="small">{e.righe}</td><td className="n">{fN(e.kwp, 2)}</td><td className="n">{eur(e.totale)}</td><td className="n"><b>{e.prezzo != null ? eur(e.prezzo) : '–'}</b>{e.totale > 0 && e.prezzo != null && e.prezzo - e.totale < 0.5 ? <div className="small" style={{ color: 'var(--warn)' }}>margine 0 %</div> : null}</td>
                   <td className="small muted">{fd(e.salvato)}{e.autore ? <div>{e.autore.split('@')[0]}</div> : null}</td>
                   <td className="acts">
                     <button className="btn s p" onClick={run(() => archOpen(e.id))}>Apri</button>
                     <button className="btn s" onClick={run(() => archDup(e.id))} title="Duplica">Duplica</button>
+                    <button className="btn s" onClick={() => setVarId(varId === e.id ? null : e.id)} title="Altri preventivi uguali con profilo o asse diversi">Varianti</button>
                     <button className="btn s" onClick={run(() => archRename(e.id))} title="Cambia il nome del preventivo">Rinomina</button>
                     <button className="btn s" onClick={() => archDl(e.id)} title="Scarica come file">Scarica</button>
                     {isAdmin() && <button className="btn x" onClick={run(() => archDel(e.id))} title="Elimina">✕</button>}
                   </td>
                 </tr>
+                {varId === e.id && <tr><td colSpan={9}><ModuloVarianti id={e.id} chiudi={() => setVarId(null)} /></td></tr>}
+                </Fragment>
               );
             })}
           </tbody></table>
