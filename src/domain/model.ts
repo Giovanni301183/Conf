@@ -114,7 +114,7 @@ export function newPrev(){return {cliente:'',rif:'',data:new Date().toISOString(
 export function defOfferta(){return {nome:'',rev:'0',data:'',referente:'',pieno:'',trasporto:'',posa:'',posaNota:'',posaModo:'',
   layout:'',layoutW:0,layoutH:0,layoutNome:'',dxf:null as null|Record<string,number>,prog:{} as Record<string,string>,inviata:''};}
 // Stato commerciale del preventivo: [chiave, etichetta, colore, simbolo]. Il colore non basta mai da solo: c'e' sempre etichetta e simbolo.
-export const STATI=[['bozza','Bozza','#8a969c','○'],['inviato','Inviato','#2f6fb0','➜'],['vinto','Vinto','#2e8b57','✓'],['perso','Perso','#c0453a','✕']] as const;
+export const STATI=[['bozza','Bozza','#8a969c','○'],['inviato','Inviato','#2f6fb0','➜'],['vinto','Vinto','#2e8b57','✓'],['perso','Perso','#c0453a','✕'],['alternativa','Non scelta','#a8946a','⊘']] as const;
 export const statoOf=k=>STATI.find(s=>s[0]===k)||STATI[0];
 // Posizione dell'impianto: nome della localita' e coordinate (vuote = non ancora sulla mappa).
 export function defLuogo(){return {nome:'',lat:null,lng:null};}

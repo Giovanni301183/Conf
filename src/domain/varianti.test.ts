@@ -1,7 +1,7 @@
 // Varianti di materiale: profilo per famiglia, spessori, variante uguale al base, legame con il base.
 import { describe, expect, it } from 'vitest';
 import { defRiga, defaultData, newPrev } from './model';
-import { etichetta, nomeVariante, profDa, variante } from './varianti';
+import { daNonScegliere, etichetta, nomeVariante, profDa, variante } from './varianti';
 
 const data = defaultData();
 const base = () => { const P: any = newPrev(); P._id = 'p1'; P.num = '2026/014'; P.cliente = 'Rossi'; P.stato = 'inviato';
@@ -25,5 +25,16 @@ describe('varianti', () => {
     expect(etichetta(base())).toBe('IPE 140 · asse 2,5 · omega 2,0');
     expect(() => variante(base(), { asse: 4 }, data)).toThrow(/asse/);
     expect(() => variante(base(), {}, data)).toThrow(/vuota/);
+  });
+  it('variante di una variante resta nel gruppo del primo base', () => {
+    const v1 = variante(base(), { prof: 'IPEA' }, data); v1._id = 'p2'; v1.num = '2026/015';
+    expect(variante(v1, { asse: 3 }, data).variante).toMatchObject({ di: 'p1', num: '2026/014' });
+  });
+  it('vinto uno, gli altri aperti del gruppo diventano non scelti', () => {
+    const e = (id: string, stato: string, di?: string) => ({ id, prev: { stato, variante: di ? { di } : undefined } });
+    const arch = [e('p1', 'inviato'), e('p2', 'vinto', 'p1'), e('p3', 'bozza', 'p1'), e('p4', 'perso', 'p1'), e('p5', 'inviato')];
+    expect(daNonScegliere(arch, 'p2').map(a => a.id)).toEqual(['p1', 'p3']);
+    expect(daNonScegliere(arch, 'p1').map(a => a.id)).toEqual(['p3']);
+    expect(daNonScegliere(arch, 'p5')).toEqual([]);
   });
 });

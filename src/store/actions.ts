@@ -4,7 +4,7 @@ import { compute } from '../domain/compute';
 import { MIN_CUSC, clone, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../domain/model';
 import { download, fileName } from '../domain/format';
 import { AUTO } from '../domain/plan';
-import { etichetta, nomeVariante, variante, type Variante } from '../domain/varianti';
+import { daNonScegliere, etichetta, nomeVariante, variante, type Variante } from '../domain/varianti';
 import { KEY_ARCH, KEY_DRAFT, KEY_PREV, R, S, commit, getP, load, save, setP, store, unstore } from './state';
 import { delArch, isAdmin, online, pushArch } from './remote';
 
@@ -50,8 +50,9 @@ export function archSave(asNew: boolean) {
     totale: R.total, prezzo: R.prezzo, kwp: R.kwp, nTracker: R.nTracker, righe: righeTxt(P), prev: clone(P), dati: clone(S.data) };
   const i = S.arch.findIndex(a => a.id === id);
   if (i >= 0) S.arch[i] = e; else S.arch.unshift(e);
-  if (saveArch([e])) toast((i >= 0 ? `Preventivo "${nome}" aggiornato` : `Preventivo N° ${P.num} "${nome}" salvato nell'archivio`)
-    + (numUsed(P.num, id) ? ` · attenzione: il N° ${P.num} è già usato da un altro preventivo` : ''));
+  const altri = nonScelte(e);
+  if (saveArch([e, ...altri])) toast((i >= 0 ? `Preventivo "${nome}" aggiornato` : `Preventivo N° ${P.num} "${nome}" salvato nell'archivio`)
+    + (numUsed(P.num, id) ? ` · attenzione: il N° ${P.num} è già usato da un altro preventivo` : '') + (altri.length ? ' · ' + testoNonScelte(altri) : ''));
   save();
 }
 export function archOpen(id: string) {
@@ -119,8 +120,21 @@ export function archPatch(id: string, f: (p: any) => void) {
   const e = S.arch.find(a => a.id === id); if (!e) return;
   normPrev(e.prev); f(e.prev); e.salvato = new Date().toISOString();
   if (S.prev._id === id) { normPrev(S.prev); f(S.prev); save(); }
-  saveArch([e]);
+  const altri = nonScelte(e);
+  if (saveArch([e, ...altri]) && altri.length) toast(testoNonScelte(altri));
 }
+// Vinto un preventivo con varianti, gli altri del gruppo ancora in bozza o inviati diventano "non scelta"
+// (cosi' non restano offerte aperte ne' richiami). Ritorna le voci cambiate, da salvare insieme.
+function nonScelte(e: any): any[] {
+  if (e.prev?.stato !== 'vinto') return [];
+  const altri = daNonScegliere(S.arch, e.id);
+  for (const a of altri) {
+    a.prev.stato = 'alternativa'; a.salvato = new Date().toISOString();
+    if (S.prev._id === a.id) { S.prev.stato = 'alternativa'; save(); }
+  }
+  return altri;
+}
+const testoNonScelte = (aa: any[]) => aa.length ? `${aa.map(a => 'N° ' + (a.prev.num || '–')).join(', ')} ${aa.length === 1 ? 'segnato' : 'segnati'} «Non scelta»` : '';
 export function archDl(id: string) {
   const e = S.arch.find(a => a.id === id);
   if (e) download(`preventivo_${fileName(e.nome)}.json`, JSON.stringify({ tipo: 'preventivo', nome: e.nome, prev: e.prev, data: e.dati }, null, 1));

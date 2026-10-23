@@ -52,7 +52,8 @@ export function variante(base: any, v: Variante, data: any): any | null {
   delete P._id; delete P.num;
   P.stato = 'bozza';
   if (P.offerta) P.offerta.inviata = '';
-  P.variante = { di: base._id || null, num: base.num || '', etichetta: etichetta(P) };
+  // Sempre legata al primo base, anche se nasce dalla variante di una variante: il gruppo resta uno.
+  P.variante = { di: base.variante?.di || base._id || null, num: base.variante?.num || base.num || '', etichetta: etichetta(P) };
   return P;
 }
 
@@ -62,3 +63,10 @@ export const nomeVariante = (nomeBase: string, P: any) => `${nomeBase.split(' �
 /** Riga del confronto tra varianti: numero, materiale, prezzo, €/Wp e acciaio. */
 export const rigaVariante = (P: any, R: any) =>
   `N° ${P.num || '–'} · ${etichetta(P)} · ${eur(R.prezzo)} · €/Wp ${R.kwp ? fN(R.prezzo / (R.kwp * 1000), 4) : '–'} · acciaio ${fN(R.steel / 1000, 1)} t`;
+
+/** Gli altri preventivi del gruppo (base e sue varianti) ancora in bozza o inviati: quando uno e' vinto diventano "non scelta". */
+export function daNonScegliere(arch: any[], id: string): any[] {
+  const e = arch.find(a => a.id === id); if (!e) return [];
+  const radice = e.prev?.variante?.di || e.id;
+  return arch.filter(a => a.id !== id && (a.id === radice || a.prev?.variante?.di === radice) && ['bozza', 'inviato'].includes(a.prev?.stato || 'bozza'));
+}
