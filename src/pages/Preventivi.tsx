@@ -65,7 +65,7 @@ export function Preventivi() {
                     <button className="btn s" onClick={run(() => archDup(e.id))} title="Duplica">Duplica</button>
                     <button className="btn s" onClick={run(() => archRename(e.id))} title="Cambia il nome del preventivo">Rinomina</button>
                     <button className="btn s" onClick={() => archDl(e.id)} title="Scarica come file">Scarica</button>
-                    {isAdmin() && <button className="btn x" onClick={run(() => archDel(e.id))} title="Elimina">✕</button>}
+                    {isAdmin() && <button className="btn s del" onClick={run(() => archDel(e.id))} title="Elimina il preventivo (solo amministratore)">Elimina</button>}
                   </td>
                 </tr>
               );
