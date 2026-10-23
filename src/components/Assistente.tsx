@@ -77,6 +77,7 @@ export function Assistente() {
 
   const detta = () => {
     if (ascolto) { rec.current?.stop(); return; }
+    if (!Riconoscimento) { setVoci(v => [...v, { ruolo: 'err', testo: 'Questo browser non supporta la dettatura: usa Chrome o Edge.' }]); return; }
     const r = new Riconoscimento();
     r.lang = 'it-IT'; r.continuous = true; r.interimResults = true;
     const prima = testo.trim() ? testo.trim() + ' ' : '';
@@ -127,8 +128,8 @@ export function Assistente() {
       <form className="aiform" onSubmit={invia}>
         <textarea rows={2} value={testo} placeholder={ascolto ? 'Ti ascolto… parla pure' : 'Scrivi qui…'} onChange={e => setTesto(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); invia(); } }} />
-        {Riconoscimento && <button type="button" className={'btn aimic' + (ascolto ? ' on' : '')} onClick={detta}
-          title={ascolto ? 'Ferma la dettatura' : 'Detta a voce'}>{ascolto ? '■' : '🎤'}</button>}
+        <button type="button" className={'btn aimic' + (ascolto ? ' on' : '')} onClick={detta}
+          title={ascolto ? 'Ferma la dettatura' : 'Detta a voce'}>{ascolto ? '■' : '🎤'}</button>
         <button className="btn p" disabled={busy || !testo.trim()}>Invia</button>
       </form>
     </aside>}
