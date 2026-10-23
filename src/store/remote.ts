@@ -156,6 +156,13 @@ export async function chiediAssistente(body: unknown): Promise<{ messages: unkno
   if (!r.ok) throw new Error(j.error || `Errore ${r.status}`);
   return j;
 }
+// Bozza dell'email di aggiornamento scritta dall'AI a partire da un appunto.
+export async function bozzaEmail(body: { titolo: string; testo: string; contesto?: string; richiesta?: string }): Promise<{ oggetto: string; testo: string }> {
+  const r = await fetch('/api/email', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({ error: `Risposta non valida dal server (${r.status})` }));
+  if (!r.ok) throw new Error(j.error || `Errore ${r.status}`);
+  return j;
+}
 
 // Presenza: ogni finestra aperta si annuncia sul canale; chiudendola (o uscendo) sparisce dall'elenco.
 let presenza: RealtimeChannel | null = null;
