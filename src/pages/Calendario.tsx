@@ -42,10 +42,31 @@ const vociVisibili = () => { const vv = voci(S.arch, S.scad), me = mioEmail(); r
 /** Voci scadute e non fatte, per il numerino sulla voce Home del menu. */
 export const nScadute = () => { const a = allarmi(vociVisibili(), dToday()); return a.urgenze.length + a.scadute.length; };
 
+// Assegnazione rapida di una voce a un collega (o a nessuno), senza aprire Modifica.
+function Assegna({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
+  const [a, setA] = useState(s.assegnata_a || ''), [busy, setBusy] = useState(false);
+  const fai = async () => {
+    setBusy(true); const e = await salvaScadenza({ ...s, assegnata_a: a || null }); setBusy(false);
+    if (e) { toast('Voce non assegnata: ' + e); return; }
+    toast(a ? `Assegnata a ${nomeDi(a)}: la trova in «Le mie»` : 'Assegnazione tolta'); chiudi(); commit();
+  };
+  return (
+    <div className="cform">
+      <label className="f">Assegna a<select value={a} autoFocus onChange={e => setA(e.target.value)}>
+        <option value="">— chiunque —</option>
+        {cloud.colleghi.map(u => <option key={u.email} value={u.email}>{u.nome || u.email}{u.email === mioEmail() ? ' (io)' : ''}</option>)}</select></label>
+      <div className="f" style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+        <button className="btn p" disabled={busy || a === (s.assegnata_a || '')} onClick={fai}>{busy ? 'Salvo…' : 'Assegna'}</button>
+        <button className="btn" onClick={chiudi}>Annulla</button>
+      </div>
+    </div>
+  );
+}
+
 function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean }) {
   const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s);
   // Allegati della voce (file e note): la graffetta mostra quanti sono e apre l'elenco sotto la voce.
-  const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [all, setAll] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
+  const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [all, setAll] = useState(false), [ass, setAss] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
   return (<>
     <div className={`cvoce ${s?.fatto ? 'fatto' : ''}`} style={{ '--vc': c } as React.CSSProperties}>
       {s ? <input type="checkbox" checked={s.fatto} disabled={!spunta} onChange={() => segna(s)} title={spunta ? 'Fatto' : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
@@ -61,8 +82,10 @@ function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?
       {attesa && spunta && <button className="btn s p" onClick={() => risposta(s!)} title="Segna la voce come fatta, con una nota su cosa hanno risposto">Risposta arrivata</button>}
       {s && online() && !email && <button className="btn s" onClick={() => setEmail(attesa ? 'sollecito' : 'email')} title={attesa ? 'Scrivi un sollecito cortese' : "Scrivi un'email di aggiornamento da questa voce"}>{attesa ? '✉ Sollecita' : '✉ Email'}</button>}
       {docOk && <button className={`btn s${all ? ' on' : ''}`} onClick={() => setAll(!all)} title="File e note allegati alla voce">📎{nAll ? ' ' + nAll : ''}</button>}
+      {mio && !s.fatto && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la voce a un collega">👤 {s.assegnata_a ? 'Riassegna' : 'Assegna'}</button>}
       {mio && onEdit && <><button className="btn s" onClick={() => onEdit(s)}>Modifica</button><button className="btn x" onClick={() => togli(s)} title="Elimina">✕</button></>}
     </div>
+    {ass && s && <div className="callegati"><Assegna s={s} chiudi={() => setAss(false)} /></div>}
     {email && s && <div className="callegati"><ModuloEmail titolo={s.titolo} testo={s.nota || ''} contesto={contestoEmail(s.preventivo_id, s.id)}
       chiave={s.preventivo_id || s.id} preventivo={s.preventivo_id} chiudi={() => setEmail('')}
       richiesta0={email === 'sollecito' ? 'Sollecito cortese: non abbiamo ancora ricevuto risposta alla nostra email.' : ''} /></div>}
