@@ -1,5 +1,6 @@
 // Offerta tecnico-economica: dati presi dal preventivo e compilazione del modello PowerPoint (public/offerta/modello-offerta.pptx).
-// Nel modello i campi sono segnaposto {{nome}}; {{#lista}}…{{/lista}} in un paragrafo lo ripete per ogni elemento.
+// Nel modello i campi sono segnaposto {{nome}}; {{#lista}}…{{/lista}} in un paragrafo lo ripete per ogni elemento;
+// le forme con descrizione {{#lista}} sono una riga di tabella disegnata, ripetuta una sotto l'altra (vedi righeForme).
 // L'immagine chiamata IMG_LAYOUT viene sostituita dal layout dell'impianto; le altre slide restano come sono.
 import JSZip from 'jszip';
 import { pesoTot } from './compute.js';
@@ -7,14 +8,20 @@ import { fDate, fN, fPeso } from './format.js';
 import { CATS, defOfferta, num } from './model.js';
 
 /* ---------- Impostazioni condivise (nel listino, valgono per tutti i preventivi) ---------- */
-export const INCLUSI0 = ['Struttura metallica in acciaio S355 zincato a caldo', 'Cuscinetti, inclinometri programmati e finecorsa',
+// Nelle voci si possono usare i segnaposto del modello: {{profilo_pilastri}} e {{spessore_asse}} prendono il materiale del preventivo.
+export const INCLUSI0 = ['Struttura portante in {{profilo_pilastri}} in acciaio S355 zincato a caldo',
+  'Tubo di rotazione 120x120 Magnelis S320 ZM 310 {{spessore_asse}} mm', 'Omega supporto pannelli in lamiera Magnelis S250 ZM 310 (250 mm)',
+  'Motoriduttore e quadro sotto-motore per ogni tracker', 'Bulloneria 8.8', 'Calcolo strutturale depositato al Genio Civile',
+  'Sistema di controllo TTS® Agri Solar Control'];
+// Elenco predefinito del modello precedente: chi non l'aveva cambiato passa al nuovo.
+const INCLUSI_VECCHI = ['Struttura metallica in acciaio S355 zincato a caldo', 'Cuscinetti, inclinometri programmati e finecorsa',
   'Motoriduttore e quadro sotto-motore per ogni tracker', 'Omega di supporto pannelli e bulloneria', 'Calcolo strutturale depositato al Genio Civile',
   'Sistema di controllo TTS® Agri Solar Control'];
 export const GARANZIE0 = { struttura: 20, commerciali: 5, assistenza: 2 };
 export function offCfg(data: any) {
   const p = data.params; if (!p.offerta) p.offerta = {};
   const o = p.offerta;
-  if (!Array.isArray(o.inclusi)) o.inclusi = [...INCLUSI0];
+  if (!Array.isArray(o.inclusi) || o.inclusi.join('|') === INCLUSI_VECCHI.join('|')) o.inclusi = [...INCLUSI0];
   o.garanzie = { ...GARANZIE0, ...(o.garanzie || {}) };
   return o;
 }
@@ -23,7 +30,7 @@ export function offCfg(data: any) {
 // Campi della slide "Dati di progetto" compilati a mano: [chiave nel modello, etichetta, esempio].
 export const PROGETTO = [
   ['modulo_tipo', 'Tipo modulo', 'bifacciale'], ['modulo_dimensioni', 'Dimensioni modulo (mm)', '2384 × 1303 × 35'], ['modulo_peso_kg', 'Peso modulo (kg)', '38'],
-  ['vento_ms', 'Vento di progetto (m/s)', '27'], ['categoria_terreno', 'Categoria terreno (Eurocodice)', 'II'], ['altitudine_m', 'Altitudine (m s.l.m.)', '120'],
+  ['vento_ms', 'Vento di progetto (m/s)', '27'], ['vento_protezione_ms', 'Vento di protezione (m/s)', '20'], ['categoria_terreno', 'Categoria terreno (Eurocodice)', 'II'], ['altitudine_m', 'Altitudine (m s.l.m.)', '120'],
   ['classe_corrosivita', 'Classe di corrosività', 'C3'], ['pendenza_ns', 'Pendenza N-S', '3 %'], ['altezza_min_modulo_m', 'Altezza minima modulo (m)', '2,10'],
   ['infissione_m', 'Infissione (m)', '1,80'], ['angolo_rotazione', 'Angolo di rotazione (±°)', '55'],
 ] as const;
@@ -53,7 +60,9 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
   const perTaglia = new Map<string, number>();
   P.righe.forEach((r: any) => { if (num(r.n) > 0) perTaglia.set(String(r.taglia), (perTaglia.get(String(r.taglia)) || 0) + num(r.n)); });
   const righe = [...perTaglia].sort((a, b) => num(b[0]) - num(a[0])).map(([taglia, n]) => ({ n, taglia }));
-  const profili = [...new Set(P.righe.filter((r: any) => num(r.n) > 0).map((r: any) => r.prof))].join(' / ');
+  const attive = P.righe.filter((r: any) => num(r.n) > 0), diversi = (k: string) => [...new Set(attive.map((r: any) => String(r[k])))].join(' / ');
+  const profili = diversi('prof'), tipi = new Set(attive.map((r: any) => r.tipo === 'Basso' ? 'Basso' : 'Agrivoltaico'));
+  const agri = tipi.has('Agrivoltaico'), terra = tipi.has('Basso');
 
   // Prezzi di vendita. Il modello ha posto solo per il trasporto: le altre voci extra vanno in "struttura e componenti".
   const extra = R.lines.filter((l: any) => l.riga === 'extra'), altre = extra.filter((l: any) => !isTrasporto(l));
@@ -64,12 +73,20 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
 
   const lu = P.luogo || {}, pr = O.prog;
   const campi: Record<string, string> = {
-    nome_impianto: O.nome || P.rif || P.cliente || '', cliente: P.cliente || '', referente: O.referente || '',
+    nome_impianto: O.nome || P.rif || P.cliente || '', cliente: P.cliente || '', referente: O.referente || '', email_referente: O.email || '',
+    n_tracker: fN(righe.reduce((s, r) => s + r.n, 0), 0),
+    tipo_progetto: agri && terra ? 'Impianto agrivoltaico e a terra' : terra ? 'Impianto fotovoltaico a terra' : 'Impianto agrivoltaico',
+    tipo_struttura: `Tracker monoassiale ${agri && terra ? 'agrivoltaico e a terra' : terra ? 'a terra' : 'agrivoltaico'} TTS`,
+    profilo_pilastri: profili, spessore_asse: diversi('asse'), spessore_omega: diversi('omega'),
+    zona: O.zona || '', localita_zona: [lu.nome, O.zona ? 'zona ' + O.zona : ''].filter(Boolean).join(' · '),
+    resa: O.resa || '', pagamento: O.pagamento || 'Da concordare', consegna: O.consegna || '', validita: O.validita || '',
     numero_offerta: P.num || '', revisione: O.rev === '' || O.rev == null ? '0' : String(O.rev), data_offerta: fDate(O.data || P.data),
     potenza_kwp: fN(R.kwp, 2), potenza_modulo_w: fN(R.wp, 0), moduli_totali: fN(R.nModuli, 0), modulo_modello: P.modulo?.marca || '',
     localita: lu.nome || '', coordinate: lu.lat != null && lu.lng != null ? `${(+lu.lat).toFixed(5)}, ${(+lu.lng).toFixed(5)}` : '',
     n_quadri_area: fN(P.imp?.quadA, 0), n_quadri_generali: fN(P.imp?.quadGen, 0),
     prezzo_offerta: euro(pStr), prezzo_listino: euro(pieno), costo_trasporto: euro(trasp), costo_posa: euro(posa),
+    // Tabella dei servizi opzionali: il prezzo se c'e', altrimenti «Su richiesta».
+    trasporto_opzionale: trasp > 0 ? `€ ${euro(trasp)} + IVA` : 'Su richiesta', posa_opzionale: posa > 0 ? `€ ${euro(posa)} + IVA` : 'Su richiesta',
     nota_posa: O.posaNota || '', modalita_posa: O.posaModo || '',
     prezzo_kwp: R.kwp ? fN(pStr / R.kwp, 0) : '–', peso_struttura_ton: fN(R.steel / 1000, 1), profilo_acciaio: profili ? profili + ' S355' : '',
     // Pesi per categoria (slide Dati di progetto): {{peso_struttura}}, {{peso_bulloneria}}, … e {{peso_totale}}.
@@ -86,12 +103,13 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
   if (!(num(P.imp?.quadA) > 0)) paragrafi.n_quadri_area = null;
   if (!(num(P.imp?.quadGen) > 0)) paragrafi.n_quadri_generali = null;
   const liste = {
-    tracker: righe.map(r => ({ quantita: fN(r.n, 0), moduli: r.taglia })),
+    tracker: righe.map(r => ({ quantita: fN(r.n, 0), moduli: r.taglia, potenza_tracker: fN(num(r.taglia) * R.wp, 0), potenza_riga: fN((r.n * num(r.taglia) * R.wp) / 1000, 2) })),
     inclusi: cfg.inclusi.map((v: string) => String(v).trim()).filter(Boolean).map((voce: string) => ({ voce })),
   };
 
   // Campi descrittivi vuoti: nel PowerPoint «–» (gli altri segnaposto vuoti restano vuoti, es. la nota della posa).
-  const vuoti = [['referente', 'referente'], ['localita', 'località'], ['coordinate', 'coordinate'], ['modulo_modello', 'modello del modulo'], ...PROGETTO.map(([k, l]) => [k, l.toLowerCase()])]
+  const vuoti = [['referente', 'referente'], ['email_referente', 'e-mail del referente'], ['zona', 'zona'], ['localita', 'località'], ['localita_zona', 'località'],
+    ['resa', 'resa'], ['consegna', 'tempi di consegna'], ['validita', "validità dell'offerta"], ['coordinate', 'coordinate'], ['modulo_modello', 'modello del modulo'], ...PROGETTO.map(([k, l]) => [k, l.toLowerCase()])]
     .filter(([k]) => !campi[k]).map(([k, l]) => { campi[k] = '–'; return l; });
   if (!campi.numero_offerta) campi.numero_offerta = '–';
 
@@ -101,7 +119,7 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
   if (!(R.prezzo > 0)) avvisi.push('Il prezzo di vendita è zero.');
   if (R.total > 0 && R.prezzo - R.total < 0.5) avvisi.push("Margine 0 %: nell'offerta il prezzo di vendita è uguale al costo. Imposta il margine qui sotto (Prezzi) o nella scheda Margini.");
   if (!O.layout) avvisi.push('Nessun layout caricato: la slide del layout resterà vuota, senza disegno.');
-  if (vuoti.length) avvisi.push(`Slide "Dati di progetto": ${vuoti.length} campi vuoti (${vuoti.join(', ')}), compariranno come «–».`);
+  if (vuoti.length) avvisi.push(`Campi vuoti nell'offerta (${[...new Set(vuoti)].join(', ')}): compariranno come «–».`);
   if (O.dxf) {
     const diff = [...new Set([...Object.keys(O.dxf), ...righe.map(r => r.taglia)])]
       .filter(t => (O.dxf![t] || 0) !== (perTaglia.get(t) || 0)).map(t => `${t} moduli: DXF ${O.dxf![t] || 0}, preventivo ${perTaglia.get(t) || 0}`);
@@ -129,6 +147,32 @@ function paraText(p: string, text: string) {
   return `<a:p>${pPr}<a:r>${rPr}<a:t>${esc(text)}</a:t></a:r></a:p>`;
 }
 
+// Riga di tabella fatta di forme: quelle con descrizione {{#nome}} sono la riga d'esempio ({{#nome:alterna}}, lo sfondo
+// a righe alterne, solo nelle righe dispari). Si ricopiano una sotto l'altra per ogni elemento; le forme con descrizione
+// {{segue:nome}} (totale, note) scendono di conseguenza. Oltre 2 righe le righe si stringono nello spazio di 2, sopra il logo.
+const offRe = /<a:off x="(-?\d+)" y="(-?\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/;
+function righeForme(x: string, nome: string, items: Record<string, string>[], campi: Record<string, string>) {
+  const forma = (d: string) => new RegExp(String.raw`<p:sp>(?:(?!<p:sp>)[\s\S])*?descr="${reEsc(d)}"[\s\S]*?</p:sp>`, 'g');
+  // In ordine di disegno: lo sfondo della riga resta sotto i testi.
+  const riga = [...x.matchAll(new RegExp(String.raw`<p:sp>(?:(?!<p:sp>)[\s\S])*?descr="\{\{#${reEsc(nome)}(:alterna)?\}\}"[\s\S]*?</p:sp>`, 'g'))]
+    .map(m => ({ s: m[0], alterna: !!m[1] }));
+  if (!riga.length) return x;
+  const pos = (s: string) => { const o = offRe.exec(s)!; return { m: o[0], x: +o[1], y: +o[2], w: +o[3], h: +o[4] }; };
+  const y0 = Math.min(...riga.map(f => pos(f.s).y)), h = Math.max(...riga.map(f => pos(f.s).h));
+  const n = items.length, hh = n > 2 ? Math.round((h * 2) / n) : h;
+  let id = Math.max(0, ...[...x.matchAll(/<p:cNvPr id="(\d+)"/g)].map(m => +m[1]));
+  const nuove = items.map((it, i) => riga.filter(f => !f.alterna || i % 2 === 0).map(f => {
+    const p = pos(f.s), y = y0 + i * hh + Math.round(((p.y - y0) * hh) / h);
+    return tokens(f.s, { ...campi, ...it }).replace(p.m, `<a:off x="${p.x}" y="${y}"/><a:ext cx="${p.w}" cy="${Math.round((p.h * hh) / h)}"/>`)
+      .replace(/<p:cNvPr id="\d+"/, () => `<p:cNvPr id="${++id}"`).replace(/ descr="[^"]*"/, '');
+  }).join('')).join('');
+  const SEGNO = '<!--righe-->';
+  riga.forEach((f, i) => { x = x.replace(f.s, i === 0 ? SEGNO : ''); });
+  const dy = (Math.min(n, 2) - 1) * h;   // esatto: niente arrotondamenti delle righe strette
+  x = x.replace(forma(`{{segue:${nome}}}`), s => { const p = pos(s); return s.replace(p.m, `<a:off x="${p.x}" y="${p.y + dy}"/><a:ext cx="${p.w}" cy="${p.h}"/>`).replace(/ descr="[^"]*"/, ''); });
+  return x.replace(SEGNO, nuove);
+}
+
 const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 export const compilaPptx = async (modello: ArrayBuffer, D: DatiOfferta, layout?: Layout) =>
   (await compila(modello, D, layout)).generateAsync({ type: 'blob', mimeType: PPTX, compression: 'DEFLATE' });
@@ -147,6 +191,7 @@ async function compila(modello: ArrayBuffer | Uint8Array, D: DatiOfferta, layout
   for (const n of slides) {
     let x = await zip.file(n)!.async('string');
     const orig = x;
+    for (const [nome, items] of Object.entries(D.liste)) x = righeForme(x, nome, items, D.campi);
     // Blocchi ripetuti: il paragrafo con {{#nome}}…{{/nome}} si ricopia per ogni elemento (e sparisce se la lista è vuota).
     for (const [nome, items] of Object.entries(D.liste)) {
       let m: RegExpExecArray | null;

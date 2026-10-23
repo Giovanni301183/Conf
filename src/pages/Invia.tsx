@@ -112,6 +112,8 @@ export function Invia() {
           <label className="f">Data dell'offerta<DateInp path="prev.offerta.data" /><span className="muted small">{O.data ? '' : `vuota = data del preventivo (${fDate(P.data)})`}</span></label>
           <label className="f">Nome dell'impianto<Inp path="prev.offerta.nome" type="txt" ph={P.rif || P.cliente || 'es. Impianto agrivoltaico Foggia'} /></label>
           <label className="f">Referente del cliente<Inp path="prev.offerta.referente" type="txt" ph="Nome e cognome" /></label>
+          <label className="f">E-mail del referente<Inp path="prev.offerta.email" type="txt" ph="nome@cliente.it" /></label>
+          <label className="f">Zona<Inp path="prev.offerta.zona" type="txt" ph="es. Periferia, Zona industriale" /></label>
         </div>
       </>}</Fold>
 
@@ -163,8 +165,18 @@ export function Invia() {
           <div key={i} className="pill"><span className="pl">{c.label}</span><span className="pv">{c.strike ? <s>{c.strike}</s> : null}<b>{c.value}</b>{c.nota ? <em>{c.nota}</em> : null}</span></div>))}</div>
       </>}</Fold>
 
-      <Fold id="in-incl" step={6} title="Incluso nel prezzo e garanzie" sum={`${D.liste.inclusi.length} voci incluse · garanzia ${cfg.garanzie.struttura} anni · vale per tutti i preventivi`}>{() => <>
-        <p className="hint">Elenco "Incluso nel prezzo" della slide Investimento (una voce per riga) e anni della slide Garanzie. Sono impostazioni comuni: valgono per tutti i preventivi.</p>
+      <Fold id="in-comm" step={6} title="Condizioni commerciali" sum={`Pagamento: ${D.campi.pagamento} · validità ${D.campi.validita}`}>{() => <>
+        <p className="hint">Slide «Condizioni commerciali». Valuta (EUR) e prezzi IVA esclusa sono fissi; i campi vuoti compaiono come «–» (il pagamento come «Da concordare»).</p>
+        <div className="grid">
+          <label className="f">Resa (Incoterms 2020)<Inp path="prev.offerta.resa" type="txt" ph="es. DAP cantiere, EXW Marsala" /></label>
+          <label className="f">Condizioni di pagamento<Inp path="prev.offerta.pagamento" type="txt" ph="Da concordare" /></label>
+          <label className="f">Tempi di consegna<Inp path="prev.offerta.consegna" type="txt" ph="es. 8-10 settimane dall'ordine" /></label>
+          <label className="f">Validità dell'offerta<Inp path="prev.offerta.validita" type="txt" ph="es. 30 giorni" /></label>
+        </div>
+      </>}</Fold>
+
+      <Fold id="in-incl" step={7} title="Incluso nel prezzo e garanzie" sum={`${D.liste.inclusi.length} voci incluse · garanzia ${cfg.garanzie.struttura} anni · vale per tutti i preventivi`}>{() => <>
+        <p className="hint">Elenco "Incluso nel prezzo" della slide Investimento (una voce per riga) e anni della slide Garanzie. Sono impostazioni comuni: valgono per tutti i preventivi. Nelle voci, <code>{'{{profilo_pilastri}}'}</code> e <code>{'{{spessore_asse}}'}</code> diventano il profilo e lo spessore dell'asse del preventivo (es. IPEA 140, 2,5).</p>
         <label className="f" style={{ marginBottom: 14 }}>Incluso nel prezzo
           <textarea rows={7} value={cfg.inclusi.join('\n')} onChange={e => { cfg.inclusi = e.target.value.split('\n'); save(); commit(); }} /></label>
         <div className="grid">

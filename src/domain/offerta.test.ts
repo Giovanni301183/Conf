@@ -31,7 +31,10 @@ describe('offerta', () => {
     const P = prev(), D0 = defaultData(), R = compute(D0, P);
     const D = datiOfferta(P, R, D0, 140000);
     expect(D.righe).toEqual([{ n: 32, taglia: '40' }, { n: 4, taglia: '20' }]);
-    expect(D.liste.tracker).toEqual([{ quantita: '32', moduli: '40' }, { quantita: '4', moduli: '20' }]);
+    expect(D.liste.tracker).toEqual([{ quantita: '32', moduli: '40', potenza_tracker: '30.800', potenza_riga: '985,60' },
+      { quantita: '4', moduli: '20', potenza_tracker: '15.400', potenza_riga: '61,60' }]);
+    expect([D.campi.n_tracker, D.campi.tipo_progetto, D.campi.profilo_pilastri, D.campi.spessore_asse]).toEqual(['36', 'Impianto agrivoltaico e a terra', 'IPE 140 / IPEA 140', '2,5']);
+    expect([D.campi.trasporto_opzionale, D.campi.pagamento, D.campi.resa]).toEqual([`€ ${fN(R.lines.find((l: any) => l.riga === 'extra').prezzo, 2)} + IVA`, 'Da concordare', '–']);
     expect(D.prezzi.map(c => c.label)).toEqual(['Struttura e componenti', 'Trasporto', 'Posa in opera', 'Prezzo per kWp']);
     const trasp = R.lines.find((l: any) => l.riga === 'extra').prezzo;
     expect(D.campi.costo_trasporto).toBe(fN(trasp, 2));
@@ -55,9 +58,18 @@ describe('offerta', () => {
     expect(testo).toContain('2026/007 rev. 1');
     expect(testo).toContain('N.32 TRACKER TTS.40 MODULI');
     expect(testo).toContain('N.4 TRACKER TTS.20 MODULI');
-    expect(testo).toContain('N.3 QUADRI DI CAMPO');
-    expect(testo).not.toContain('QUADRO GENERALE');
     expect(testo).toContain('IPE 140 / IPEA 140 S355');
+    // Tabella della soluzione: una riga di forme per taglia, con la potenza per tracker e per riga.
+    expect(testo).toContain('Tracker TTS.40');
+    expect(testo).toContain('Tracker TTS.20');
+    expect(testo).toContain('30.800 W');
+    expect(testo).toContain('61,60 kWp');
+    expect(xml).not.toMatch(/descr="\{\{/);
+    // Incluso nel prezzo con il materiale del preventivo; condizioni commerciali e servizi opzionali.
+    expect(testo).toContain('Struttura portante in IPE 140 / IPEA 140 in acciaio S355');
+    expect(testo).toContain('Magnelis S320 ZM 310 2,5 mm');
+    expect(testo).toContain('Da concordare');
+    expect(testo).toContain('Impianto agrivoltaico e a terra');
     expect(testo).toContain('Calcolo strutturale depositato al Genio Civile');
     expect(testo).toContain('20 anni di garanzia');
     expect(testo).toContain('(esclusa trivellazione)');
@@ -70,6 +82,17 @@ describe('offerta', () => {
     expect(rels).toMatch(/media\/layout_\d+\.png/);
   });
 
+  it("righe della tabella: una sotto l'altra, e il totale scende solo fino a 2 righe", async () => {
+    const P = prev(), tre = { ...P.righe[0], taglia: '24', n: 2 };
+    const y = (xml: string, t: string) => { const i = xml.indexOf(t); return +/<a:off x="\d+" y="(\d+)"/.exec(xml.slice(xml.lastIndexOf('<p:sp>', i)))![1]; };
+    const due = (await compila(P)).xml; P.righe.push(tre); const tr = (await compila(P)).xml;
+    expect(y(due, 'Tracker TTS.20') - y(due, 'Tracker TTS.40')).toBe(680000);
+    expect(y(due, 'Totale impianto') - y(due, 'Tracker TTS.40')).toBe(2 * 680000);
+    // Con 3 taglie le righe si stringono nello spazio di 2: il totale resta dov'era, sopra il logo.
+    expect(y(tr, 'Tracker TTS.20') - y(tr, 'Tracker TTS.24')).toBe(453333);
+    expect(y(tr, 'Totale impianto')).toBe(y(due, 'Totale impianto'));
+  });
+
   it('senza trasporto, posa e numero: diciture al posto dei prezzi', async () => {
     const P = prev(); P.extra = []; P.num = '';
     const { testo, xml } = await compila(P, 0, false);
@@ -78,6 +101,7 @@ describe('offerta', () => {
     expect(testo).toContain('Escluso');
     expect(testo).toContain('Non inclusa');
     expect(testo).toContain('Offerta n. – rev. 1');
+    expect(testo).toContain('Su richiesta');
   });
 });
 
