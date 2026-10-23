@@ -507,6 +507,9 @@ table.arch td input{width:100%;max-width:260px}
 .aiesito{font-weight:600;color:var(--acc);margin-top:2px}
 .aiform{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);align-items:flex-end}
 .aiform textarea{flex:1;resize:none;font:inherit;font-size:13.5px;padding:7px 9px;border:1px solid var(--line);border-radius:8px}
+.aimic{min-width:38px}
+.aimic.on{background:#c62828;border-color:#c62828;color:#fff;animation:aipulse 1.2s ease-in-out infinite}
+@keyframes aipulse{50%{opacity:.6}}
 @media print{.aifab,.aipanel{display:none!important}}
 
 /* Documenti e note */

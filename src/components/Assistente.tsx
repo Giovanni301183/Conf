@@ -10,6 +10,8 @@ import { chiediAssistente, online, salvaScadenza } from '../store/remote';
 type Voce = { ruolo: 'tu' | 'ai' | 'err'; testo: string; proposte?: Proposta[] };
 const cap = (g: string) => g.charAt(0) + g.slice(1).toLowerCase();
 const giorno = (d: string) => new Date(d + 'T12:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+// Dettatura col riconoscimento vocale del browser (Chrome/Edge): il testo va nella casella, si invia a mano.
+const Riconoscimento: any = typeof window !== 'undefined' ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition : undefined;
 
 /** Applica una sostituzione confermata: crea i codici nuovi copiando i vecchi, poi cambia le righe delle distinte. */
 function applicaSostituzione(p: Extract<Proposta, { tipo: 'sostituzione' }>): string {
@@ -67,11 +69,32 @@ export function Assistente() {
   const [aperto, setAperto] = useState(false), [voci, setVoci] = useState<Voce[]>([]), [testo, setTesto] = useState(''), [busy, setBusy] = useState(false);
   const [esiti, setEsiti] = useState<Record<string, string>>({});
   const conv = useRef<unknown[]>([]), note = useRef<string[]>([]), fondo = useRef<HTMLDivElement>(null);
+  const [ascolto, setAscolto] = useState(false), rec = useRef<any>(null);
   useEffect(() => { fondo.current?.scrollIntoView({ block: 'end' }); }, [voci, esiti, aperto]);
+  useEffect(() => () => rec.current?.abort(), []);
+  useEffect(() => { if (!aperto) rec.current?.stop(); }, [aperto]);
   if (!online()) return null;
+
+  const detta = () => {
+    if (ascolto) { rec.current?.stop(); return; }
+    const r = new Riconoscimento();
+    r.lang = 'it-IT'; r.continuous = true; r.interimResults = true;
+    const prima = testo.trim() ? testo.trim() + ' ' : '';
+    r.onresult = (ev: any) => {
+      let t = '';
+      for (let i = 0; i < ev.results.length; i++) t += ev.results[i][0].transcript;
+      setTesto(prima + t.trim());
+    };
+    r.onerror = (ev: any) => {
+      if (ev.error === 'not-allowed') setVoci(v => [...v, { ruolo: 'err', testo: 'Microfono non consentito: abilitalo dalle impostazioni del browser.' }]);
+    };
+    r.onend = () => { setAscolto(false); rec.current = null; };
+    rec.current = r; r.start(); setAscolto(true);
+  };
 
   const invia = async (e?: FormEvent) => {
     e?.preventDefault();
+    rec.current?.stop();
     const t = testo.trim(); if (!t || busy) return;
     setTesto(''); setVoci(v => [...v, { ruolo: 'tu', testo: t }]); setBusy(true);
     try {
@@ -102,8 +125,10 @@ export function Assistente() {
         <div ref={fondo} />
       </div>
       <form className="aiform" onSubmit={invia}>
-        <textarea rows={2} value={testo} placeholder="Scrivi qui…" onChange={e => setTesto(e.target.value)}
+        <textarea rows={2} value={testo} placeholder={ascolto ? 'Ti ascolto… parla pure' : 'Scrivi qui…'} onChange={e => setTesto(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); invia(); } }} />
+        {Riconoscimento && <button type="button" className={'btn aimic' + (ascolto ? ' on' : '')} onClick={detta}
+          title={ascolto ? 'Ferma la dettatura' : 'Detta a voce'}>{ascolto ? '■' : '🎤'}</button>}
         <button className="btn p" disabled={busy || !testo.trim()}>Invia</button>
       </form>
     </aside>}
