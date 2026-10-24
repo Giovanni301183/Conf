@@ -1,4 +1,4 @@
-// Home: calendario (si nasconde) e note. Scheda Preventivi: archivio dei preventivi salvati, bozza recuperabile, backup su file; cruscotto KPI e mappa.
+// Home: note in cima, poi calendario (si nasconde). Scheda Preventivi: archivio dei preventivi salvati, bozza recuperabile, backup su file; cruscotto KPI e mappa.
 import { Fragment, useState } from 'react';
 import { Fold, Seg } from '../components/ui';
 import { ModuloVarianti, scaricaOfferte } from '../components/Varianti';
@@ -18,7 +18,7 @@ const fd = (iso: string) => { const d = new Date(iso); return isNaN(+d) ? '–' 
 const nDoc = (id: string) => S.docs.filter(d => d.preventivo_id === id).length;
 const run = (f: () => void) => () => { f(); commit(); };
 
-export const Home = () => <><CalendarioHome /><NoteHome /></>;
+export const Home = () => <><NoteHome /><CalendarioHome /></>;
 
 export function Preventivi() {
   const q = S.ui.aq.trim().toLowerCase();
