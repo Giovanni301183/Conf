@@ -1,4 +1,4 @@
-// Home: calendario in cima (si nasconde), poi archivio dei preventivi salvati, bozza recuperabile, backup su file; cruscotto KPI e mappa.
+// Home: calendario (si nasconde) e note. Scheda Preventivi: archivio dei preventivi salvati, bozza recuperabile, backup su file; cruscotto KPI e mappa.
 import { Fragment, useState } from 'react';
 import { Fold, Seg } from '../components/ui';
 import { ModuloVarianti, scaricaOfferte } from '../components/Varianti';
@@ -7,6 +7,7 @@ import { Cruscotto, StatoSel } from './Cruscotto';
 import { Mappa } from './Mappa';
 import { Cerca } from './Cerca';
 import { CalendarioHome } from './Calendario';
+import { NoteHome } from './Documenti';
 import { eur, fDate, fN } from '../domain/format';
 import { KEY_DRAFT, S, commit, load } from '../store/state';
 import { cloud, isAdmin, uploadLocali } from '../store/remote';
@@ -17,6 +18,8 @@ const fd = (iso: string) => { const d = new Date(iso); return isNaN(+d) ? '–' 
 const nDoc = (id: string) => S.docs.filter(d => d.preventivo_id === id).length;
 const run = (f: () => void) => () => { f(); commit(); };
 
+export const Home = () => <><CalendarioHome /><NoteHome /></>;
+
 export function Preventivi() {
   const q = S.ui.aq.trim().toLowerCase();
   const list = S.arch.filter(e => !q || testo(e).includes(q));
@@ -25,7 +28,6 @@ export function Preventivi() {
   const [varId, setVarId] = useState<string | null>(null);
   return (
     <>
-      <CalendarioHome />
       <div className="card head"><div className="headrow">
         <div><h2>Archivio preventivi</h2>
           <p className="hint" style={{ margin: 0 }}>{n} preventiv{n === 1 ? 'o salvato' : 'i salvati'} {cloud.session ? "nell'archivio condiviso" : 'in questo browser'}. Ogni preventivo conserva anche il listino usato.</p></div>

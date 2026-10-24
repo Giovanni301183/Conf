@@ -1,6 +1,6 @@
 // Documenti e note (DMS leggero): scheda Documenti del preventivo e allegati delle voci d'agenda.
 // File e note si caricano qui; i file stanno nello Storage di Supabase e si aprono con un link temporaneo.
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { CARTELLE, LIMITE_MB, cartellaPer, cerca, documentiDi, estensione, fByte, immagine, nomeCartella, perCartella, type Cartella, type Documento } from '../domain/documenti';
 import { S, commit } from '../store/state';
 import { toast } from '../store/actions';
@@ -174,5 +174,36 @@ export function Documenti() {
         <DocPanel preventivo={id} cartella={cart} />
       </section>
     </div>
+  );
+}
+
+/** In Home, sotto il calendario: tutte le note (di preventivi e voci d'agenda), le più recenti prima, con ricerca.
+ *  Una nota nuova va legata a un preventivo salvato, come vuole il database. */
+export function NoteHome() {
+  const [q, setQ] = useState(''), [nota, setNota] = useState<Nota | null>(null), [prev, setPrev] = useState(''), [tutte, setTutte] = useState(false);
+  const no = docNonDisponibili();
+  if (no) return null;
+  const note = cerca(S.docs.filter(d => d.tipo === 'nota'), q).sort((a, b) => (b.modificato || b.creato).localeCompare(a.modificato || a.creato));
+  const viste = tutte || q ? note : note.slice(0, 10);
+  const nomeP = (id: string | null) => (id && S.arch.find(e => e.id === id)?.nome) || '';
+  return (
+    <section className="card">
+      <h2 style={{ marginTop: 0 }}>Note<span className="sp" />
+        {!nota && S.arch.length > 0 && <button className="btn s p" onClick={() => { setPrev(S.prev._id || ''); setNota({ titolo: '', testo: '', cartella: 'altro' }); }}>+ Nota</button>}</h2>
+      <div className="dbar"><input className="dq" value={q} placeholder="Cerca nelle note…" onChange={e => setQ(e.target.value)} />
+        <span className="muted small">{note.length} not{note.length === 1 ? 'a' : 'e'}{q ? ' trovat' + (note.length === 1 ? 'a' : 'e') : ''}</span></div>
+      {nota && <>
+        {!nota.id && <label className="f">Preventivo<select value={prev} onChange={e => setPrev(e.target.value)}>
+          <option value="">– scegli –</option>{S.arch.map(e => <option key={e.id} value={e.id}>{e.nome}{e.cliente ? ' · ' + e.cliente : ''}</option>)}</select></label>}
+        {nota.id || prev ? <ModuloNota n={nota} set={setNota} chiudi={() => setNota(null)} dove={nota.id ? {} : { preventivo_id: prev }} />
+          : <p className="hint">Scegli il preventivo a cui legare la nota. <a href="#" onClick={e => { e.preventDefault(); setNota(null); }}>Annulla</a></p>}
+      </>}
+      {viste.length ? viste.map(d => <Fragment key={d.id}>
+        {nomeP(d.preventivo_id) && <div className="muted small" style={{ marginTop: 8 }}>{nomeP(d.preventivo_id)}</div>}
+        <Voce d={d} onEdit={setNota} conVoce />
+      </Fragment>)
+        : <p className="hint" style={{ margin: '8px 0 0' }}>{q ? 'Nessuna nota corrisponde alla ricerca.' : 'Nessuna nota. Le note si aggiungono qui, nella scheda Documenti del preventivo o sulle voci d\'agenda.'}</p>}
+      {!q && note.length > 10 && <button className="btn s" style={{ marginTop: 8 }} onClick={() => setTutte(!tutte)}>{tutte ? 'Mostra solo le ultime 10' : `Mostra tutte (${note.length})`}</button>}
+    </section>
   );
 }

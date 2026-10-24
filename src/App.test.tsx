@@ -59,7 +59,7 @@ describe('archivio: cruscotto e mappa', () => {
     act(() => {
       S.arch = [{ id: 'x1', nome: 'Prova', cliente: 'Cliente', rif: '', data: '2026-05-04', salvato: '2026-05-04T10:00:00Z', totale: 1000, prezzo: 1250, kwp: 50, nTracker: 2, righe: '2×12 Agri',
         prev: { stato: 'inviato', luogo: { nome: 'Foggia', lat: 41.46, lng: 15.55 } } }];
-      S.ui.tab = 'archivio'; S.ui.av = av as any; commit();
+      S.ui.tab = 'prev'; S.ui.av = av as any; commit();
     });
     const { container } = render(<App />);
     expect(container.textContent).toContain('Prova');
@@ -70,7 +70,7 @@ describe('archivio: cruscotto e mappa', () => {
     act(() => { S.scad = []; S.ui.tab = 'archivio'; S.ui.av = 'elenco'; S.ui.cal = true; commit(); });
     const { container } = render(<App />);
     expect(container.querySelectorAll('.cday').length).toBeGreaterThanOrEqual(28);
-    expect(container.textContent).toContain('Archivio preventivi');   // l'archivio resta sotto
+    expect(container.textContent).not.toContain('Archivio preventivi');   // l'archivio sta nella scheda Preventivi
     fireEvent.click(screen.getByText('+ Aggiungi'));
     fireEvent.change(screen.getByPlaceholderText(/computo/), { target: { value: 'Collaudo quadri' } });
     await act(async () => { fireEvent.click(screen.getByText('Aggiungi')); });

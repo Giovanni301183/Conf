@@ -3,7 +3,7 @@ import { useToastState } from './components/ui';
 import { eur, fN } from './domain/format';
 import { R, S, TABS, commit, useStore, type Tab } from './store/state';
 import { archSave, isBlank, isDirty, newPreventivo, onFilePicked, printCosti, setFileInput, setToast } from './store/actions';
-import { Preventivi } from './pages/Preventivi';
+import { Home, Preventivi } from './pages/Preventivi';
 import { Listino } from './pages/Listino';
 import { Distinte } from './pages/Distinte';
 import { Configura } from './pages/Configura';
@@ -23,17 +23,18 @@ import { nScadute } from './pages/Calendario';
 import { cloud, isAdmin, logout, setCloudToast } from './store/remote';
 
 const VIEWS: Record<Tab, () => React.ReactNode> = {
-  archivio: Preventivi, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
+  archivio: Home, prev: Preventivi, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
   extra: Extra, margini: Margini, invia: Invia, docs: Documenti, lavor: Lavorazione, mont: Montaggio, utenti: Utenti,
 };
 const goTab = (t: Tab) => { S.ui.tab = t; window.scrollTo(0, 0); commit(); };
 const save = () => { (document.activeElement as HTMLElement | null)?.blur?.(); archSave(false); commit(); };
 
 // Barra laterale: schede raggruppate per fase di lavoro.
-const GROUPS: [string, Tab[]][] = [['', ['archivio']], ['Preventivo', ['config', 'costi', 'extra', 'margini', 'invia', 'docs']],
+const GROUPS: [string, Tab[]][] = [['', ['archivio', 'prev']], ['Preventivo', ['config', 'costi', 'extra', 'margini', 'invia', 'docs']],
   ['Produzione e cantiere', ['lavor', 'mont']], ['Dati di base', ['listino', 'distinte']], ['Amministrazione', ['utenti']]];
 const ICON: Record<Tab, string> = {
   archivio: 'M3 11l9-7 9 7M5 9.5V20h5v-6h4v6h5V9.5',
+  prev: 'M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9zM14 3v6h6M8 13h8M8 17h5',
   config: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4',
   costi: 'M4 20V10M10 20V4M16 20v-8M22 20H2',
   extra: 'M12 5v14M5 12h14',
@@ -69,8 +70,8 @@ export default function App() {
 
   if (cloud.fase !== 'locale' && cloud.fase !== 'pronto') return <><Accesso />{node}</>;
   const View = VIEWS[S.ui.tab];
-  // In Home la barra in alto non mostra preventivo e valori: resta solo il pulsante del menu sugli schermi stretti.
-  const home = S.ui.tab === 'archivio';
+  // In Home e nell'archivio la barra in alto non mostra preventivo e valori: resta solo il pulsante del menu sugli schermi stretti.
+  const home = S.ui.tab === 'archivio' || S.ui.tab === 'prev';
   const dirty = isDirty(), nSc = cloud.fase === 'pronto' || cloud.fase === 'locale' ? nScadute() : 0;
   return (
     <div className="app">
