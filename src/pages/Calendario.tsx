@@ -213,7 +213,6 @@ export function Calendario() {
     <>
       {cloud.scadErr && <div className="warn">L'agenda non si legge dal server ({cloud.scadErr}). Probabilmente manca una migrazione del database
         (<b>20261020000000_calendario_scadenze.sql</b> o <b>20261020010000_agenda.sql</b>): va eseguita nel SQL Editor di Supabase.</div>}
-      <Allarmi />
       <div className="calgrid">
         <section className="card">
           <div className="calhead">
@@ -246,6 +245,8 @@ export function Calendario() {
             : !bozza && <p className="hint" style={{ margin: 0 }}>Niente in programma.</p>}
         </section>
       </div>
+      <div className="calsep" />
+      <Allarmi />
     </>
   );
 }
