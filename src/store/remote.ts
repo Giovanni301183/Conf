@@ -239,7 +239,8 @@ async function loadDocumenti() {
   if (error) { cloud.docErr = error.message; S.docs = []; return; }
   cloud.docErr = ''; S.docs = data;
 }
-const dbErr = (m: string) => (/documenti_legato/.test(m) ? "il documento deve restare legato a un preventivo o a una voce d'agenda" : m);
+const dbErr = (m: string) => (/documenti_legato/.test(m) ? "il documento deve restare legato a un preventivo o a una voce d'agenda"
+  : /etichette/.test(m) ? 'manca la migrazione 20261025020000_etichette_note.sql (va eseguita nel SQL Editor di Supabase)' : m);
 export async function caricaFile(f: File, dove: { preventivo_id?: string | null; scadenza_id?: string | null }, cartella: string): Promise<string> {
   if (!supabase) return 'I documenti si salvano solo con il server.';
   if (f.size > LIMITE_MB * 1024 * 1024) return `"${f.name}" supera ${LIMITE_MB} MB.`;
@@ -251,9 +252,9 @@ export async function caricaFile(f: File, dove: { preventivo_id?: string | null;
   if (error) { await supabase.storage.from(BUCKET).remove([percorso]); return `"${f.name}" non salvato: ${dbErr(error.message)}`; }
   return '';
 }
-export async function salvaNota(n: { id?: string; titolo: string; testo: string; cartella: string; preventivo_id?: string | null; scadenza_id?: string | null }): Promise<string> {
+export async function salvaNota(n: { id?: string; titolo: string; testo: string; cartella: string; etichette: string[]; preventivo_id?: string | null; scadenza_id?: string | null }): Promise<string> {
   if (!supabase) return 'Le note si salvano solo con il server.';
-  const v = { titolo: n.titolo.trim().slice(0, 200), testo: n.testo.trim() || null, cartella: n.cartella };
+  const v = { titolo: n.titolo.trim().slice(0, 200), testo: n.testo.trim() || null, cartella: n.cartella, etichette: n.etichette };
   if (!v.titolo) return 'Serve un titolo.';
   const { error } = n.id ? await supabase.from('documenti').update(v).eq('id', n.id)
     : await supabase.from('documenti').insert({ ...v, tipo: 'nota', preventivo_id: n.preventivo_id || null, scadenza_id: n.scadenza_id || null });
@@ -273,7 +274,7 @@ export async function assegnaNota(d: Documento, a: string, giorno: string): Prom
   }
   await Promise.all([loadScadenze(), loadDocumenti()]); return '';
 }
-export async function aggiornaDoc(id: string, patch: Partial<Pick<Documento, 'titolo' | 'cartella' | 'testo'>>): Promise<string> {
+export async function aggiornaDoc(id: string, patch: Partial<Pick<Documento, 'titolo' | 'cartella' | 'testo' | 'etichette'>>): Promise<string> {
   const { error } = await supabase!.from('documenti').update(patch).eq('id', id);
   if (error) return dbErr(error.message);
   await loadDocumenti(); return '';

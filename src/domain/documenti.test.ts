@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cartellaPer, cerca, documentiDi, estensione, fByte, nomeSicuro, percorsoPer, perCartella, type Documento } from './documenti';
+import { cartellaPer, cerca, conEtichette, documentiDi, estensione, fByte, nomeSicuro, percorsoPer, perCartella, perEtichetta, type Documento } from './documenti';
 
 const doc = (p: Partial<Documento>): Documento => ({ id: 'x', preventivo_id: null, scadenza_id: null, cartella: 'altro', tipo: 'file', titolo: 'a.pdf', testo: null,
   percorso: null, mime: null, dimensione: null, creato_da: 'a@terranovasrl.net', creato: '2026-10-22T08:00:00Z', modificato: null, ...p });
@@ -44,5 +44,22 @@ describe('elenchi', () => {
   });
   it('conteggio per cartella', () => {
     expect(perCartella(D)).toMatchObject({ cliente: 1, altro: 1, foto: 1, disegni: 0 });
+  });
+});
+
+describe('etichette', () => {
+  const D = [
+    doc({ id: '1', tipo: 'nota', titolo: 'Offerta acciaio', etichette: ['acquisti', 'opportunita'] }),
+    doc({ id: '2', tipo: 'nota', titolo: 'Fiera Intersolar', etichette: ['marketing', 'vendita'] }),
+    doc({ id: '3', tipo: 'nota', titolo: 'Vecchia nota', etichette: null }),
+  ];
+  it('filtra con almeno una delle etichette scelte', () => {
+    expect(conEtichette(D, []).length).toBe(3);
+    expect(conEtichette(D, ['acquisti']).map(d => d.id)).toEqual(['1']);
+    expect(conEtichette(D, ['acquisti', 'vendita']).map(d => d.id)).toEqual(['1', '2']);
+  });
+  it('conta per etichetta e cerca anche nei nomi delle etichette', () => {
+    expect(perEtichetta(D)).toEqual({ acquisti: 1, opportunita: 1, marketing: 1, vendita: 1 });
+    expect(cerca(D, 'opportunità').map(d => d.id)).toEqual(['1']);
   });
 });

@@ -5,7 +5,7 @@ export type Cartella = 'cliente' | 'disegni' | 'fornitori' | 'produzione' | 'spe
 export interface Documento {
   id: string; preventivo_id: string | null; scadenza_id: string | null; cartella: Cartella; tipo: 'nota' | 'file';
   titolo: string; testo: string | null; percorso: string | null; mime: string | null; dimensione: number | null;
-  creato_da: string; creato: string; modificato: string | null;
+  creato_da: string; creato: string; modificato: string | null; etichette?: string[] | null;
 }
 // Cartelle di ogni commessa, nell'ordine in cui si mostrano: [chiave, etichetta].
 export const CARTELLE: [Cartella, string][] = [
@@ -13,6 +13,25 @@ export const CARTELLE: [Cartella, string][] = [
   ['spedizione', 'Spedizione e DDT'], ['montaggio', 'Montaggio e cantiere'], ['foto', 'Foto'], ['altro', 'Altro'],
 ];
 export const nomeCartella = (k: string) => CARTELLE.find(c => c[0] === k)?.[1] || 'Altro';
+// Etichette (temi) delle note, piu' di una per nota: [chiave, etichetta, colore]. Per aggiungerne una basta una riga qui.
+export const ETICHETTE: [string, string, string][] = [
+  ['acquisti', 'Acquisti', '#5f9473'], ['vendita', 'Vendita', '#2f6fb0'], ['opportunita', 'Opportunità', '#c58a42'],
+  ['sviluppo', 'Sviluppo prodotto', '#8b72a3'], ['tecnico', 'Tecnico e progetto', '#3e6b8a'], ['produzione', 'Produzione', '#a0673a'],
+  ['cantiere', 'Cantiere e montaggio', '#6f7d3a'], ['logistica', 'Logistica', '#4f8a8b'], ['qualita', 'Qualità e reclami', '#b8483e'],
+  ['amministrazione', 'Amministrazione', '#7a6a55'], ['marketing', 'Marketing e fiere', '#c0577f'], ['personale', 'Personale', '#5b6b9a'],
+  ['riunione', 'Riunione', '#2f8a6a'], ['idea', 'Idea', '#b39a2a'],
+];
+export const nomeEtichetta = (k: string) => ETICHETTE.find(e => e[0] === k)?.[1] || k;
+export const coloreEtichetta = (k: string) => ETICHETTE.find(e => e[0] === k)?.[2] || '#8a9196';
+export const etichetteDi = (d: Pick<Documento, 'etichette'>) => d.etichette || [];
+/** Documenti con almeno una delle etichette scelte (nessuna scelta = tutti). */
+export const conEtichette = (docs: Documento[], sel: string[]) => sel.length ? docs.filter(d => etichetteDi(d).some(e => sel.includes(e))) : docs;
+/** Quante note per etichetta, nell'ordine dell'elenco. */
+export function perEtichetta(docs: Documento[]) {
+  const n: Record<string, number> = {};
+  for (const d of docs) for (const e of etichetteDi(d)) n[e] = (n[e] || 0) + 1;
+  return n;
+}
 // Limite per file del piano gratuito di Supabase; dopo l'upgrade si alza qui e nella migrazione dello Storage.
 export const LIMITE_MB = 50;
 
@@ -45,11 +64,11 @@ export function documentiDi(docs: Documento[], { preventivo, scadenza }: { preve
   return docs.filter(d => (preventivo && d.preventivo_id === preventivo) || (scadenza && d.scadenza_id === scadenza))
     .sort((a, b) => b.creato.localeCompare(a.creato));
 }
-/** Ricerca su titolo, testo della nota e nome della cartella (parole in qualunque ordine). */
+/** Ricerca su titolo, testo della nota, nome della cartella e delle etichette (parole in qualunque ordine). */
 export function cerca(docs: Documento[], q: string) {
   const parole = q.toLowerCase().split(/\s+/).filter(Boolean);
   if (!parole.length) return docs;
-  return docs.filter(d => { const t = `${d.titolo} ${d.testo || ''} ${nomeCartella(d.cartella)}`.toLowerCase(); return parole.every(p => t.includes(p)); });
+  return docs.filter(d => { const t = `${d.titolo} ${d.testo || ''} ${nomeCartella(d.cartella)} ${etichetteDi(d).map(nomeEtichetta).join(' ')}`.toLowerCase(); return parole.every(p => t.includes(p)); });
 }
 export function perCartella(docs: Documento[]) {
   const n = Object.fromEntries(CARTELLE.map(([k]) => [k, 0])) as Record<Cartella, number>;

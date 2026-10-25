@@ -2,6 +2,7 @@
 // con Conferma e Annulla; solo la conferma cambia listino, distinte o calendario, con gli stessi strumenti dell'app.
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { datiPerAssistente, type Appunto, type Proposta } from '../domain/assistente';
+import { nomeEtichetta } from '../domain/documenti';
 import { sostituisci } from '../domain/referenze';
 import { clone } from '../domain/model';
 import { S, commit, save } from '../store/state';
@@ -19,7 +20,7 @@ const Riconoscimento: any = typeof window !== 'undefined' ? (window as any).Spee
 /** Appunti per l'assistente: note dei documenti e note degli eventi, i più recenti prima, con il nome della commessa. */
 function appunti(): Appunto[] {
   const comm = (id?: string | null) => (id && S.arch.find(a => a.id === id)?.nome) || '';
-  const note = S.docs.filter(d => d.tipo === 'nota').map(d => ({ quando: String(d.creato || '').slice(0, 10), commessa: comm(d.preventivo_id), titolo: d.titolo, testo: (d.testo || '').slice(0, 2000) }));
+  const note = S.docs.filter(d => d.tipo === 'nota').map(d => ({ quando: String(d.creato || '').slice(0, 10), commessa: comm(d.preventivo_id), titolo: d.titolo + (d.etichette?.length ? ` [${d.etichette.map(nomeEtichetta).join(', ')}]` : ''), testo: (d.testo || '').slice(0, 2000) }));
   const eventi = S.scad.filter(x => x.nota).map(x => ({ quando: x.giorno, commessa: comm(x.preventivo_id), titolo: 'Evento: ' + x.titolo, testo: String(x.nota).slice(0, 2000) }));
   return [...note, ...eventi].sort((a, b) => b.quando.localeCompare(a.quando)).slice(0, 300);
 }
