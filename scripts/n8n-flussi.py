@@ -257,6 +257,11 @@ avvisi = [
     impostazioni('Impostazioni riepilogo', [220, 520]),
     http('Riepilogo → app', [440, 520], "{ azione: 'riepilogo' }", url="={{ $('Impostazioni riepilogo').item.json.url }}"),
     send('Riepilogo nel gruppo', [660, 520], "$('Impostazioni riepilogo').item.json.gruppo", "$json.ok ? $json.testo : '⚠️ Riepilogo non disponibile: ' + $json.errore"),
+    # Riunioni: ogni 10 minuti (lun-ven 6-19) l'app manda da sola su Telegram l'avviso degli appuntamenti che iniziano tra 30-40 minuti.
+    node('Ogni 10 minuti', 'n8n-nodes-base.scheduleTrigger', 1.2, [0, 760], {'rule': {'interval': [{'field': 'cronExpression', 'expression': '*/10 6-19 * * 1-5'}]}}),
+    node('Impostazioni riunioni', 'n8n-nodes-base.set', 3.4, [220, 760], {'assignments': {'assignments': [
+        {'id': U(), 'name': 'url', 'type': 'string', 'value': API}]}, 'includeOtherFields': True, 'options': {}}),
+    http('Riunioni → app', [440, 760], "{ azione: 'avvisi_riunioni' }", url="={{ $('Impostazioni riunioni').item.json.url }}"),
 ]
 avvisi_conn = {
     'Voce nuova (Supabase)': {'main': [to('È un inserimento?')]}, 'È un inserimento?': {'main': [to('Impostazioni'), []]},
@@ -264,6 +269,7 @@ avvisi_conn = {
     'Da annunciare?': {'main': [to('Annuncia nel gruppo'), []]},
     'Ogni mattina lun-ven 8:00': {'main': [to('Impostazioni riepilogo')]}, 'Impostazioni riepilogo': {'main': [to('Riepilogo → app')]},
     'Riepilogo → app': {'main': [to('Riepilogo nel gruppo')]},
+    'Ogni 10 minuti': {'main': [to('Impostazioni riunioni')]}, 'Impostazioni riunioni': {'main': [to('Riunioni → app')]},
 }
 
 # ---------- Flusso 3: email in arrivo (Gmail) ----------
@@ -328,3 +334,9 @@ if SEGRETO and BYPASS:
                    ensure_ascii=False, indent=1).replace('INSERISCI_CODICE_BYPASS', BYPASS)
     with open(os.path.join(ROOT, 'n8n', 'da-importare', 'agenda-completo.json'), 'w', encoding='utf-8') as f: f.write(t)
     print('Scritto n8n/da-importare/agenda-completo.json (flusso unico, con segreto e bypass)')
+    # Nodi da copiare e incollare (Ctrl+V) nel flusso gia' attivo, senza reimportare: avvisi delle riunioni.
+    nomi = ['Ogni 10 minuti', 'Impostazioni riunioni', 'Riunioni → app']
+    pezzo = {'nodes': [n for n in tutti if n['name'] in nomi], 'connections': {k: v for k, v in avvisi_conn.items() if k in nomi}}
+    with open(os.path.join(ROOT, 'n8n', 'da-importare', 'incolla-avvisi-riunioni.json'), 'w', encoding='utf-8') as f:
+        f.write(json.dumps(pezzo, ensure_ascii=False, indent=1).replace('INSERISCI_CODICE_BYPASS', BYPASS))
+    print('Scritto n8n/da-importare/incolla-avvisi-riunioni.json (nodi da incollare nel flusso)')

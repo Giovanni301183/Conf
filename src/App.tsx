@@ -23,6 +23,7 @@ import { nScadute } from './pages/Calendario';
 import { InSviluppo } from './pages/InSviluppo';
 import { AREE, PASSI as PASSI0, SETTORI, infoSettore, type Settore } from './domain/settori';
 import { cloud, isAdmin, logout, setCloudToast } from './store/remote';
+import { AvvisiRiunioni } from './components/AvvisiRiunioni';
 
 const VIEWS: Record<Tab, () => React.ReactNode> = {
   archivio: Home, prev: Preventivi, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
@@ -164,7 +165,7 @@ export default function App() {
         <View />
       </main>
       <input type="file" ref={setFileInput} accept=".json,application/json" className="hide" onChange={e => { const f = e.target.files?.[0]; if (f) onFilePicked(f); }} />
-      {node}
+      <AvvisiRiunioni />{node}
       </div>
       <Assistente />
     </div>

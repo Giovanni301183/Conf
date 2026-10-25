@@ -11,6 +11,8 @@ import { S, commit } from '../store/state';
 import { archOpen, toast } from '../store/actions';
 import { DocPanel, docNonDisponibili } from './Documenti';
 import { ModuloEmail, contestoEmail } from '../components/Email';
+import { PermessoAvvisi } from '../components/AvvisiRiunioni';
+import { linkRiunione } from '../domain/riunione';
 import { cloud, eliminaScadenza, mioEmail, online, puoModificare, puoSpuntare, salvaScadenza, spuntaScadenza } from '../store/remote';
 
 const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
@@ -64,7 +66,7 @@ function Assegna({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
 }
 
 function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean }) {
-  const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s);
+  const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s), link = s && !s.fatto ? linkRiunione(s.nota) : '';
   // Allegati della voce (file e note): la graffetta mostra quanti sono e apre l'elenco sotto la voce.
   const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [all, setAll] = useState(false), [ass, setAss] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
   return (<>
@@ -78,6 +80,7 @@ function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?
         {v.tipo === 'richiamo' ? <span className="muted small">Offerta inviata da {RICHIAMO}+ giorni senza risposta: quando il cliente risponde, cambia lo stato.</span> : null}
       </div>
       {v.tipo === 'richiamo' && v.prevId && <StatoSel id={v.prevId} k="inviato" />}
+      {link && <a className="btn s p" href={link} target="_blank" rel="noopener noreferrer" title={link}>🎥 Entra</a>}
       {v.prevId && <button className="btn s" onClick={() => apri(v.prevId!)}>Apri</button>}
       {attesa && spunta && <button className="btn s p" onClick={() => risposta(s!)} title="Segna la voce come fatta, con una nota su cosa hanno risposto">Risposta arrivata</button>}
       {s && online() && !email && <button className="btn s" onClick={() => setEmail(attesa ? 'sollecito' : 'email')} title={attesa ? 'Scrivi un sollecito cortese' : "Scrivi un'email di aggiornamento da questa voce"}>{attesa ? '✉ Sollecita' : '✉ Email'}</button>}
@@ -227,6 +230,7 @@ export function Calendario() {
             <span className="sp" />
             {cloud.session && <span className="seg"><button className={S.ui.calMie ? '' : 'on'} onClick={() => { S.ui.calMie = false; commit(); }}>Tutte</button>
               <button className={S.ui.calMie ? 'on' : ''} onClick={() => { S.ui.calMie = true; commit(); }}>Le mie</button></span>}
+            <PermessoAvvisi />
             <button className="btn s" onClick={() => mostra(false)} title="Toglie il calendario dalla Home: restano solo gli allarmi">Nascondi calendario</button>
           </div>
           {mese ? <Mese ym={ym} sel={sel} setSel={setSel} nuova={nuova} byDay={byDay} oggi={oggi} /> : <Agenda vv={vv} oggi={oggi} sel={sel} setSel={setSel} onEdit={modifica} />}

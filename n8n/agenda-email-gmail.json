@@ -16,7 +16,7 @@
     },
     "options": {}
    },
-   "id": "2118d167-4315-4e7d-a70c-ca910b2eb150",
+   "id": "7ca556d5-1f2f-40bb-8139-4cc75dc02e96",
    "name": "Email in arrivo",
    "type": "n8n-nodes-base.gmailTrigger",
    "typeVersion": 1.2,
@@ -36,7 +36,7 @@
     "assignments": {
      "assignments": [
       {
-       "id": "7dd3dfe9-503d-4892-a5b4-f9efaf1eca10",
+       "id": "a31c33ad-bc88-4395-b413-4664e09c119c",
        "name": "url",
        "type": "string",
        "value": "https://conf-git-calendarrrrr-giovanne.vercel.app/api/agenda?x-vercel-protection-bypass=INSERISCI_CODICE_BYPASS"
@@ -46,7 +46,7 @@
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "cc366706-223b-4b16-852a-ec42e36a92ca",
+   "id": "8ca8de95-d727-4120-a98c-711d90f5c963",
    "name": "Impostazioni email",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -66,7 +66,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'posta', gmail_id: $('Email in arrivo').item.json.id, da: $('Email in arrivo').item.json.from?.value?.[0]?.address || $('Email in arrivo').item.json.from?.text || '', oggetto: $('Email in arrivo').item.json.subject || '', testo: $('Email in arrivo').item.json.text || '', data: $('Email in arrivo').item.json.date || '' }) }}",
     "options": {}
    },
-   "id": "f3e8d3ab-d7be-4cc2-abcb-7ebbcdf90399",
+   "id": "2e738aa6-b9ba-4137-a3ec-fba66026529f",
    "name": "Email → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,

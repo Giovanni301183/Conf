@@ -7,6 +7,7 @@
 //         appunti, email (cerca un appunto e ne manda in chat privata la bozza di email scritta dall'AI, da aprire in Gmail: vedi _email.ts);
 //         pe (pulsante sotto una email in arrivo: la trasforma in appunto, promemoria o riunione);
 //         riepilogo, annuncio (del sistema: riepilogo del mattino e avviso nel gruppo di una voce nuova);
+//         avvisi_riunioni (del sistema, ogni 10 minuti: appuntamenti che iniziano tra poco, in privato a chi li ha creati e a chi sono assegnati);
 //         posta (del sistema: email inoltrata all'indirizzo dell'agenda, letta dall'AI e proposta in chat privata a chi l'ha inoltrata: vedi _posta.ts).
 // Regole come nell'app: crea chiunque; modifica ed elimina l'autore o un amministratore; chi ha la voce assegnata la segna fatta;
 // un'urgenza o una voce senza assegnatario la puo' prendere chiunque.
@@ -15,6 +16,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { marginiBot, preventivoBot, variantiBot } from './_preventivo.js';
 import { linkGmail, scriviBozza } from './_email.js';
 import { indirizzo, leggiEmail, type Commessa, type Lettura } from './_posta.js';
+import { chiaveAvviso, daAvvisare, linkRiunione, minutiA } from '../src/domain/riunione.js';
 
 export const GENERI = ['attivita', 'promemoria', 'scadenza', 'appuntamento', 'urgenza'] as const;
 export const CATEGORIE = ['STRUTTURA', 'BULLONERIA', 'ELETTROMECCANICO', 'ELETTRONICO'] as const;
@@ -22,6 +24,7 @@ const ICONA: Record<string, string> = { urgenza: '🔴', attivita: '☑️', pro
 const NOME_GENERE: Record<string, string> = { urgenza: 'Urgenza', attivita: 'Da fare', promemoria: 'Promemoria', scadenza: 'Scadenza', appuntamento: 'Appuntamento' };
 export const RICHIAMO = 10;   // giorni dall'invio dell'offerta senza risposta (come nell'app)
 const COLS = 'id, giorno, ora, genere, categoria, titolo, nota, preventivo_id, assegnata_a, fatto, origine, creato_da, creato';
+const ANTICIPO_TG = 40;   // minuti: n8n chiama ogni 10 minuti, cosi' l'avviso arriva tra 30 e 40 minuti prima
 
 export interface Me { email: string; nome: string | null; ruolo: 'admin' | 'utente' }
 export interface Voce {
@@ -31,6 +34,7 @@ export interface Voce {
 
 /* ---------- Date (fuso di Roma: il server gira in UTC) ---------- */
 export const oggiISO = (d = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' }).format(d);
+export const oraRoma = (d = new Date()) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
 const DAY = 864e5;
 export const giornoNum = (s: string) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / DAY;
 export const isoDi = (n: number) => new Date(n * DAY).toISOString().slice(0, 10);
@@ -219,12 +223,12 @@ async function emailDaAppunto(db: Db, b: any, io: Me, chat: number, origine: str
 }
 
 /* ---------- Email in arrivo ---------- */
-export type Proposta = Lettura & { oggetto: string };
+export type Proposta = Lettura & { oggetto: string; link?: string };
 /** Messaggio in chat privata con la lettura dell'email e i pulsanti "pe:<id>:<scelta>" (a appunto, p promemoria, r riunione, x ignora). */
 export function propostaTelegram(id: string, l: Proposta, commessa: string | null, oggi: string) {
   const giorno = l.giorno || prossimoLavorativo(oggi), b = (text: string, s: string) => [{ text, callback_data: `pe:${id}:${s}` }];
   const text = [`📧 Email${l.mittente ? ' di ' + l.mittente : ''}`, l.oggetto ? `Oggetto: ${l.oggetto}` : '', '', `👉 ${l.titolo}`, l.riassunto, '',
-    commessa ? `Commessa: ${commessa}` : "Commessa: non riconosciuta (per salvarla come appunto scrivi la commessa sopra l'inoltro)", '', 'Cosa ne faccio?']
+    l.link ? `🎥 ${l.link}` : '', commessa ? `Commessa: ${commessa}` : "Commessa: non riconosciuta (per salvarla come appunto scrivi la commessa sopra l'inoltro)", '', 'Cosa ne faccio?']
     .filter((x, i, a) => x || (i > 0 && a[i - 1])).join('\n').slice(0, 4000);
   const tasti = [...(commessa ? [b('📝 Appunto nella commessa', 'a')] : []), b(`🔔 Promemoria ${giornoIt(giorno)}`, 'p'),
     ...(l.giorno ? [b(`📅 Riunione ${giornoIt(l.giorno)}${l.ora ? ' ' + l.ora : ''}`, 'r')] : []), b('🗑 Ignora', 'x')];
@@ -245,7 +249,7 @@ async function postaInArrivo(db: Db, b: any, oggi: string) {
   const commesse = (cc || []) as Commessa[];
   const l = await leggiEmail({ da: String(b.da ?? ''), oggetto, testo: String(b.testo ?? ''), data: String(b.data ?? '') }, commesse, oggi);
   if ('errore' in l) return fail(l.errore);
-  const dati: Proposta = { ...l, oggetto };
+  const dati: Proposta = { ...l, oggetto, link: linkRiunione(String(b.testo ?? '')) };
   const { data: p, error } = await db.from('posta_proposte').insert({ email: u.email, gmail_id: gid, dati }).select('id').single();
   if (error) return error.code === '23505' ? { ok: true, doppia: true } : fail(error.message);
   const c = commesse.find(x => x.id === l.preventivo_id);
@@ -255,13 +259,43 @@ async function postaInArrivo(db: Db, b: any, oggi: string) {
   return { ok: true, id: p.id, titolo: l.titolo };
 }
 
+/** Messaggio di avviso di una riunione che sta per iniziare, con il pulsante per entrare se c'e' il link. */
+export function avvisoRiunione(v: Voce, adesso: string, ctx: Ctx) {
+  const min = minutiA(v.ora!, adesso), link = linkRiunione(v.nota), p = v.preventivo_id ? ctx.commesse.get(v.preventivo_id) : null;
+  const text = [`⏰ Tra ${min} minuti: ${v.titolo} (ore ${v.ora!.slice(0, 5)})`, p ? `Commessa: ${p.nome}` : '',
+    v.nota ? v.nota.slice(0, 500) : ''].filter(Boolean).join('\n');
+  return { text, ...(link ? { reply_markup: { inline_keyboard: [[{ text: '🎥 Entra nella riunione', url: link }]] } } : {}) };
+}
+
+/** Appuntamenti che iniziano entro ANTICIPO_TG minuti: avviso in privato a chi li ha creati e a chi sono assegnati, una volta sola. */
+async function avvisiRiunioni(db: Db, oggi: string, adesso: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return fail('Sul server manca TELEGRAM_BOT_TOKEN.');
+  const { data, error } = await db.from('scadenze').select(COLS + ', avvisata_per').eq('genere', 'appuntamento').eq('fatto', false).eq('giorno', oggi).not('ora', 'is', null);
+  if (error) return fail(error.message);
+  const vv = daAvvisare((data || []) as unknown as (Voce & { avvisata_per: string | null })[], oggi, adesso, ANTICIPO_TG).filter(v => v.avvisata_per !== chiaveAvviso(v));
+  if (!vv.length) return { ok: true, avvisati: 0 };
+  const [{ data: uu }, ctx] = await Promise.all([db.from('utenti').select('email, telegram_id').eq('attivo', true).not('telegram_id', 'is', null), contesto(db)]);
+  const tg = new Map((uu || []).map(u => [u.email, u.telegram_id as number]));
+  let n = 0;
+  for (const v of vv) {
+    const msg = avvisoRiunione(v, adesso, ctx);
+    for (const chat of new Set([v.creato_da, v.assegnata_a].flatMap(e => (e && tg.get(e) ? [tg.get(e)!] : [])))) {
+      const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: chat, ...msg }) });
+      if (r.ok) n++;
+    }
+    await db.from('scadenze').update({ avvisata_per: chiaveAvviso(v) }).eq('id', v.id);
+  }
+  return { ok: true, avvisati: n };
+}
+
 /** Pulsante sotto la proposta: appunto nei documenti della commessa, promemoria o riunione in agenda, oppure niente. */
 async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
   const { data: p } = await db.from('posta_proposte').select('id, email, dati, usata').eq('id', String(b.id ?? '')).maybeSingle();
   if (!p || p.email !== io.email) return fail('Proposta non trovata: era per un altro collega o è stata cancellata.');
   if (p.usata) return fail("Questa email l'hai già sistemata.");
   const d = p.dati as Proposta, scelta = String(b.scelta ?? '');
-  const nota = [d.riassunto, `✉ Email${d.mittente ? ' di ' + d.mittente : ''}${d.oggetto ? `: «${d.oggetto}»` : ''}`].filter(Boolean).join('\n\n');
+  const nota = [d.riassunto, d.link && `🎥 ${d.link}`, `✉ Email${d.mittente ? ' di ' + d.mittente : ''}${d.oggetto ? `: «${d.oggetto}»` : ''}`].filter(Boolean).join('\n\n');
   let testo: string;
   if (scelta === 'x') testo = 'Ok, email ignorata.';
   else if (scelta === 'a') {
@@ -303,6 +337,7 @@ export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''):
   }
 
   if (az === 'posta') return postaInArrivo(db, b, oggi);
+  if (az === 'avvisi_riunioni') return avvisiRiunioni(db, oggi, oraRoma(adesso));
 
   // --- Abbinamento dell'account ---
   const tid = Number(b.telegram_id);
