@@ -4,6 +4,9 @@ import { compute } from '../domain/compute';
 import { MIN_CUSC, clone, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../domain/model';
 import { download, fileName } from '../domain/format';
 import { AUTO } from '../domain/plan';
+import { infoSettore, settoreDi, type Settore } from '../domain/settori';
+/** Apre nel menu il settore (e la sua macro area). */
+const apriSettore = (k: Settore) => { S.ui.set = k; S.ui.sopen = true; S.ui.area = infoSettore(k).gruppo; };
 import { daNonScegliere, etichetta, nomeVariante, variante, type Variante } from '../domain/varianti';
 import { KEY_ARCH, KEY_DRAFT, KEY_PREV, R, S, commit, getP, load, save, setP, store, unstore } from './state';
 import { delArch, isAdmin, online, pushArch } from './remote';
@@ -25,7 +28,7 @@ export const snap = (o: unknown) => JSON.stringify(o, (k, v) => (k === '_imp' ? 
 })();
 export function curEntry() { return S.prev._id ? S.arch.find(a => a.id === S.prev._id) : null; }
 // Un preventivo nuovo ancora vuoto (salvo la data) non conta come modifica non salvata.
-export function isBlank(p) { return !p._id && snap({ ...p, data: '' }) === snap({ ...newPrev(), data: '' }); }
+export function isBlank(p) { return !p._id && snap({ ...p, data: '', settore: '' }) === snap({ ...newPrev(), data: '', settore: '' }); }
 export function isDirty() { const e = curEntry(); return e ? snap(e.prev) !== snap(S.prev) : !isBlank(S.prev); }
 export function prevName(p) { return p._nome || [p.cliente, p.rif].filter(Boolean).join(' · ') || 'Preventivo senza nome'; }
 export const nextNum = (p, arch = S.arch) => numSucc(p, arch);
@@ -59,11 +62,11 @@ export function archOpen(id: string) {
   const e = S.arch.find(a => a.id === id); if (!e) return;
   if (S.prev._id !== id && isDirty() && !confirm('Il preventivo aperto ha modifiche non salvate che andranno perse. Continuare?')) return;
   normPrev(e.prev); S.prev = clone(e.prev); S.prev._id = e.id; S.prev._nome = e.nome;
-  // Parametri del Gantt e listino montaggio non contano come "listino cambiato".
-  const dSnap = d => snap({ ...d, mont: undefined, params: { ...d.params, gantt: undefined } });
+  // Parametri del Gantt, listino montaggio e codici articolo non contano come "listino cambiato".
+  const dSnap = d => snap({ ...d, mont: undefined, params: { ...d.params, gantt: undefined }, listino: d.listino?.map(({ art, ...x }) => x) });
   if (e.dati && dSnap(e.dati) !== dSnap(S.data) && !confirm(`Il listino è cambiato dopo il salvataggio di "${e.nome}".\n\nOK → ricalcola con il listino ATTUALE (prezzi aggiornati)\nAnnulla → ripristina il listino salvato con il preventivo`))
     S.data = { ...clone(e.dati), mont: S.data.mont, params: { ...e.dati.params, gantt: S.data.params.gantt } };
-  save(); S.ui.tab = 'config'; toast(`Aperto "${e.nome}"`);
+  apriSettore(settoreDi(S.prev)); save(); S.ui.tab = 'config'; toast(`Aperto "${e.nome}"`);
 }
 export function archDup(id: string) {
   const e = S.arch.find(a => a.id === id); if (!e) return;
@@ -159,12 +162,12 @@ function archImport(j) {
 }
 export function newPreventivo() {
   if (isDirty() && !confirm('Il preventivo attuale ha modifiche non salvate. Iniziare comunque un nuovo preventivo?')) return;
-  S.prev = newPrev(); S.ui.tab = 'config'; save();
+  S.prev = newPrev(); apriSettore('tracker'); S.ui.tab = 'config'; save();
 }
 export function draftOpen() {
   const dr = load(KEY_DRAFT); if (!dr) return;
   if (isDirty() && !confirm('Il preventivo attuale ha modifiche non salvate che andranno perse. Continuare?')) return;
-  S.prev = normPrev(dr); unstore(KEY_DRAFT); S.ui.tab = 'config'; save();
+  S.prev = normPrev(dr); unstore(KEY_DRAFT); apriSettore(settoreDi(S.prev)); S.ui.tab = 'config'; save();
 }
 export function draftDel() { if (confirm('Scartare definitivamente la bozza non salvata?')) unstore(KEY_DRAFT); }
 

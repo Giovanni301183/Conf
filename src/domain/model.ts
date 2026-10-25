@@ -106,7 +106,7 @@ export const MPAR=[['ggProg','Progettazione esecutiva (gg)'],['ggPull','Pull-out
 export function defaultData(){return {params:{maggZinc:0.025,gantt:clone(GANTT0)},listino:clone(LISTINO0),template:clone(TEMPLATE0),sizes:clone(SIZES0),mont:defMont()};}
 export function defRiga(){return {taglia:'12',n:1,tipo:'Agrivoltaico',prof:'IPE 140',asse:'2,5',omega:'2,0',lFond:3,lCusc:2.3};}
 // Un preventivo nuovo parte da 0 €: una riga tracker con 0 tracker e nessun componente di impianto.
-export function newPrev(){return {cliente:'',rif:'',data:new Date().toISOString().slice(0,10),note:'',
+export function newPrev(){return {settore:'tracker',cliente:'',rif:'',data:new Date().toISOString().slice(0,10),note:'',
   modulo:{marca:'',wp:600},righe:[{...defRiga(),n:0}],
   imp:{quadA:0,quadGen:0,box:0,piran:0,anem:0,termAria:0,termCont:0},extra:[],marg:defMarg(),gantt:defGantt(),mont:defMontPrev(),
   stato:'bozza',luogo:defLuogo(),offerta:defOfferta()};}

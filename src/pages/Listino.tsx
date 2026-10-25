@@ -12,7 +12,7 @@ import { pickFile, resetData } from '../store/actions';
 const TIPI = { barra: 'Profili a barra — prezzati al metro', pezzo: 'Carpenteria e pezzi speciali — prezzati a pezzo', comm: 'Componenti — prezzati a pezzo' };
 const done = () => { save(); commit(); };
 // Riga nascosta dalla ricerca per codice o descrizione.
-const hid = (it: any) => { const q = S.ui.filter.trim().toLowerCase(); return !!q && !(it.c + ' ' + it.d).toLowerCase().includes(q) ? 'hide' : undefined; };
+const hid = (it: any) => { const q = S.ui.filter.trim().toLowerCase(); return !!q && !(it.c + ' ' + (it.art || '') + ' ' + it.d).toLowerCase().includes(q) ? 'hide' : undefined; };
 
 function delItem(i: number) {
   const D = S.data, it = D.listino[i];
@@ -22,7 +22,11 @@ function delItem(i: number) {
 }
 const CodeCell = ({ i }: { i: number }) => {
   const it = S.data.listino[i];
-  return <td style={{ minWidth: 120 }}>{it.u ? <Inp path={`data.listino.${i}.c`} type="txt" /> : <span className="code">{it.c}</span>}</td>;
+  // Codice articolo modificabile su tutte le voci; la chiave interna (usata da distinte e configuratore) resta sotto.
+  const togli = () => { if (confirm(`Eliminare il codice articolo "${it.art}"? La voce torna a mostrare la chiave "${it.c}".`)) { delete it.art; done(); } };
+  return <td style={{ minWidth: 140 }}><div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><Inp path={`data.listino.${i}.art`} type="txt" ph={it.c} />
+    {it.art ? <button className="btn x" onClick={togli} title="Elimina il codice articolo">✕</button> : null}</div>
+    <div className="muted small" title="Chiave interna usata da distinte e configuratore">{it.u ? <Inp path={`data.listino.${i}.c`} type="txt" /> : it.c}</div></td>;
 };
 const DelBtn = ({ i }: { i: number }) => <td><button className="btn x" onClick={() => delItem(i)} title="Elimina">✕</button></td>;
 
@@ -30,7 +34,7 @@ function TableBarre({ ii, t }: { ii: number[]; t: string }) {
   const L = S.data.listino, mz = num(S.data.params.maggZinc), u = t === 'barra' ? 'm' : 'pz';
   return (
     <div className="wrap"><table><tbody>
-      <tr><th>Codice</th><th>Descrizione</th><th>Sottogruppo</th><th className="n">{t === 'barra' ? 'kg/m teorico' : 'Peso netto kg'}</th><th className="n">€/kg acq.</th><th className="n">€/kg zinc.</th><th className="n">€/kg lav.</th>
+      <tr><th title="Codice articolo (modificabile) e, sotto, la chiave interna">Codice articolo</th><th>Descrizione</th><th>Sottogruppo</th><th className="n">{t === 'barra' ? 'kg/m teorico' : 'Peso netto kg'}</th><th className="n">€/kg acq.</th><th className="n">€/kg zinc.</th><th className="n">€/kg lav.</th>
         <th className="n">Mat. €/{u}</th><th className="n">Zinc. €/{u}</th><th className="n">Lavoraz. €/{u}</th><th className="n">Totale €/{u}</th>{t === 'barra' && <th title="Profilo che si può scegliere per i pilastri in Configura">Pilastro</th>}<th></th></tr>
       {ii.map(i => {
         const it = L[i], c = costLine(it, 1, 1, mz), p = `data.listino.${i}.`;
@@ -60,7 +64,7 @@ function TableComm({ ii }: { ii: number[] }) {
   const delSd = (i: number, j: number) => { const it = L[i]; it.sd.splice(j, 1); if (!it.sd.length) { delete it.sd; open.delete(i); } done(); };
   return (
     <div className="wrap"><table><tbody>
-      <tr><th>Codice</th><th>Descrizione</th><th>Sottogruppo</th><th className="n">Peso kg/pz</th><th className="n">Costo €/pz</th><th>Sotto-distinta</th><th></th></tr>
+      <tr><th title="Codice articolo (modificabile) e, sotto, la chiave interna">Codice articolo</th><th>Descrizione</th><th>Sottogruppo</th><th className="n">Peso kg/pz</th><th className="n">Costo €/pz</th><th>Sotto-distinta</th><th></th></tr>
       {ii.map(i => {
         const it = L[i], hasSd = it.sd && it.sd.length, p = `data.listino.${i}.`;
         return (
@@ -111,7 +115,7 @@ function Sostituisci() {
     if (!c) return;
     if (D.listino.some(x => x.c === c)) { alert(`Il codice "${c}" è già nel listino: sceglilo dall'elenco.`); return; }
     const it = da ? { ...JSON.parse(JSON.stringify(da)), c, u: true } : { c, d: 'Nuova voce', cat: 'BULLONERIA', sub: 'Bulloneria', t: 'comm', kg: 0, costo: 0, u: true };
-    delete it.pil; D.listino.splice(da ? D.listino.indexOf(da) + 1 : D.listino.length, 0, it); save(); set(i, 'a', c);
+    delete it.pil; delete it.art; D.listino.splice(da ? D.listino.indexOf(da) + 1 : D.listino.length, 0, it); save(); set(i, 'a', c);
   };
   const applica = () => {
     if (!nRighe) return;
@@ -122,7 +126,7 @@ function Sostituisci() {
     setCc([{ da: '', a: '' }]); done();
     alert(`Sostituite ${nRighe} righe.` + (via.length ? `\nTolti dal listino perché non più usati: ${via.join(', ')}.` : ''));
   };
-  const opts = D.listino.map(x => <option key={x.c} value={x.c}>{x.c} — {x.d}</option>);
+  const opts = D.listino.map(x => <option key={x.c} value={x.c}>{x.art ? `${x.art} — ${x.d} (${x.c})` : `${x.c} — ${x.d}`}</option>);
   return <>
     <p className="hint">Cambia un codice in tutte le righe delle distinte base che lo usano, per esempio i bulloni del pilastro motore o un profilo. Quantità e formule restano uguali.
       Vale per i preventivi nuovi; uno già salvato, quando lo riapri, chiede se ricalcolarlo con il listino attuale.</p>

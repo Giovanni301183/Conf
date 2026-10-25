@@ -2,17 +2,9 @@
 // I pulsanti di Telegram accettano solo indirizzi https: questa pagina riceve a, oggetto e testo e apre l'app Gmail
 // del telefono con la mail gia' compilata (Android: intent verso Gmail; iPhone: googlegmail://), cosi' non parte
 // l'app di posta predefinita, che puo' avere un altro account. Resta un link mailto per chi usa un'altra app. Non salva e non invia niente.
-const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+import { linkPosta } from '../src/domain/posta.js';
 
-/** Link per aprire la mail compilata: nell'app Gmail (secondo il telefono) e in qualsiasi app di posta (mailto). */
-export function linkPosta(a: string, su: string, body: string, ua: string) {
-  const dest = a.split(',').map(x => encodeURIComponent(x.trim()).replace(/%40/g, '@')).filter(Boolean).join(',');
-  const q = `subject=${encodeURIComponent(su)}&body=${encodeURIComponent(body)}`;
-  const mailto = `mailto:${dest}?${q}`;
-  const gmail = /android/i.test(ua) ? `intent:${dest}?${q}#Intent;scheme=mailto;action=android.intent.action.SENDTO;package=com.google.android.gm;end`
-    : /iphone|ipad|ipod/i.test(ua) ? `googlegmail://co?to=${dest}&${q}` : mailto;
-  return { gmail, mailto };
-}
+const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
 export function GET(req: Request) {
   const q = new URL(req.url).searchParams, a = (q.get('a') || '').trim(), su = q.get('su') || '', body = q.get('body') || '';

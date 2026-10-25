@@ -9,6 +9,7 @@ import { Cerca } from './Cerca';
 import { CalendarioHome } from './Calendario';
 import { NoteHome } from './Documenti';
 import { eur, fDate, fN } from '../domain/format';
+import { SETTORI, infoSettore, settoreDi } from '../domain/settori';
 import { KEY_DRAFT, S, commit, load } from '../store/state';
 import { cloud, isAdmin, uploadLocali } from '../store/remote';
 import { archDel, archDl, archDup, archExp, archOpen, archRename, archSave, draftDel, draftOpen, isDirty, newPreventivo, pickFile, prevName, righeTxt } from '../store/actions';
@@ -22,7 +23,7 @@ export const Home = () => <><NoteHome /><CalendarioHome /></>;
 
 export function Preventivi() {
   const q = S.ui.aq.trim().toLowerCase();
-  const list = S.arch.filter(e => !q || testo(e).includes(q));
+  const list = S.arch.filter(e => (!q || testo(e).includes(q)) && (!S.ui.aset || settoreDi(e.prev) === S.ui.aset));
   const dr = load(KEY_DRAFT);
   const n = S.arch.length;
   const [varId, setVarId] = useState<string | null>(null);
@@ -34,6 +35,8 @@ export function Preventivi() {
         <span className="sp" />
         <Seg path="ui.av" opts={[['elenco', 'Elenco'], ['kpi', 'Cruscotto'], ['mappa', 'Mappa'], ['cerca', 'Cerca']]} />
         {S.ui.av === 'elenco' && <input placeholder="Cerca per nome, cliente, commessa…" value={S.ui.aq} onChange={e => { S.ui.aq = e.target.value; commit(); }} style={{ width: 260 }} />}
+        {S.ui.av === 'elenco' && <select value={S.ui.aset} onChange={e => { S.ui.aset = e.target.value as typeof S.ui.aset; commit(); }} title="Filtra per settore">
+          <option value="">Tutti i settori</option>{SETTORI.map(s => <option key={s.k} value={s.k}>{s.nome}</option>)}</select>}
         <button className="btn" onClick={run(() => archSave(false))}>Salva preventivo corrente</button>
         <button className="btn p" onClick={run(newPreventivo)}>+ Nuovo preventivo</button>
       </div></div>
@@ -57,7 +60,7 @@ export function Preventivi() {
       )}
 
       {!list.length ? (
-        <div className="card"><div className="empty">{n ? 'Nessun preventivo corrisponde alla ricerca.' : <>L'archivio è vuoto. Configura un preventivo e premi <b>Salva</b> in alto.</>}</div></div>
+        <div className="card"><div className="empty">{n ? (S.ui.aset && !q ? `Nessun preventivo in ${infoSettore(S.ui.aset).nome}.` : 'Nessun preventivo corrisponde alla ricerca.') : <>L'archivio è vuoto. Configura un preventivo e premi <b>Salva</b> in alto.</>}</div></div>
       ) : (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}><div className="wrap" style={{ border: 0, borderRadius: 0 }}>
           <table className="arch"><tbody>
@@ -67,7 +70,7 @@ export function Preventivi() {
               return (
                 <Fragment key={e.id}>
                 <tr className={cur ? 'cur' : ''}>
-                  <td><b>{e.nome}</b>{nDoc(e.id) ? <span className="muted small" title="Documenti e note"> · 📎 {nDoc(e.id)}</span> : null}{cur && <> <span className="tag on">aperto{isDirty() ? ' · modificato' : ''}</span></>}<div className="muted small">{e.prev?.num ? <>N° {e.prev.num} · </> : null}{e.cliente || '–'}{e.prev?.variante?.num ? <> · variante di N° {e.prev.variante.num}</> : null}</div></td>
+                  <td><b>{e.nome}</b>{nDoc(e.id) ? <span className="muted small" title="Documenti e note"> · 📎 {nDoc(e.id)}</span> : null}{cur && <> <span className="tag on">aperto{isDirty() ? ' · modificato' : ''}</span></>}<div className="muted small">{!S.ui.aset ? <>{infoSettore(settoreDi(e.prev)).nome} · </> : null}{e.prev?.num ? <>N° {e.prev.num} · </> : null}{e.cliente || '–'}{e.prev?.variante?.num ? <> · variante di N° {e.prev.variante.num}</> : null}</div></td>
                   <td>{e.rif || '–'}<div className="muted small">{fDate(e.data)}</div></td>
                   <td><StatoSel id={e.id} k={eStato(e)} /></td><td className="small">{e.righe}</td><td className="n">{fN(e.kwp, 2)}</td><td className="n">{eur(e.totale)}</td><td className="n"><b>{e.prezzo != null ? eur(e.prezzo) : '–'}</b>{e.totale > 0 && e.prezzo != null && e.prezzo - e.totale < 0.5 ? <div className="small" style={{ color: 'var(--warn)' }}>margine 0 %</div> : null}</td>
                   <td className="small muted">{fd(e.salvato)}{e.autore ? <div>{e.autore.split('@')[0]}</div> : null}</td>

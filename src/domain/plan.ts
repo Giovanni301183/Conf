@@ -12,7 +12,7 @@ export function buildLavor(){
   const mk=(l):any=>{const it=map.get(l.code)||{}, t=it.t||'comm', L=t==='barra'?num(l.L):'';
     const kgU=t==="barra"?(L as number)*num(it.kg):num(it.kg), zinc=t!=='comm'&&num(it.zn)>0;
     // kgT = peso nero totale; kgZ = peso dopo la zincatura (solo pezzi zincati, altrimenti 0)
-    return {code:l.code,desc:String(l.desc).replace(/ · L [\d.,]+ m$/,''),dItem:it.d||l.desc,cat:l.cat,sub:l.sub,t,L,qPer:l.qPer,q:l.q,kgU,kgT:kgU*l.q,kgZ:zinc?kgU*l.q*(1+mz):0,zinc,cost:tot(l),sd:l.sd,riga:l.riga,gruppo:l.gruppo};};
+    return {code:l.code,art:it.art||l.code,desc:String(l.desc).replace(/ · L [\d.,]+ m$/,''),dItem:it.d||l.desc,cat:l.cat,sub:l.sub,t,L,qPer:l.qPer,q:l.q,kgU,kgT:kgU*l.q,kgZ:zinc?kgU*l.q*(1+mz):0,zinc,cost:tot(l),sd:l.sd,riga:l.riga,gruppo:l.gruppo};};
   const items=R.lines.filter(l=>l.riga!=='extra').map(mk);
   const righe=S.prev.righe.map((r,i)=>{const its=items.filter(x=>x.riga===i), gruppi:any[]=[];
     for(const x of its){let G=gruppi.find(y=>y.nome===x.gruppo); if(!G)gruppi.push(G={nome:x.gruppo,items:[]}); G.items.push(x);}
@@ -20,12 +20,12 @@ export function buildLavor(){
   const imp=items.filter(x=>x.riga==='imp');
   const tg=new Map<any,any>();
   for(const x of items.filter(x=>x.t==='barra')){const k=x.code+'|'+x.L;
-    let e=tg.get(k); if(!e)tg.set(k,e={code:x.code,desc:x.dItem,L:x.L,pz:0,kg:0,kgZ:0,zinc:x.zinc,righe:new Set()});
+    let e=tg.get(k); if(!e)tg.set(k,e={code:x.code,art:x.art,desc:x.dItem,L:x.L,pz:0,kg:0,kgZ:0,zinc:x.zinc,righe:new Set()});
     e.pz+=x.q; e.kg+=x.kgT; e.kgZ+=x.kgZ; if(typeof x.riga==='number')e.righe.add('R'+(x.riga+1));}
   const taglio=[...tg.values()].sort((a,b)=>a.code.localeCompare(b.code)||b.L-a.L);
   const od=new Map<any,any>();
   for(const x of items){let e=od.get(x.code);
-    if(!e)od.set(x.code,e={cat:x.cat,sub:x.sub,code:x.code,desc:x.dItem,t:x.t,um:x.t==='barra'?'m':'pz',qty:0,kg:0,kgZ:0,zinc:x.zinc,cost:0,sd:x.sd});
+    if(!e)od.set(x.code,e={cat:x.cat,sub:x.sub,code:x.code,art:x.art,desc:x.dItem,t:x.t,um:x.t==='barra'?'m':'pz',qty:0,kg:0,kgZ:0,zinc:x.zinc,cost:0,sd:x.sd});
     e.qty+=x.t==='barra'?x.q*x.L:x.q; e.kg+=x.kgT; e.kgZ+=x.kgZ; e.cost+=x.cost;}
   const ordini=[...CATS,'NON TROVATO'].map(c=>({cat:c,items:[...od.values()].filter(e=>e.cat===c).sort((a,b)=>(a.sub||'').localeCompare(b.sub||'')||a.code.localeCompare(b.code))})).filter(g=>g.items.length);
   const sum=k=>items.reduce((a,x)=>a+x[k],0);

@@ -55,3 +55,15 @@ describe('margine sulla lavorazione', () => {
     expect(r.prezzo).toBeCloseTo((r.total - lav - zinc) / 0.8 + lav / 0.5 + zinc / 0.9, 6);
   });
 });
+
+describe('codice articolo', () => {
+  it('si mostra al posto della chiave senza cambiare il calcolo', () => {
+    const d = defaultData(), p = prev('12'), t0 = compute(d, p).total;
+    const it = d.listino.find((x: any) => x.c === 'IPE 140')!;
+    it.art = 'ART-0001';
+    const r = compute(d, p), l = r.lines.find((x: any) => x.code === 'IPE 140')!;
+    expect(l.art).toBe('ART-0001');
+    expect(r.total).toBe(t0);
+    expect(r.lines.find((x: any) => x.code !== 'IPE 140' && x.code)!.art).toBe(r.lines.find((x: any) => x.code !== 'IPE 140' && x.code)!.code);   // senza codice articolo resta la chiave
+  });
+});

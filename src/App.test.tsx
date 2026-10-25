@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Prova di fumo dell'interfaccia: ogni scheda si disegna con tutte le tendine aperte, i campi ricalcolano, gli Excel si generano.
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import App from './App';
 import { S, TABS, commit } from './store/state';
@@ -94,6 +94,28 @@ describe('archivio: cruscotto e mappa', () => {
     expect(container.querySelector('.nbadge')!.textContent).toBe('1');
     expect(container.querySelector('[data-fold="cf-agenda"]')!.textContent).toContain('Richiamare il cliente');
     act(() => { delete S.prev._id; S.arch = []; S.ui.tab = 'archivio'; commit(); });
+  });
+});
+
+describe('settori', () => {
+  it('menu per settori: i tracker hanno le schede vere, gli altri «in sviluppo»; i vecchi preventivi sono tracker', async () => {
+    const { settoreDi } = await import('./domain/settori');
+    expect(settoreDi({})).toBe('tracker');
+    expect(settoreDi({ settore: 'serre' })).toBe('serre');
+    act(() => { S.ui.set = 'tracker'; S.ui.area = ''; S.ui.tab = 'archivio'; commit(); });
+    const { container } = render(<App />);
+    const nav = container.querySelector('nav')!;
+    for (const t of ['Energia', 'Vigneti', 'Serre', 'Recinzioni', 'Dati comuni']) expect(nav.textContent).toContain(t);
+    expect(nav.textContent).not.toContain('Configura');   // aree chiuse
+    fireEvent.click(within(nav).getByText('Serre'));
+    fireEvent.click(within(nav).getByText('Configura'));
+    expect(container.querySelector('main')!.textContent).toContain('in sviluppo');
+    fireEvent.click(within(nav).getByText('Energia'));
+    expect(nav.textContent).toContain('Impianti fissi');
+    fireEvent.click(within(nav).getByText('Tracker solari'));
+    fireEvent.click(within(nav).getByText('Configura'));
+    expect(container.querySelector('main')!.textContent).not.toContain('in sviluppo');
+    act(() => { S.ui.tab = 'archivio'; commit(); });
   });
 });
 

@@ -22,6 +22,15 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Inter","Segoe
 .side nav button:hover{background:rgba(255,255,255,.06);color:#fff}
 .side nav button.on{background:var(--acc2);color:#fff;font-weight:600;box-shadow:inset 3px 0 var(--yel)}
 .side nav button.on svg{opacity:1}
+.nset{display:flex;flex-direction:column;gap:1px}
+.side nav .nsh{color:#e4eaed;font-weight:600}
+.side nav .nsh svg{transition:transform .15s;opacity:.6}
+.nset.open .nsh svg{transform:rotate(90deg)}
+.nset>button:not(.nsh){padding-left:22px}
+.nset .nset>.nsh{padding-left:22px;font-weight:500}
+.nset .nset>button:not(.nsh){padding-left:36px}
+.side nav .nsh.cur{color:#fff;box-shadow:inset 3px 0 var(--yel)}
+.side nav .nsoon{margin-left:auto;font-style:normal;font-size:10px;font-weight:500;color:#8a949a;white-space:nowrap}
 .mainc{min-width:0;display:flex;flex-direction:column}
 .mainc>header{background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:9}
 .top{display:flex;align-items:center;gap:18px;padding:12px 28px;flex-wrap:wrap;max-width:1560px;margin:0 auto;width:100%}

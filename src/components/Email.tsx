@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { ATTESA, traGiorniLavorativi } from '../domain/calendario';
 import { dFmt, dToday, isoDay } from '../domain/plan';
+import { linkPosta, telefono } from '../domain/posta';
 import { S, commit } from '../store/state';
 import { toast } from '../store/actions';
 import { bozzaEmail, cloud, salvaScadenza } from '../store/remote';
@@ -22,11 +23,19 @@ export function contestoEmail(preventivo_id?: string | null, scadenza_id?: strin
     s && `voce d'agenda "${s.titolo}" del ${s.giorno}`].filter(Boolean).join('; ');
 }
 
-/** Apre in una scheda nuova la finestra di scrittura di Gmail, sull'account di chi è collegato all'app. */
+/** Apre la mail compilata: sul telefono nell'app Gmail (come il pulsante di Telegram), sul computer in una scheda nuova
+ *  con la finestra di scrittura di Gmail, sull'account di chi è collegato all'app. */
 export function apriGmail(a: string, oggetto: string, testo: string) {
   const me = cloud.me?.email || cloud.session?.user.email || '0';
   const q = new URLSearchParams({ view: 'cm', fs: '1', to: a.trim(), su: oggetto, body: testo });
-  window.open(`https://mail.google.com/mail/u/${encodeURIComponent(me)}/?${q.toString().replace(/\+/g, '%20')}`, '_blank');
+  const web = `https://mail.google.com/mail/u/${encodeURIComponent(me)}/?${q.toString().replace(/\+/g, '%20')}`;
+  if (!telefono(navigator.userAgent)) { window.open(web, '_blank'); return; }
+  // Se l'app Gmail non c'è la pagina resta visibile: dopo un attimo si ripiega su Gmail web.
+  let uscito = false;
+  const via = () => { if (document.hidden) uscito = true; };
+  document.addEventListener('visibilitychange', via);
+  setTimeout(() => { document.removeEventListener('visibilitychange', via); if (!uscito && !document.hidden) window.open(web, '_blank'); }, 1500);
+  location.href = linkPosta(a, oggetto, testo, navigator.userAgent).gmail;
 }
 
 /** chiave = commessa o voce a cui legare i destinatari ricordati; preventivo = commessa del promemoria «Attesa risposta». */

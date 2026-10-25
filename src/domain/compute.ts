@@ -52,7 +52,7 @@ export function compute(data,prev){
       if(!it)warn.add(`Codice "${code}" non trovato nel listino (${t.g})`);
       const c=costLine(it,q1*n,L,mz);
       const base=t.d||(it?it.d:code);
-      lines.push({riga:i,rigaLabel:out.label,gruppo:t.g,cat:it?it.cat:'NON TROVATO',sub:it?it.sub:'',code,
+      lines.push({riga:i,rigaLabel:out.label,gruppo:t.g,cat:it?it.cat:'NON TROVATO',sub:it?it.sub:'',code,art:(it&&it.art)||code,
         desc:base+(num(L)&&it&&it.t==='barra'?` · L ${fL(L)} m`:''),L:it&&it.t==='barra'?num(L):'',q:q1*n,qPer:q1,sd:it&&it.sd,...c});
     }
     return out;
@@ -68,7 +68,7 @@ export function compute(data,prev){
     const v=num(e.val); let imp=0,q=1;
     if(e.modo==='tracker'){imp=v*nTracker;q=nTracker;} else if(e.modo==='kwp'){imp=v*kwp;q=kwp;} else if(e.modo==='perc'){imp=base*v/100;} else imp=v;
     const c={peso:0,mat:0,zinc:0,lav:0,acq:0,altro:0}; c[e.voce||'altro']=imp; e._imp=imp;
-    lines.push({riga:'extra',rigaLabel:'VOCI EXTRA',gruppo:'VOCI EXTRA',cat:'VOCI EXTRA',sub:EXTRA_VOCI.find(x=>x[0]===(e.voce||'altro'))![1],code:'',desc:e.desc||'(senza descrizione)',L:'',q,qPer:q,...c});
+    lines.push({riga:'extra',rigaLabel:'VOCI EXTRA',gruppo:'VOCI EXTRA',cat:'VOCI EXTRA',sub:EXTRA_VOCI.find(x=>x[0]===(e.voce||'altro'))![1],code:'',art:'',desc:e.desc||'(senza descrizione)',L:'',q,qPer:q,...c});
   }
   const T={peso:0,mat:0,zinc:0,lav:0,acq:0,altro:0};
   // Pesi per categoria (kg): totali e per riga tracker; le voci extra non pesano.
@@ -103,7 +103,7 @@ export function buildTree(lines,levels){
   }
   return root;
 }
-export const leafLv=l=>({key:l.code+'|'+l.L+'|'+l.desc,label:l.desc,sub:l.code});
+export const leafLv=l=>({key:l.code+'|'+l.L+'|'+l.desc,label:l.desc,sub:l.art??l.code});
 export const VIEWS={
   cat:{name:'Per categoria',levels:[
     l=>({key:l.cat,label:l.cat}),

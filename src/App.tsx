@@ -20,18 +20,27 @@ import { Presenza } from './components/Presenza';
 import { Assistente } from './components/Assistente';
 import { Telegram } from './components/Telegram';
 import { nScadute } from './pages/Calendario';
+import { InSviluppo } from './pages/InSviluppo';
+import { AREE, PASSI as PASSI0, SETTORI, infoSettore, type Settore } from './domain/settori';
 import { cloud, isAdmin, logout, setCloudToast } from './store/remote';
 
 const VIEWS: Record<Tab, () => React.ReactNode> = {
   archivio: Home, prev: Preventivi, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
   extra: Extra, margini: Margini, invia: Invia, docs: Documenti, lavor: Lavorazione, mont: Montaggio, utenti: Utenti,
 };
-const goTab = (t: Tab) => { S.ui.tab = t; window.scrollTo(0, 0); commit(); };
+const goTab = (t: Tab, set?: Settore) => { S.ui.tab = t; if (set) S.ui.set = set; window.scrollTo(0, 0); commit(); };
 const save = () => { (document.activeElement as HTMLElement | null)?.blur?.(); archSave(false); commit(); };
 
-// Barra laterale: schede raggruppate per fase di lavoro.
-const GROUPS: [string, Tab[]][] = [['', ['archivio', 'prev']], ['Preventivo', ['config', 'costi', 'extra', 'margini', 'invia', 'docs']],
-  ['Produzione e cantiere', ['lavor', 'mont']], ['Dati di base', ['listino', 'distinte']], ['Amministrazione', ['utenti']]];
+// Barra laterale: Home e archivio, poi i settori (ognuno con la sua cascata di schede, aperto uno alla volta), poi i dati comuni.
+// Le macro aree partono chiuse; aprendone una si chiude l'altra. Energia ha due settori, le altre aree uno solo (le schede stanno sotto l'area).
+const PASSI = PASSI0 as readonly Tab[];
+const CHEV = 'M9 6l6 6-6 6';
+const apriArea = (g: string, ss: typeof SETTORI) => {
+  S.ui.area = S.ui.area === g ? '' : g;
+  if (ss.length === 1) { S.ui.set = ss[0].k; S.ui.sopen = true; }
+  commit();
+};
+const apriSet = (k: Settore) => { S.ui.sopen = !(S.ui.set === k && S.ui.sopen); S.ui.set = k; commit(); };
 const ICON: Record<Tab, string> = {
   archivio: 'M3 11l9-7 9 7M5 9.5V20h5v-6h4v6h5V9.5',
   prev: 'M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9zM14 3v6h6M8 13h8M8 17h5',
@@ -69,9 +78,10 @@ export default function App() {
   }, []);
 
   if (cloud.fase !== 'locale' && cloud.fase !== 'pronto') return <><Accesso />{node}</>;
-  const View = VIEWS[S.ui.tab];
-  // In Home e nell'archivio la barra in alto non mostra preventivo e valori: resta solo il pulsante del menu sugli schermi stretti.
-  const home = S.ui.tab === 'archivio' || S.ui.tab === 'prev';
+  // Le schede di un settore non ancora pronto mostrano la pagina «in sviluppo».
+  const set = infoSettore(S.ui.set), passo = PASSI.includes(S.ui.tab), View = passo && !set.pronto ? InSviluppo : VIEWS[S.ui.tab];
+  // In Home, nell'archivio e nei settori in sviluppo la barra in alto non mostra preventivo e valori: resta solo il pulsante del menu sugli schermi stretti.
+  const home = S.ui.tab === 'archivio' || S.ui.tab === 'prev' || (passo && !set.pronto);
   const dirty = isDirty(), nSc = cloud.fase === 'pronto' || cloud.fase === 'locale' ? nScadute() : 0;
   return (
     <div className="app">
@@ -79,13 +89,38 @@ export default function App() {
       <aside className={`side ${menu ? 'open' : ''}`}>
         <div className="brand"><img src="/logo-terranova.png" alt="Terranova" /></div>
         <nav>
-          {GROUPS.filter(([, tabs]) => isAdmin() || !tabs.includes('utenti')).map(([g, tabs]) => (
-            <div key={g || 'home'} className="ng">
-              {g && <div className="ngt">{g}</div>}
-              {tabs.map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span>
-                {k === 'archivio' && nSc > 0 && <em className="nbadge" title={`${nSc} voci in agenda scadute`}>{nSc}</em>}</button>)}
-            </div>
-          ))}
+          <div className="ng">
+            {(['archivio', 'prev'] as Tab[]).map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span>
+              {k === 'archivio' && nSc > 0 && <em className="nbadge" title={`${nSc} voci in agenda scadute`}>{nSc}</em>}</button>)}
+          </div>
+          <div className="ng">
+            <div className="ngt">Settori</div>
+            {AREE.map(g => {
+              const ss = SETTORI.filter(s => s.gruppo === g), aperta = S.ui.area === g, solo = ss.length === 1;
+              const qui = PASSI.includes(S.ui.tab) && ss.some(s => s.k === S.ui.set);   // la scheda aperta è in quest'area
+              const passi = (s: (typeof SETTORI)[number]) => PASSI.map(k => <button key={k} className={S.ui.tab === k && S.ui.set === s.k ? 'on' : ''} onClick={() => { setMenu(false); goTab(k, s.k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span></button>);
+              return (
+                <div key={g} className={`nset area${aperta ? ' open' : ''}`}>
+                  <button className={`nsh${qui && !aperta ? ' cur' : ''}`} aria-expanded={aperta} onClick={() => apriArea(g, ss)}><Ico d={CHEV} /><span>{g}</span>
+                    {ss.every(s => !s.pronto) && <em className="nsoon">in sviluppo</em>}</button>
+                  {aperta && (solo ? passi(ss[0]) : ss.map(s => {
+                    const su = S.ui.set === s.k && S.ui.sopen;
+                    return (
+                      <div key={s.k} className={`nset${su ? ' open' : ''}`}>
+                        <button className="nsh" aria-expanded={su} onClick={() => apriSet(s.k)}><Ico d={CHEV} /><span>{s.nome}</span>
+                          {!s.pronto && <em className="nsoon">in sviluppo</em>}</button>
+                        {su && passi(s)}
+                      </div>
+                    );
+                  }))}
+                </div>
+              );
+            })}
+          </div>
+          <div className="ng">
+            <div className="ngt">Dati comuni</div>
+            {(['listino', ...(isAdmin() ? ['utenti'] : [])] as Tab[]).map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span></button>)}
+          </div>
         </nav>
         <Presenza />
         <Telegram />
@@ -104,7 +139,7 @@ export default function App() {
             </button>
             {!home && <>
             <div className="cur">
-              <small>{LABEL[S.ui.tab]}</small>
+              <small>{passo ? `${set.nome} · ` : ''}{LABEL[S.ui.tab]}</small>
               <span className={`curname ${dirty ? 'dirty' : ''}`} title={dirty ? 'Modifiche non salvate' : 'Salvato'}>
                 {S.prev._id ? S.prev._nome : 'Nuovo preventivo'}
                 {isBlank(S.prev) ? null : dirty ? <i> ● non salvato</i> : <i className="ok"> ✓ salvato</i>}
