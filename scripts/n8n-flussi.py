@@ -2,6 +2,7 @@
 
   n8n/agenda-chat-telegram.json      chat con l'assistente, pulsanti "Me ne occupo"/"Risolto", /collega e /id
   n8n/agenda-avvisi-riepilogo.json   avviso nel gruppo delle voci nuove (dal database) e riepilogo del mattino
+  n8n/agenda-email-gmail.json        email inoltrate all'indirizzo dell'agenda (POSTA): l'AI le propone in privato come appunto, promemoria o riunione
 
 Uso:  python scripts/n8n-flussi.py [indirizzo dell'app]
       (predefinito: anteprima del branch calendario; per la produzione: https://conf-five.vercel.app)
@@ -13,6 +14,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = (sys.argv[1] if len(sys.argv) > 1 else 'https://conf-git-calendario-giovanne.vercel.app').rstrip('/')
 # L'anteprima Vercel e' protetta: n8n entra con il codice "Protection Bypass for Automation". In produzione non serve.
 API = BASE + '/api/agenda' + ('' if 'conf-five' in BASE else '?x-vercel-protection-bypass=INSERISCI_CODICE_BYPASS')
+
+# Indirizzo a cui i colleghi inoltrano le email da mettere in agenda: un "+agenda" sulla casella collegata a n8n,
+# niente casella nuova. Chi inoltra deve essere un utente dell'app con Telegram collegato.
+POSTA = 'g.sorrentino+agenda@terranovasrl.net'
+GMAIL = {'gmailOAuth2': {'id': '', 'name': 'Gmail Agenda'}}
 
 U = lambda: str(uuid.uuid4())
 URL = "={{ $('Impostazioni').item.json.url }}"
@@ -107,8 +113,8 @@ chat = [
     node('Telegram Trigger', 'n8n-nodes-base.telegramTrigger', 1.2, [0, 300], {'updates': ['message', 'callback_query'], 'additionalFields': {}}, TG),
     impostazioni('Impostazioni', [220, 300]),
     node('È un pulsante?', 'n8n-nodes-base.if', 2.2, [440, 300], cond('!!$json.callback_query')),
-    # Pulsanti sotto gli avvisi del gruppo: "prendi:<id>" e "risolvi:<id>".
-    http('Pulsante → app', [680, 120], "{ azione: $json.callback_query.data.split(':')[0], id: $json.callback_query.data.split(':')[1], telegram_id: $json.callback_query.from.id }"),
+    # Pulsanti sotto gli avvisi del gruppo: "prendi:<id>" e "risolvi:<id>"; sotto le email in arrivo "pe:<id>:<scelta>".
+    http('Pulsante → app', [680, 120], "{ azione: $json.callback_query.data.split(':')[0], id: $json.callback_query.data.split(':')[1], scelta: $json.callback_query.data.split(':')[2] || '', telegram_id: $json.callback_query.from.id }"),
     node('Risposta al pulsante', 'n8n-nodes-base.telegram', 1.2, [900, 120], {'resource': 'callback', 'queryId': "={{ $('Telegram Trigger').item.json.callback_query.id }}",
          'additionalFields': {'text': '={{ ($json.ok ? $json.testo : $json.errore).slice(0, 190) }}', 'show_alert': '={{ !$json.ok }}'}}, TG),
     node('Andato a buon fine?', 'n8n-nodes-base.if', 2.2, [1120, 120], cond("$('Pulsante → app').item.json.ok")),
@@ -258,6 +264,20 @@ avvisi_conn = {
     'Riepilogo → app': {'main': [to('Riepilogo nel gruppo')]},
 }
 
+# ---------- Flusso 3: email in arrivo (Gmail) ----------
+# Ogni email nuova inoltrata a POSTA va all'app, che la fa leggere all'AI e manda la proposta in privato a chi l'ha inoltrata.
+# Le scelte (pulsanti "pe:...") arrivano al flusso della chat. Le email di chi non e' un utente collegato restano ok:false nelle esecuzioni.
+EM = "$('Email in arrivo').item.json"
+email = [
+    node('Email in arrivo', 'n8n-nodes-base.gmailTrigger', 1.2, [0, 200], {'pollTimes': {'item': [{'mode': 'everyMinute'}]}, 'simple': False,
+         'filters': {'q': 'to:' + POSTA}, 'options': {}}, GMAIL),
+    node('Impostazioni email', 'n8n-nodes-base.set', 3.4, [220, 200], {'assignments': {'assignments': [
+        {'id': U(), 'name': 'url', 'type': 'string', 'value': API}]}, 'includeOtherFields': True, 'options': {}}),
+    http('Email → app', [440, 200], "{ azione: 'posta', gmail_id: " + EM + ".id, da: " + EM + ".from?.value?.[0]?.address || " + EM + ".from?.text || '', oggetto: "
+         + EM + ".subject || '', testo: " + EM + ".text || '', data: " + EM + ".date || '' }", url="={{ $('Impostazioni email').item.json.url }}"),
+]
+email_conn = {'Email in arrivo': {'main': [to('Impostazioni email')]}, 'Impostazioni email': {'main': [to('Email → app')]}}
+
 SETTINGS = {'executionOrder': 'v1', 'timezone': 'Europe/Rome'}
 # Copia pronta da importare con il codice di bypass di .env.local (VERCEL_BYPASS): va in n8n/da-importare/, esclusa da GitHub.
 try:
@@ -268,14 +288,15 @@ for cartella, sost in [('n8n', None), (os.path.join('n8n', 'da-importare'), BYPA
     if cartella != 'n8n' and not sost: continue
     os.makedirs(os.path.join(ROOT, cartella), exist_ok=True)
     for nome, nodi, conn, file in [('Agenda - Chat Telegram', chat, chat_conn, 'agenda-chat-telegram.json'),
-                                   ('Agenda - Avvisi e riepilogo', avvisi, avvisi_conn, 'agenda-avvisi-riepilogo.json')]:
+                                   ('Agenda - Avvisi e riepilogo', avvisi, avvisi_conn, 'agenda-avvisi-riepilogo.json'),
+                                   ('Agenda - Email Gmail', email, email_conn, 'agenda-email-gmail.json')]:
         t = json.dumps({'name': nome, 'nodes': nodi, 'connections': conn, 'settings': SETTINGS, 'pinData': {}}, ensure_ascii=False, indent=1)
         with open(os.path.join(ROOT, cartella, file), 'w', encoding='utf-8') as f:
             f.write(t.replace('INSERISCI_CODICE_BYPASS', sost) if sost else t)
         print('Scritto ' + os.path.join(cartella, file).replace(os.sep, '/'))
 
 # ---------- Un unico flusso completo, pronto all'uso (solo in n8n/da-importare/) ----------
-# Segreto e bypass gia' dentro: in n8n restano da collegare solo il token Telegram e la chiave del modello,
+# Segreto e bypass gia' dentro: in n8n restano da collegare solo il token Telegram, la chiave del modello e Gmail,
 # piu' l'id del gruppo nel nodo "Impostazioni avvisi" (si ricava scrivendo /id nel gruppo).
 try:
     ENV = dict(l.strip().split('=', 1) for l in open(os.path.join(ROOT, '.env.local'), encoding='utf-8') if '=' in l)
@@ -288,7 +309,9 @@ if SEGRETO and BYPASS:
         if n['name'] == 'Impostazioni': n['name'] = 'Impostazioni avvisi'
         n['position'] = [n['position'][0], n['position'][1] + 1150]
     av_conn = json.loads(json.dumps(avvisi_conn).replace('"Impostazioni"', '"Impostazioni avvisi"'))
-    tutti = json.loads(json.dumps(chat)) + av
+    em = json.loads(json.dumps(email))
+    for n in em: n['position'] = [n['position'][0], n['position'][1] + 1650]
+    tutti = json.loads(json.dumps(chat)) + av + em
     for n in tutti:
         p = n['parameters']
         if p.get('authentication') == 'genericCredentialType':   # richieste all'app: segreto nell'intestazione
@@ -299,7 +322,7 @@ if SEGRETO and BYPASS:
             p['authentication'] = 'none'; n.pop('credentials', None)
         if n['name'] == 'È un inserimento?':
             n['parameters'] = cond(f"$json.headers['x-agenda-secret'] === '{SEGRETO}' && $json.body.type === 'INSERT' && !!$json.body.record?.id")
-    t = json.dumps({'name': 'Agenda Terranova - Telegram', 'nodes': tutti, 'connections': {**chat_conn, **av_conn}, 'settings': SETTINGS, 'pinData': {}},
+    t = json.dumps({'name': 'Agenda Terranova - Telegram', 'nodes': tutti, 'connections': {**chat_conn, **av_conn, **email_conn}, 'settings': SETTINGS, 'pinData': {}},
                    ensure_ascii=False, indent=1).replace('INSERISCI_CODICE_BYPASS', BYPASS)
     with open(os.path.join(ROOT, 'n8n', 'da-importare', 'agenda-completo.json'), 'w', encoding='utf-8') as f: f.write(t)
     print('Scritto n8n/da-importare/agenda-completo.json (flusso unico, con segreto e bypass)')

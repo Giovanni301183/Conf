@@ -1,0 +1,114 @@
+{
+ "name": "Agenda - Email Gmail",
+ "nodes": [
+  {
+   "parameters": {
+    "pollTimes": {
+     "item": [
+      {
+       "mode": "everyMinute"
+      }
+     ]
+    },
+    "simple": false,
+    "filters": {
+     "q": "to:g.sorrentino+agenda@terranovasrl.net"
+    },
+    "options": {}
+   },
+   "id": "84efaf3b-3b21-40c7-b87b-e6d84cf8a826",
+   "name": "Email in arrivo",
+   "type": "n8n-nodes-base.gmailTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    200
+   ],
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "",
+     "name": "Gmail Agenda"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "assignments": {
+     "assignments": [
+      {
+       "id": "700a7e61-1e31-4602-b096-a9fd6de211ce",
+       "name": "url",
+       "type": "string",
+       "value": "https://conf-git-calendarrrrr-giovanne.vercel.app/api/agenda?x-vercel-protection-bypass=INSERISCI_CODICE_BYPASS"
+      }
+     ]
+    },
+    "includeOtherFields": true,
+    "options": {}
+   },
+   "id": "11e6ea3b-099d-4ad1-a55e-a8dd25ba0ff4",
+   "name": "Impostazioni email",
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    220,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('Impostazioni email').item.json.url }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ azione: 'posta', gmail_id: $('Email in arrivo').item.json.id, da: $('Email in arrivo').item.json.from?.value?.[0]?.address || $('Email in arrivo').item.json.from?.text || '', oggetto: $('Email in arrivo').item.json.subject || '', testo: $('Email in arrivo').item.json.text || '', data: $('Email in arrivo').item.json.date || '' }) }}",
+    "options": {}
+   },
+   "id": "a9f9504c-3fa7-4566-90cd-c459896455d5",
+   "name": "Email → app",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    440,
+    200
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Agenda - segreto"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Email in arrivo": {
+   "main": [
+    [
+     {
+      "node": "Impostazioni email",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Impostazioni email": {
+   "main": [
+    [
+     {
+      "node": "Email → app",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "Europe/Rome"
+ },
+ "pinData": {}
+}
