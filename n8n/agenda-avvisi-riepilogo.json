@@ -8,7 +8,7 @@
     "authentication": "headerAuth",
     "options": {}
    },
-   "id": "85e8d443-c8a3-4535-a6ea-07dbb22517c5",
+   "id": "7e2c7c22-fb44-4bf9-b7f8-5e6e3ba6c927",
    "name": "Voce nuova (Supabase)",
    "type": "n8n-nodes-base.webhook",
    "typeVersion": 2,
@@ -33,7 +33,7 @@
      },
      "conditions": [
       {
-       "id": "d63b3b88-f1b4-4686-82bd-eb23c8df77cf",
+       "id": "cfbc5a8a-6a4e-4e7f-89a5-13bdf4b009aa",
        "leftValue": "={{ $json.body.type === 'INSERT' && !!$json.body.record?.id }}",
        "rightValue": "",
        "operator": {
@@ -47,7 +47,7 @@
     },
     "options": {}
    },
-   "id": "7bb19b3d-334e-4a52-bdee-2c8da6ef25cc",
+   "id": "80e0c008-7820-40b7-9f9c-10df0afd78a1",
    "name": "È un inserimento?",
    "type": "n8n-nodes-base.if",
    "typeVersion": 2.2,
@@ -61,13 +61,13 @@
     "assignments": {
      "assignments": [
       {
-       "id": "8e43f207-5816-43a4-b975-63916bee3560",
+       "id": "b4c94eb2-f2a1-4250-a65e-ddd4c9952939",
        "name": "url",
        "type": "string",
        "value": "https://conf-git-calendarrrrr-giovanne.vercel.app/api/agenda?x-vercel-protection-bypass=INSERISCI_CODICE_BYPASS"
       },
       {
-       "id": "6f292dfc-db3b-4086-a40c-2e5df1966e1b",
+       "id": "cfa4914a-874c-4744-a527-5013c600cb77",
        "name": "gruppo",
        "type": "string",
        "value": "INSERISCI_ID_GRUPPO"
@@ -77,7 +77,7 @@
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "2dbc3645-8ab1-4536-9bbe-9e93561b90e9",
+   "id": "a8c9fc8a-575a-480b-954c-2bb33fec8fa1",
    "name": "Impostazioni",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -97,7 +97,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'annuncio', id: $('Voce nuova (Supabase)').item.json.body.record.id }) }}",
     "options": {}
    },
-   "id": "5698e860-f73a-4d6f-9076-c924982a08b2",
+   "id": "99e2de9d-4ea4-4c4b-8a26-5c2345a5183f",
    "name": "Annuncio → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -122,7 +122,7 @@
      },
      "conditions": [
       {
-       "id": "c70af213-2a2a-44c5-8dbb-774690c73555",
+       "id": "e7d0ede3-e3e3-4a1d-849f-91414285e2f9",
        "leftValue": "={{ $json.ok && $json.invia }}",
        "rightValue": "",
        "operator": {
@@ -136,7 +136,7 @@
     },
     "options": {}
    },
-   "id": "55980a64-4e24-4c0c-ade6-6b552a9ef579",
+   "id": "6a420820-b3f1-4dd4-9591-4bf3d6169ee8",
    "name": "Da annunciare?",
    "type": "n8n-nodes-base.if",
    "typeVersion": 2.2,
@@ -176,7 +176,7 @@
      "appendAttribution": false
     }
    },
-   "id": "8f77d315-fac8-443a-9a24-2fb4bde5a7ab",
+   "id": "ca683f70-fe87-479b-a41b-36d6eb54b77b",
    "name": "Annuncia nel gruppo",
    "type": "n8n-nodes-base.telegram",
    "typeVersion": 1.2,
@@ -202,7 +202,7 @@
      ]
     }
    },
-   "id": "aa35097a-81ec-4e84-aefc-2d25d51fda18",
+   "id": "9fdb2611-dfd4-4fb0-b580-2ceb9cce7526",
    "name": "Ogni mattina lun-ven 8:00",
    "type": "n8n-nodes-base.scheduleTrigger",
    "typeVersion": 1.2,
@@ -216,13 +216,13 @@
     "assignments": {
      "assignments": [
       {
-       "id": "f816848c-146a-407b-b6c0-69bf4df3bf40",
+       "id": "261ed037-c497-4dad-ac0f-fd7b41a49791",
        "name": "url",
        "type": "string",
        "value": "https://conf-git-calendarrrrr-giovanne.vercel.app/api/agenda?x-vercel-protection-bypass=INSERISCI_CODICE_BYPASS"
       },
       {
-       "id": "c3480299-fed5-48d1-9711-71dc4cdddc6a",
+       "id": "a527a8ce-727b-4589-8837-a71b2969747c",
        "name": "gruppo",
        "type": "string",
        "value": "INSERISCI_ID_GRUPPO"
@@ -232,7 +232,7 @@
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "3da4ffe9-5662-401e-9e0b-1af68bd6e5e5",
+   "id": "b1b1e7b9-a7cb-4779-9ee7-e929134e086d",
    "name": "Impostazioni riepilogo",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -252,7 +252,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'riepilogo' }) }}",
     "options": {}
    },
-   "id": "5429bdd8-60c7-4416-84e7-0a6d0c03c88b",
+   "id": "64b64bce-ae49-4d3d-87c7-7b764bd9d2af",
    "name": "Riepilogo → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -275,7 +275,7 @@
      "appendAttribution": false
     }
    },
-   "id": "c93ad109-1931-4202-bda7-bc837ecb1485",
+   "id": "41171c54-4327-4358-b7c1-79ae5b3d184e",
    "name": "Riepilogo nel gruppo",
    "type": "n8n-nodes-base.telegram",
    "typeVersion": 1.2,

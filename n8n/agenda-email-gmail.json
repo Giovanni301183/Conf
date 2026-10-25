@@ -12,11 +12,11 @@
     },
     "simple": false,
     "filters": {
-     "q": "to:g.sorrentino+agenda@terranovasrl.net"
+     "q": "to:g.sorrentino+agenda@terranovasrl.net OR (from:me to:me subject:(Fwd OR I))"
     },
     "options": {}
    },
-   "id": "84efaf3b-3b21-40c7-b87b-e6d84cf8a826",
+   "id": "2118d167-4315-4e7d-a70c-ca910b2eb150",
    "name": "Email in arrivo",
    "type": "n8n-nodes-base.gmailTrigger",
    "typeVersion": 1.2,
@@ -36,7 +36,7 @@
     "assignments": {
      "assignments": [
       {
-       "id": "700a7e61-1e31-4602-b096-a9fd6de211ce",
+       "id": "7dd3dfe9-503d-4892-a5b4-f9efaf1eca10",
        "name": "url",
        "type": "string",
        "value": "https://conf-git-calendarrrrr-giovanne.vercel.app/api/agenda?x-vercel-protection-bypass=INSERISCI_CODICE_BYPASS"
@@ -46,7 +46,7 @@
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "11e6ea3b-099d-4ad1-a55e-a8dd25ba0ff4",
+   "id": "cc366706-223b-4b16-852a-ec42e36a92ca",
    "name": "Impostazioni email",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -66,7 +66,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'posta', gmail_id: $('Email in arrivo').item.json.id, da: $('Email in arrivo').item.json.from?.value?.[0]?.address || $('Email in arrivo').item.json.from?.text || '', oggetto: $('Email in arrivo').item.json.subject || '', testo: $('Email in arrivo').item.json.text || '', data: $('Email in arrivo').item.json.date || '' }) }}",
     "options": {}
    },
-   "id": "a9f9504c-3fa7-4566-90cd-c459896455d5",
+   "id": "f3e8d3ab-d7be-4cc2-abcb-7ebbcdf90399",
    "name": "Email → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,

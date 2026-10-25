@@ -18,6 +18,8 @@ API = BASE + '/api/agenda' + ('' if 'conf-five' in BASE else '?x-vercel-protecti
 # Indirizzo a cui i colleghi inoltrano le email da mettere in agenda: un "+agenda" sulla casella collegata a n8n,
 # niente casella nuova. Chi inoltra deve essere un utente dell'app con Telegram collegato.
 POSTA = 'g.sorrentino+agenda@terranovasrl.net'
+# Vale anche l'inoltro a se' stessi (dal telefono il completamento automatico toglie spesso il "+agenda").
+CERCA = f'to:{POSTA} OR (from:me to:me subject:(Fwd OR I))'
 GMAIL = {'gmailOAuth2': {'id': '', 'name': 'Gmail Agenda'}}
 
 U = lambda: str(uuid.uuid4())
@@ -270,7 +272,7 @@ avvisi_conn = {
 EM = "$('Email in arrivo').item.json"
 email = [
     node('Email in arrivo', 'n8n-nodes-base.gmailTrigger', 1.2, [0, 200], {'pollTimes': {'item': [{'mode': 'everyMinute'}]}, 'simple': False,
-         'filters': {'q': 'to:' + POSTA}, 'options': {}}, GMAIL),
+         'filters': {'q': CERCA}, 'options': {}}, GMAIL),
     node('Impostazioni email', 'n8n-nodes-base.set', 3.4, [220, 200], {'assignments': {'assignments': [
         {'id': U(), 'name': 'url', 'type': 'string', 'value': API}]}, 'includeOtherFields': True, 'options': {}}),
     http('Email → app', [440, 200], "{ azione: 'posta', gmail_id: " + EM + ".id, da: " + EM + ".from?.value?.[0]?.address || " + EM + ".from?.text || '', oggetto: "
