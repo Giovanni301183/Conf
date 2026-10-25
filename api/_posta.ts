@@ -2,7 +2,7 @@
 // e propone titolo, riassunto, giorno, ora e commessa. Non crea niente: la proposta arriva in chat privata su Telegram
 // e chi l'ha inoltrata sceglie con un pulsante se farne un appunto, un promemoria o una riunione (azioni posta e pe di /api/agenda).
 import Anthropic from '@anthropic-ai/sdk';
-import { ETICHETTE, pulisciEtichette } from '../src/domain/documenti.js';
+import { ETICHETTE, LIMITE_MB, pulisciEtichette } from '../src/domain/documenti.js';
 
 const MODELLO = 'claude-opus-5-5';
 
@@ -66,6 +66,26 @@ export async function leggiEmail(e: EmailIn, commesse: Commessa[], oggi: string)
     if (err instanceof Anthropic.APIError) return { errore: `Errore dal servizio AI (${err.status}): ${err.message}` };
     return { errore: (err as Error).message };
   }
+}
+
+/* ---------- Allegati dell'email ---------- */
+// n8n manda nome, tipo e peso ("12.3 kB") di ogni allegato; l'app dice quali caricare e dove (link firmato dello Storage).
+export interface AllegatoIn { chiave: string; nome: string; mime: string; peso?: string | number }
+/** Byte dal peso scritto da n8n ("523 B", "12.3 kB", "1.2 MB"); un numero vale gia' come byte. */
+export function byteDa(peso: unknown): number {
+  if (typeof peso === 'number') return peso;
+  const m = /([\d.,]+)\s*([kmg]?)b/i.exec(String(peso ?? ''));
+  return m ? Math.round(parseFloat(m[1].replace(',', '.')) * ({ '': 1, k: 1e3, m: 1e6, g: 1e9 } as Record<string, number>)[m[2].toLowerCase()]) : 0;
+}
+/** Allegati da tenere: niente loghi e immagini delle firme (immagini sotto 20 KB), niente inviti .ics, entro il limite per file; al massimo 10. */
+export function allegatiDaCaricare(aa: AllegatoIn[]): AllegatoIn[] {
+  return aa.filter(a => {
+    const nome = String(a.nome || ''), mime = String(a.mime || ''), b = byteDa(a.peso);
+    if (!a.chiave || !nome) return false;
+    if (mime === 'text/calendar' || /\.ics$/i.test(nome)) return false;
+    if (mime.startsWith('image/') && b > 0 && b < 20_000) return false;
+    return b <= LIMITE_MB * 1024 * 1024;
+  }).slice(0, 10);
 }
 
 /** Indirizzo email da un'intestazione From ("Mario Rossi <mario@x.it>" → mario@x.it). */

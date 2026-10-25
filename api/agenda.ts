@@ -16,9 +16,9 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { marginiBot, preventivoBot, variantiBot } from './_preventivo.js';
 import { linkGmail, scriviBozza } from './_email.js';
-import { indirizzo, leggiEmail, type Commessa, type Lettura } from './_posta.js';
+import { allegatiDaCaricare, indirizzo, leggiEmail, type Commessa, type Lettura } from './_posta.js';
 import { chiaveAvviso, daAvvisare, linkRiunione, minutiA } from '../src/domain/riunione.js';
-import { ETICHETTE, nomiEtichette, pulisciEtichette } from '../src/domain/documenti.js';
+import { ETICHETTE, cartellaPer, nomeSicuro, nomiEtichette, pulisciEtichette } from '../src/domain/documenti.js';
 
 export const GENERI = ['attivita', 'promemoria', 'scadenza', 'appuntamento', 'urgenza'] as const;
 export const CATEGORIE = ['STRUTTURA', 'BULLONERIA', 'ELETTROMECCANICO', 'ELETTRONICO'] as const;
@@ -261,13 +261,16 @@ async function modificaNota(db: Db, b: any, io: Me) {
 }
 
 /* ---------- Email in arrivo ---------- */
-export type Proposta = Lettura & { oggetto: string; link?: string };
+// allegati: file dell'email caricati da n8n nello Storage (cartella posta/...), legati alla nota o alla voce quando si sceglie.
+export interface AllegatoPosta { nome: string; mime: string; percorso: string }
+export type Proposta = Lettura & { oggetto: string; link?: string; allegati?: AllegatoPosta[] };
 /** Messaggio in chat privata con la lettura dell'email e i pulsanti "pe:<id>:<scelta>" (a appunto, p promemoria, r riunione, x ignora). */
 export function propostaTelegram(id: string, l: Proposta, commessa: string | null, oggi: string) {
   const giorno = l.giorno || prossimoLavorativo(oggi), b = (text: string, s: string) => [{ text, callback_data: `pe:${id}:${s}` }];
   const text = [`📧 Email${l.mittente ? ' di ' + l.mittente : ''}`, l.oggetto ? `Oggetto: ${l.oggetto}` : '', '', `👉 ${l.titolo}`, l.riassunto, '',
     l.link ? `🎥 ${l.link}` : '', commessa ? `Commessa: ${commessa}` : 'Commessa: non riconosciuta (l\'appunto resta libero)',
-    l.etichette?.length ? `Temi: ${nomiEtichette(l.etichette)}` : '', '', 'Cosa ne faccio?']
+    l.etichette?.length ? `Temi: ${nomiEtichette(l.etichette)}` : '',
+    l.allegati?.length ? `📎 ${l.allegati.length} allegat${l.allegati.length === 1 ? 'o' : 'i'}: ${l.allegati.map(a => a.nome).join(', ')}`.slice(0, 600) : '', '', 'Cosa ne faccio?']
     .filter((x, i, a) => x || (i > 0 && a[i - 1])).join('\n').slice(0, 4000);
   const tasti = [b(commessa ? '📝 Appunto nella commessa' : '📝 Appunto', 'a'), b(`🔔 Promemoria ${giornoIt(giorno)}`, 'p'),
     ...(l.giorno ? [b(`📅 Riunione ${giornoIt(l.giorno)}${l.ora ? ' ' + l.ora : ''}`, 'r')] : []), b('🗑 Ignora', 'x')];
@@ -288,14 +291,24 @@ async function postaInArrivo(db: Db, b: any, oggi: string) {
   const commesse = (cc || []) as Commessa[];
   const l = await leggiEmail({ da: String(b.da ?? ''), oggetto, testo: String(b.testo ?? ''), data: String(b.data ?? '') }, commesse, oggi);
   if ('errore' in l) return fail(l.errore);
-  const dati: Proposta = { ...l, oggetto, link: linkRiunione(String(b.testo ?? '')) };
+  // Allegati: ognuno ha il suo posto nello Storage; n8n li carica con i link firmati che tornano nella risposta.
+  const cartellaPosta = `posta/${crypto.randomUUID()}`;
+  const scelti = allegatiDaCaricare(Array.isArray(b.allegati) ? b.allegati : [])
+    .map((a, i) => ({ chiave: a.chiave, nome: a.nome.slice(0, 200), mime: a.mime || '', percorso: `${cartellaPosta}/${i + 1}_${nomeSicuro(a.nome)}` }));
+  const dati: Proposta = { ...l, oggetto, link: linkRiunione(String(b.testo ?? '')), allegati: scelti.map(({ chiave, ...a }) => a) };
   const { data: p, error } = await db.from('posta_proposte').insert({ email: u.email, gmail_id: gid, dati }).select('id').single();
   if (error) return error.code === '23505' ? { ok: true, doppia: true } : fail(error.message);
   const c = commesse.find(x => x.id === l.preventivo_id);
   const t = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ chat_id: u.telegram_id, ...propostaTelegram(p.id, dati, c ? c.nome + (c.num ? ` (N° ${c.num})` : '') : null, oggi) }) });
   if (!t.ok) return fail('Telegram non ha accettato la proposta' + (t.status === 403 ? ': il collega deve aprire la chat con il bot e premere Avvia.' : '.'));
-  return { ok: true, id: p.id, titolo: l.titolo };
+  const apikey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+  const caricamenti: { chiave: string; url: string; mime: string; apikey: string }[] = [];
+  for (const a of scelti) {
+    const { data: u } = await db.storage.from(BUCKET).createSignedUploadUrl(a.percorso);
+    if (u) caricamenti.push({ chiave: a.chiave, url: u.signedUrl, mime: a.mime || 'application/octet-stream', apikey });
+  }
+  return { ok: true, id: p.id, titolo: l.titolo, caricamenti };
 }
 
 /** Messaggio di avviso di una riunione che sta per iniziare, con il pulsante per entrare se c'e' il link. */
@@ -328,6 +341,22 @@ async function avvisiRiunioni(db: Db, oggi: string, adesso: string) {
   return { ok: true, avvisati: n };
 }
 
+const BUCKET = 'documenti';
+/** Allegati arrivati davvero nello Storage, legati alla nota o alla voce d'agenda appena creata. Ritorna quanti. */
+async function legaAllegati(db: Db, d: Proposta, dove: { nota_id: string } | { scadenza_id: string }, cartella: string | null, io: Me) {
+  const aa = d.allegati || [];
+  if (!aa.length) return 0;
+  const cart = aa[0].percorso.split('/').slice(0, 2).join('/');
+  const { data: ff } = await db.storage.from(BUCKET).list(cart, { limit: 100 });
+  const ci = new Map((ff || []).map((f: any) => [`${cart}/${f.name}`, f]));
+  const righe = aa.filter(a => ci.has(a.percorso)).map(a => ({ ...dove, tipo: 'file', cartella: cartella || cartellaPer(a.nome, a.mime), titolo: a.nome,
+    percorso: a.percorso, mime: a.mime || null, dimensione: ci.get(a.percorso)?.metadata?.size ?? null, creato_da: io.email }));
+  if (!righe.length) return 0;
+  const { error } = await db.from('documenti').insert(righe);
+  return error ? 0 : righe.length;
+}
+const conAllegati = (n: number) => (n ? ` · 📎 ${n} allegat${n === 1 ? 'o' : 'i'}` : '');
+
 /** Pulsante sotto la proposta: appunto nei documenti della commessa, promemoria o riunione in agenda, oppure niente. */
 async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
   const { data: p } = await db.from('posta_proposte').select('id, email, dati, usata').eq('id', String(b.id ?? '')).maybeSingle();
@@ -336,20 +365,27 @@ async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
   const d = p.dati as Proposta, scelta = String(b.scelta ?? '');
   const nota = [d.riassunto, d.link && `🎥 ${d.link}`, `✉ Email${d.mittente ? ' di ' + d.mittente : ''}${d.oggetto ? `: «${d.oggetto}»` : ''}`].filter(Boolean).join('\n\n');
   let testo: string;
-  if (scelta === 'x') testo = 'Ok, email ignorata.';
+  if (scelta === 'x') {
+    const pp = (d.allegati || []).map(a => a.percorso);
+    if (pp.length) await db.storage.from(BUCKET).remove(pp);
+    testo = 'Ok, email ignorata.';
+  }
   else if (scelta === 'a') {
     const etichette = pulisciEtichette(d.etichette);
-    const { error } = await db.from('documenti').insert({ preventivo_id: d.preventivo_id || null, tipo: 'nota', cartella: d.preventivo_id ? 'cliente' : 'altro',
-      titolo: d.titolo, testo: nota, etichette, creato_da: io.email });
+    const cartella = d.preventivo_id ? 'cliente' : 'altro';
+    const { data: n, error } = await db.from('documenti').insert({ preventivo_id: d.preventivo_id || null, tipo: 'nota', cartella,
+      titolo: d.titolo, testo: nota, etichette, creato_da: io.email }).select('id').single();
     if (error) return fail(error.message);
+    const na = await legaAllegati(db, d, { nota_id: n.id }, cartella, io);
     const { data: c } = d.preventivo_id ? await db.from('preventivi').select('nome').eq('id', d.preventivo_id).maybeSingle() : { data: null };
-    testo = `📝 Appunto salvato${c ? ' in Documenti di ' + c.nome : ' tra le note (libero)'}: ${d.titolo}${temiTesto(etichette)}`;
+    testo = `📝 Appunto salvato${c ? ' in Documenti di ' + c.nome : ' tra le note (libero)'}: ${d.titolo}${temiTesto(etichette)}${conAllegati(na)}`;
   } else if (scelta === 'p' || scelta === 'r') {
     if (scelta === 'r' && !d.giorno) return fail("Nell'email non c'è la data della riunione: scegli promemoria e correggila nell'app.");
     const { data: v, error } = await db.from('scadenze').insert({ genere: scelta === 'r' ? 'appuntamento' : 'promemoria', giorno: d.giorno || prossimoLavorativo(oggi),
       ora: d.ora || null, titolo: d.titolo, nota, preventivo_id: d.preventivo_id || null, creato_da: io.email, origine: 'telegram' }).select(COLS).single();
     if (error) return fail(error.message);
-    testo = `Aggiunto: ${riga(v as Voce, await contesto(db))}`;
+    const na = await legaAllegati(db, d, { scadenza_id: (v as Voce).id }, null, io);
+    testo = `Aggiunto: ${riga(v as Voce, await contesto(db))}${conAllegati(na)}`;
   } else return fail('Scelta sconosciuta.');
   await db.from('posta_proposte').update({ usata: new Date().toISOString() }).eq('id', p.id);
   return { ok: true, testo };

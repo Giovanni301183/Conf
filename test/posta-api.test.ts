@@ -1,7 +1,7 @@
 // Email in arrivo (/api/agenda, azioni posta e pe): lettura dell'AI ripulita e proposta su Telegram con i pulsanti.
 import { describe, expect, it } from 'vitest';
 import { prossimoLavorativo, propostaTelegram, type Proposta } from '../api/agenda';
-import { indirizzo, pulisciLettura } from '../api/_posta';
+import { allegatiDaCaricare, byteDa, indirizzo, pulisciLettura } from '../api/_posta';
 
 const commesse = [{ id: 'p1', nome: 'Ripo Nord', cliente: 'Rossi', num: '2026/014', rif: null }];
 const lettura = (o: Partial<Proposta> = {}): Proposta => ({ titolo: 'Rossi chiede conferma pali', riassunto: 'Vuole la consegna entro venerdì.', mittente: 'Mario Rossi',
@@ -36,5 +36,27 @@ describe('email in arrivo', () => {
     expect(con.text).toContain('Commessa: Ripo Nord (N° 2026/014)');
     // callback_data di Telegram: massimo 64 byte con un id uuid
     expect(`pe:${'0'.repeat(36)}:a`.length).toBeLessThanOrEqual(64);
+  });
+});
+
+describe('allegati delle email in arrivo', () => {
+  it('peso scritto da n8n in byte', () => {
+    expect(byteDa('523 B')).toBe(523);
+    expect(byteDa('12.3 kB')).toBe(12300);
+    expect(byteDa('1,5 MB')).toBe(1500000);
+    expect(byteDa(2048)).toBe(2048);
+    expect(byteDa(undefined)).toBe(0);
+  });
+  it('salta loghi delle firme, inviti e file troppo grandi', () => {
+    const aa = [{ chiave: 'attachment_0', nome: 'offerta.pdf', mime: 'application/pdf', peso: '230 kB' },
+      { chiave: 'attachment_1', nome: 'logo.png', mime: 'image/png', peso: '8.1 kB' },
+      { chiave: 'attachment_2', nome: 'invite.ics', mime: 'text/calendar', peso: '2 kB' },
+      { chiave: 'attachment_3', nome: 'cantiere.jpg', mime: 'image/jpeg', peso: '1.8 MB' },
+      { chiave: 'attachment_4', nome: 'enorme.zip', mime: 'application/zip', peso: '80 MB' }];
+    expect(allegatiDaCaricare(aa).map(a => a.nome)).toEqual(['offerta.pdf', 'cantiere.jpg']);
+  });
+  it('la proposta su Telegram dice quanti allegati ci sono', () => {
+    const m = propostaTelegram('id1', lettura({ allegati: [{ nome: 'offerta.pdf', mime: 'application/pdf', percorso: 'posta/x/1_offerta.pdf' }] }), null, '2026-10-23');
+    expect(m.text).toContain('📎 1 allegato: offerta.pdf');
   });
 });

@@ -14,9 +14,12 @@
     "filters": {
      "q": "to:g.sorrentino+agenda@terranovasrl.net OR (from:me to:me subject:(Fwd OR I))"
     },
-    "options": {}
+    "options": {
+     "downloadAttachments": true,
+     "dataPropertyAttachmentsPrefixName": "attachment_"
+    }
    },
-   "id": "7ca556d5-1f2f-40bb-8139-4cc75dc02e96",
+   "id": "d9e0a113-59e1-4120-a448-22eb9f3bff38",
    "name": "Email in arrivo",
    "type": "n8n-nodes-base.gmailTrigger",
    "typeVersion": 1.2,
@@ -36,7 +39,7 @@
     "assignments": {
      "assignments": [
       {
-       "id": "a31c33ad-bc88-4395-b413-4664e09c119c",
+       "id": "1f22ab69-2f41-4c1c-b14d-5e5ddd8075f1",
        "name": "url",
        "type": "string",
        "value": "https://conf-git-calendarrrrr-giovanne.vercel.app/api/agenda?x-vercel-protection-bypass=INSERISCI_CODICE_BYPASS"
@@ -46,7 +49,7 @@
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "8ca8de95-d727-4120-a98c-711d90f5c963",
+   "id": "e9bad765-4b1f-419e-8e37-7eacaeb6a3f6",
    "name": "Impostazioni email",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -63,10 +66,10 @@
     "genericAuthType": "httpHeaderAuth",
     "sendBody": true,
     "specifyBody": "json",
-    "jsonBody": "={{ JSON.stringify({ azione: 'posta', gmail_id: $('Email in arrivo').item.json.id, da: $('Email in arrivo').item.json.from?.value?.[0]?.address || $('Email in arrivo').item.json.from?.text || '', oggetto: $('Email in arrivo').item.json.subject || '', testo: $('Email in arrivo').item.json.text || '', data: $('Email in arrivo').item.json.date || '' }) }}",
+    "jsonBody": "={{ JSON.stringify({ azione: 'posta', gmail_id: $('Email in arrivo').item.json.id, da: $('Email in arrivo').item.json.from?.value?.[0]?.address || $('Email in arrivo').item.json.from?.text || '', oggetto: $('Email in arrivo').item.json.subject || '', testo: $('Email in arrivo').item.json.text || '', data: $('Email in arrivo').item.json.date || '', allegati: Object.entries($('Email in arrivo').item.binary || {}).map(([k, f]) => ({ chiave: k, nome: f.fileName || k, mime: f.mimeType || '', peso: f.fileSize || '' })) }) }}",
     "options": {}
    },
-   "id": "2e738aa6-b9ba-4137-a3ec-fba66026529f",
+   "id": "5b3e7988-1ec2-4b10-b9b9-888409d37801",
    "name": "Email → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -80,6 +83,54 @@
      "name": "Agenda - segreto"
     }
    }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Un elemento per ogni allegato da caricare, con il suo file preso dall'email.\nconst file = $('Email in arrivo').first().binary || {};\nconst r = $input.first().json;\nreturn (r.ok && r.caricamenti ? r.caricamenti : []).filter(c => file[c.chiave]).map(c => ({ json: c, binary: { data: file[c.chiave] } }));"
+   },
+   "id": "b194f65a-66e7-438d-80fe-060ebfcfafa3",
+   "name": "Allegati da caricare",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "method": "PUT",
+    "url": "={{ $json.url }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "content-type",
+       "value": "={{ $json.mime }}"
+      },
+      {
+       "name": "apikey",
+       "value": "={{ $json.apikey }}"
+      },
+      {
+       "name": "x-upsert",
+       "value": "false"
+      }
+     ]
+    },
+    "sendBody": true,
+    "contentType": "binaryData",
+    "inputDataFieldName": "data",
+    "options": {}
+   },
+   "id": "1baaa0e3-dad8-4051-b2df-8b624486031f",
+   "name": "Carica allegato",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    880,
+    200
+   ]
   }
  ],
  "connections": {
@@ -99,6 +150,28 @@
     [
      {
       "node": "Email → app",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Email → app": {
+   "main": [
+    [
+     {
+      "node": "Allegati da caricare",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Allegati da caricare": {
+   "main": [
+    [
+     {
+      "node": "Carica allegato",
       "type": "main",
       "index": 0
      }

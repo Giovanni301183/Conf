@@ -288,15 +288,28 @@ avvisi_conn = {
 # Ogni email nuova inoltrata a POSTA va all'app, che la fa leggere all'AI e manda la proposta in privato a chi l'ha inoltrata.
 # Le scelte (pulsanti "pe:...") arrivano al flusso della chat. Le email di chi non e' un utente collegato restano ok:false nelle esecuzioni.
 EM = "$('Email in arrivo').item.json"
+# Nome, tipo e peso degli allegati scaricati dal nodo Gmail (attachment_0, attachment_1...).
+ALLEGATI = "Object.entries($('Email in arrivo').item.binary || {}).map(([k, f]) => ({ chiave: k, nome: f.fileName || k, mime: f.mimeType || '', peso: f.fileSize || '' }))"
+CODICE_ALLEGATI = """// Un elemento per ogni allegato da caricare, con il suo file preso dall'email.
+const file = $('Email in arrivo').first().binary || {};
+const r = $input.first().json;
+return (r.ok && r.caricamenti ? r.caricamenti : []).filter(c => file[c.chiave]).map(c => ({ json: c, binary: { data: file[c.chiave] } }));"""
 email = [
     node('Email in arrivo', 'n8n-nodes-base.gmailTrigger', 1.2, [0, 200], {'pollTimes': {'item': [{'mode': 'everyMinute'}]}, 'simple': False,
-         'filters': {'q': CERCA}, 'options': {}}, GMAIL),
+         'filters': {'q': CERCA}, 'options': {'downloadAttachments': True, 'dataPropertyAttachmentsPrefixName': 'attachment_'}}, GMAIL),
     node('Impostazioni email', 'n8n-nodes-base.set', 3.4, [220, 200], {'assignments': {'assignments': [
         {'id': U(), 'name': 'url', 'type': 'string', 'value': API}]}, 'includeOtherFields': True, 'options': {}}),
     http('Email → app', [440, 200], "{ azione: 'posta', gmail_id: " + EM + ".id, da: " + EM + ".from?.value?.[0]?.address || " + EM + ".from?.text || '', oggetto: "
-         + EM + ".subject || '', testo: " + EM + ".text || '', data: " + EM + ".date || '' }", url="={{ $('Impostazioni email').item.json.url }}"),
+         + EM + ".subject || '', testo: " + EM + ".text || '', data: " + EM + ".date || '', allegati: " + ALLEGATI + " }", url="={{ $('Impostazioni email').item.json.url }}"),
+    # Allegati: l'app risponde con un link firmato per ognuno da tenere; qui si carica il file direttamente nello Storage.
+    node('Allegati da caricare', 'n8n-nodes-base.code', 2, [660, 200], {'jsCode': CODICE_ALLEGATI}),
+    node('Carica allegato', 'n8n-nodes-base.httpRequest', 4.2, [880, 200], {'method': 'PUT', 'url': '={{ $json.url }}', 'sendHeaders': True,
+         'headerParameters': {'parameters': [{'name': 'content-type', 'value': '={{ $json.mime }}'}, {'name': 'apikey', 'value': '={{ $json.apikey }}'},
+                                             {'name': 'x-upsert', 'value': 'false'}]},
+         'sendBody': True, 'contentType': 'binaryData', 'inputDataFieldName': 'data', 'options': {}}),
 ]
-email_conn = {'Email in arrivo': {'main': [to('Impostazioni email')]}, 'Impostazioni email': {'main': [to('Email → app')]}}
+email_conn = {'Email in arrivo': {'main': [to('Impostazioni email')]}, 'Impostazioni email': {'main': [to('Email → app')]},
+              'Email → app': {'main': [to('Allegati da caricare')]}, 'Allegati da caricare': {'main': [to('Carica allegato')]}}
 
 SETTINGS = {'executionOrder': 'v1', 'timezone': 'Europe/Rome'}
 # Copia pronta da importare con il codice di bypass di .env.local (VERCEL_BYPASS): va in n8n/da-importare/, esclusa da GitHub.
@@ -358,3 +371,8 @@ if SEGRETO and BYPASS:
     with open(os.path.join(ROOT, 'n8n', 'da-importare', 'incolla-note.json'), 'w', encoding='utf-8') as f:
         f.write(json.dumps(pezzo, ensure_ascii=False, indent=1).replace('INSERISCI_CODICE_BYPASS', BYPASS))
     print('Scritto n8n/da-importare/incolla-note.json (strumenti delle note da incollare nel flusso)')
+    nomi = ['Allegati da caricare', 'Carica allegato']
+    pezzo = {'nodes': [n for n in tutti if n['name'] in nomi], 'connections': {k: v for k, v in email_conn.items() if k in nomi}}
+    with open(os.path.join(ROOT, 'n8n', 'da-importare', 'incolla-allegati-email.json'), 'w', encoding='utf-8') as f:
+        f.write(json.dumps(pezzo, ensure_ascii=False, indent=1))
+    print('Scritto n8n/da-importare/incolla-allegati-email.json (nodi degli allegati da incollare nel flusso)')
