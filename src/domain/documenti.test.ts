@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cartellaPer, cerca, conEtichette, documentiDi, estensione, fByte, nomeSicuro, percorsoPer, perCartella, perEtichetta, type Documento } from './documenti';
+import { cartellaPer, cerca, conEtichette, documentiDi, estensione, fByte, nomeSicuro, percorsoPer, perCartella, perEtichetta, suggerisciEtichette, suggerisciPreventivi, type Documento } from './documenti';
 
 const doc = (p: Partial<Documento>): Documento => ({ id: 'x', preventivo_id: null, scadenza_id: null, cartella: 'altro', tipo: 'file', titolo: 'a.pdf', testo: null,
   percorso: null, mime: null, dimensione: null, creato_da: 'a@terranovasrl.net', creato: '2026-10-22T08:00:00Z', modificato: null, ...p });
@@ -61,5 +61,21 @@ describe('etichette', () => {
   it('conta per etichetta e cerca anche nei nomi delle etichette', () => {
     expect(perEtichetta(D)).toEqual({ acquisti: 1, opportunita: 1, marketing: 1, vendita: 1 });
     expect(cerca(D, 'opportunità').map(d => d.id)).toEqual(['1']);
+  });
+});
+
+describe('suggerimenti', () => {
+  it('riconosce il tema dalle parole', () => {
+    expect(suggerisciEtichette("Ordine dell'acciaio al fornitore")).toEqual(['acquisti']);
+    expect(suggerisciEtichette('Fattura e pagamento della spedizione')).toEqual(['amministrazione', 'logistica']);
+    expect(suggerisciEtichette('Idea: un nuovo prodotto per le serre')[0]).toBe('sviluppo');
+    expect(suggerisciEtichette('ciao')).toEqual([]);
+  });
+  it('riconosce la commessa dal nome o dal cliente, i vinti prima', () => {
+    const A = [{ id: 'a', nome: 'Impianto Rossi', cliente: 'Rossi Energia', prev: { stato: 'perso' } },
+      { id: 'b', nome: 'Tracker Foggia', cliente: 'Rossi Energia', prev: { stato: 'vinto' } }, { id: 'c', nome: 'Bar', cliente: 'Ne' }];
+    expect(suggerisciPreventivi('Sentito Rossi Energia per i pali', A).map(e => e.id)).toEqual(['b', 'a']);
+    expect(suggerisciPreventivi('Novità sul tracker foggia', A).map(e => e.id)).toEqual(['b']);
+    expect(suggerisciPreventivi('Un bar e Ne', A)).toEqual([]);
   });
 });

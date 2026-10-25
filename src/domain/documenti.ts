@@ -24,6 +24,37 @@ export const ETICHETTE: [string, string, string][] = [
 export const nomeEtichetta = (k: string) => ETICHETTE.find(e => e[0] === k)?.[1] || k;
 export const coloreEtichetta = (k: string) => ETICHETTE.find(e => e[0] === k)?.[2] || '#8a9196';
 export const etichetteDi = (d: Pick<Documento, 'etichette'>) => d.etichette || [];
+
+// Parole che fanno pensare a un tema (inizi di parola, senza accenti): servono a suggerire le etichette mentre si scrive.
+const INDIZI: Record<string, string[]> = {
+  acquisti: ['acquist', 'ordin', 'fornitor', 'approvvigion', 'rda', 'acciaio', 'bulloni', 'materiale', 'magazzin', 'listino fornit'],
+  vendita: ['vendit', 'offert', 'preventiv', 'trattativ', 'contratt', 'sconto', 'cliente', 'firmat', 'ordine cliente'],
+  opportunita: ['opportunit', 'lead', 'gara', 'bando', 'nuovo cliente', 'potenzial', 'contatto', 'richiesta di offerta', 'interessat'],
+  sviluppo: ['svilupp', 'prototip', 'nuovo prodotto', 'brevett', 'miglior', 'innovaz', 'versione', 'r&d', 'ricerca'],
+  tecnico: ['disegn', 'calcol', 'progett', 'verific', 'carich', 'vento', 'dwg', 'dxf', 'layout', 'struttural', 'relazione tecnica'],
+  produzione: ['produzion', 'lavoraz', 'taglio', 'saldat', 'zincat', 'officin', 'piegat', 'foratur'],
+  cantiere: ['cantier', 'montagg', 'posa', 'sopralluog', 'installaz', 'battipal', 'squadra'],
+  logistica: ['spedizion', 'trasport', 'camion', 'consegn', 'ddt', 'container', 'bilic', 'ritiro'],
+  qualita: ['reclam', 'difett', 'non conform', 'garanzi', 'ruggin', 'rottur', 'contestaz', 'danneggiat'],
+  amministrazione: ['fattur', 'pagament', 'bonific', 'iva', 'banca', 'incass', 'acconto', 'saldo', 'sollecito pagament'],
+  marketing: ['fiera', 'fiere', 'brochure', 'sito', 'linkedin', 'social', 'catalog', 'intersolar', 'newsletter'],
+  personale: ['feri', 'assunz', 'colloqui', 'formazion', 'dipendent', 'malatti', 'permess', 'stipend'],
+  riunione: ['riunion', 'call', 'meet', 'teams', 'zoom', 'verbale', 'incontr', 'videochiamat'],
+  idea: ['idea', 'potremmo', 'proposta', 'sarebbe bello', 'pensare a', 'valutare'],
+};
+const piano = (s: string) => ' ' + s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9&]+/g, ' ') + ' ';
+/** Etichette suggerite dal titolo e dal testo, le piu' probabili prima (al massimo tre). */
+export function suggerisciEtichette(testo: string): string[] {
+  const t = piano(testo);
+  return ETICHETTE.map(([k]) => [k, (INDIZI[k] || []).filter(p => t.includes(' ' + p)).length] as const)
+    .filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k);
+}
+/** Preventivi nominati nel testo (per nome, cliente o riferimento, almeno 4 lettere): i vinti e i piu' recenti prima. */
+export function suggerisciPreventivi<T extends { id: string; nome?: string; cliente?: string; rif?: string; prev?: any }>(testo: string, arch: T[]): T[] {
+  const t = piano(testo), peso = (e: T) => (e.prev?.stato === 'vinto' ? 0 : e.prev?.stato === 'perso' || e.prev?.stato === 'alternativa' ? 2 : 1);
+  return arch.filter(e => [e.nome, e.cliente, e.rif].some(x => { const p = piano(x || '').trim(); return p.length >= 4 && t.includes(' ' + p + ' '); }))
+    .sort((a, b) => peso(a) - peso(b)).slice(0, 3);
+}
 /** Documenti con almeno una delle etichette scelte (nessuna scelta = tutti). */
 export const conEtichette = (docs: Documento[], sel: string[]) => sel.length ? docs.filter(d => etichetteDi(d).some(e => sel.includes(e))) : docs;
 /** Quante note per etichetta, nell'ordine dell'elenco. */

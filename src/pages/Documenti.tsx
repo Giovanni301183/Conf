@@ -1,7 +1,7 @@
 // Documenti e note (DMS leggero): scheda Documenti del preventivo e allegati delle voci d'agenda.
 // File e note si caricano qui; i file stanno nello Storage di Supabase e si aprono con un link temporaneo.
 import { Fragment, useEffect, useState, type CSSProperties } from 'react';
-import { CARTELLE, ETICHETTE, LIMITE_MB, cartellaPer, cerca, coloreEtichetta, conEtichette, documentiDi, estensione, etichetteDi, fByte, immagine, nomeCartella, nomeEtichetta, perCartella, perEtichetta, type Cartella, type Documento } from '../domain/documenti';
+import { CARTELLE, ETICHETTE, LIMITE_MB, cartellaPer, cerca, coloreEtichetta, conEtichette, documentiDi, estensione, etichetteDi, fByte, immagine, nomeCartella, nomeEtichetta, perCartella, perEtichetta, suggerisciEtichette, suggerisciPreventivi, type Cartella, type Documento } from '../domain/documenti';
 import { S, commit } from '../store/state';
 import { toast } from '../store/actions';
 import { ModuloEmail, contestoEmail } from '../components/Email';
@@ -30,10 +30,17 @@ async function sposta(d: Documento, cartella: Cartella) {
   const e = await aggiornaDoc(d.id, { cartella }); if (e) toast('Non spostato: ' + e); commit();
 }
 
-type Nota = { id?: string; titolo: string; testo: string; cartella: Cartella; etichette: string[] };
+// preventivo_id: presente solo quando il modulo fa scegliere il collegamento (Home); '' = nota libera.
+type Nota = { id?: string; titolo: string; testo: string; cartella: Cartella; etichette: string[]; preventivo_id?: string };
 const notaVuota = (cartella: Cartella = 'altro'): Nota => ({ titolo: '', testo: '', cartella, etichette: [] });
 const scambia = (xx: string[], k: string) => xx.includes(k) ? xx.filter(x => x !== k) : [...xx, k];
 
+/** Preventivi dell'archivio per un menu: prima quelli aperti (vinti e in corso), poi persi e non scelti. */
+function OpzioniPreventivi() {
+  const chiusi = (e: any) => ['perso', 'alternativa'].includes(e.prev?.stato), op = (e: any) => <option key={e.id} value={e.id}>{e.nome}{e.cliente ? ' · ' + e.cliente : ''}</option>;
+  const a = S.arch.filter(e => !chiusi(e)), c = S.arch.filter(chiusi);
+  return <>{a.length > 0 && <optgroup label="Vinti e in corso">{a.map(op)}</optgroup>}{c.length > 0 && <optgroup label="Persi e non scelti">{c.map(op)}</optgroup>}</>;
+}
 /** Etichetta colorata; con onClick diventa un pulsante da accendere e spegnere. */
 function Etq({ k, on = true, n, onClick }: { k: string; on?: boolean; n?: number; onClick?: () => void }) {
   const st = { '--ec': coloreEtichetta(k) } as CSSProperties, t = <>{nomeEtichetta(k)}{n ? <em>{n}</em> : null}</>;
@@ -50,21 +57,31 @@ function FiltroEtichette({ docs, sel, set }: { docs: Documento[]; sel: string[];
     </div>
   );
 }
+/** Modulo della nota. Mentre si scrive suggerisce i temi e, se il collegamento si sceglie qui, la commessa nominata nel testo. */
 function ModuloNota({ n, set, chiudi, dove }: { n: Nota; set: (n: Nota) => void; chiudi: () => void; dove: { preventivo_id?: string | null; scadenza_id?: string | null } }) {
   const [busy, setBusy] = useState(false);
+  const scelgo = n.preventivo_id !== undefined, scritto = `${n.titolo} ${n.testo}`;
+  const sugE = suggerisciEtichette(scritto).filter(k => !n.etichette.includes(k));
+  const sugP = scelgo && !n.preventivo_id ? suggerisciPreventivi(scritto, S.arch) : [];
   const salva = async () => {
-    setBusy(true); const e = await salvaNota({ ...n, ...dove }); setBusy(false);
+    setBusy(true); const e = await salvaNota({ ...n, ...dove, ...(scelgo ? { preventivo_id: n.preventivo_id } : {}) }); setBusy(false);
     if (e) { toast('Nota non salvata: ' + e); return; }
     toast(n.id ? 'Nota aggiornata' : 'Nota aggiunta'); chiudi(); commit();
   };
   return (
     <div className="cform">
       <label className="f">Titolo<input value={n.titolo} maxLength={200} autoFocus placeholder="es. Telefonata con il cliente" onChange={e => set({ ...n, titolo: e.target.value })} /></label>
+      {scelgo && <label className="f">Collegata a<select value={n.preventivo_id} onChange={e => set({ ...n, preventivo_id: e.target.value })}>
+        <option value="">— nessun preventivo (nota libera) —</option>
+        <OpzioniPreventivi /></select></label>}
       <label className="f">Cartella<select value={n.cartella} onChange={e => set({ ...n, cartella: e.target.value as Cartella })}>
         {CARTELLE.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
       <div className="f wide">Etichette (tema, anche più di una)<div className="etqs">
         {ETICHETTE.map(([k]) => <Etq key={k} k={k} on={n.etichette.includes(k)} onClick={() => set({ ...n, etichette: scambia(n.etichette, k) })} />)}</div></div>
       <label className="f wide">Testo<textarea rows={4} value={n.testo} onChange={e => set({ ...n, testo: e.target.value })} /></label>
+      {(sugE.length > 0 || sugP.length > 0) && <div className="wide etqs sug"><span className="muted small">Sembra:</span>
+        {sugE.map(k => <button key={k} type="button" className="etq" style={{ '--ec': coloreEtichetta(k) } as CSSProperties} onClick={() => set({ ...n, etichette: [...n.etichette, k] })}>+ {nomeEtichetta(k)}</button>)}
+        {sugP.map(e => <button key={e.id} type="button" className="etq" onClick={() => set({ ...n, preventivo_id: e.id })}>🔗 {e.nome}{e.cliente ? ' · ' + e.cliente : ''}</button>)}</div>}
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
         <button className="btn p" disabled={busy || !n.titolo.trim()} onClick={salva}>{n.id ? 'Salva modifiche' : 'Aggiungi nota'}</button>
         <button className="btn" onClick={chiudi}>Annulla</button>
@@ -201,9 +218,9 @@ export function Documenti() {
 }
 
 /** In Home, sotto il calendario: tutte le note (di preventivi e voci d'agenda), le più recenti prima, con ricerca.
- *  Una nota nuova va legata a un preventivo salvato, come vuole il database. */
+ *  Una nota puo' essere libera (solo con le etichette) o legata a un preventivo, scelto qui o suggerito dal testo. */
 export function NoteHome() {
-  const [q, setQ] = useState(''), [nota, setNota] = useState<Nota | null>(null), [prev, setPrev] = useState(''), [tutte, setTutte] = useState(false);
+  const [q, setQ] = useState(''), [nota, setNota] = useState<Nota | null>(null), [tutte, setTutte] = useState(false);
   const [temi, setTemi] = useState<string[]>([]);
   const no = docNonDisponibili();
   if (no) return null;
@@ -214,21 +231,16 @@ export function NoteHome() {
   return (
     <section className="card">
       <h2 style={{ marginTop: 0 }}>Note<span className="sp" />
-        {!nota && S.arch.length > 0 && <button className="btn s p" onClick={() => { setPrev(S.prev._id || ''); setNota(notaVuota()); }}>+ Nota</button>}</h2>
+        {!nota && <button className="btn s p" onClick={() => setNota({ ...notaVuota(), preventivo_id: S.prev._id || '' })}>+ Nota</button>}</h2>
       <div className="dbar"><input className="dq" value={q} placeholder="Cerca nelle note…" onChange={e => setQ(e.target.value)} />
         <span className="muted small">{note.length} not{note.length === 1 ? 'a' : 'e'}{filtro ? ' trovat' + (note.length === 1 ? 'a' : 'e') : ''}</span></div>
       <FiltroEtichette docs={tutteNote} sel={temi} set={setTemi} />
-      {nota && <>
-        {!nota.id && <label className="f">Preventivo<select value={prev} onChange={e => setPrev(e.target.value)}>
-          <option value="">– scegli –</option>{S.arch.map(e => <option key={e.id} value={e.id}>{e.nome}{e.cliente ? ' · ' + e.cliente : ''}</option>)}</select></label>}
-        {nota.id || prev ? <ModuloNota n={nota} set={setNota} chiudi={() => setNota(null)} dove={nota.id ? {} : { preventivo_id: prev }} />
-          : <p className="hint">Scegli il preventivo a cui legare la nota. <a href="#" onClick={e => { e.preventDefault(); setNota(null); }}>Annulla</a></p>}
-      </>}
+      {nota && <ModuloNota n={nota} set={setNota} chiudi={() => setNota(null)} dove={{}} />}
       {viste.length ? viste.map(d => <Fragment key={d.id}>
         {nomeP(d.preventivo_id) && <div className="muted small" style={{ marginTop: 8 }}>{nomeP(d.preventivo_id)}</div>}
-        <Voce d={d} onEdit={setNota} conVoce />
+        <Voce d={d} onEdit={x => setNota({ ...x, preventivo_id: d.preventivo_id || '' })} conVoce />
       </Fragment>)
-        : <p className="hint" style={{ margin: '8px 0 0' }}>{filtro ? 'Nessuna nota corrisponde alla ricerca.' : 'Nessuna nota. Le note si aggiungono qui, nella scheda Documenti del preventivo o sulle voci d\'agenda.'}</p>}
+        : <p className="hint" style={{ margin: '8px 0 0' }}>{filtro ? 'Nessuna nota corrisponde alla ricerca.' : 'Nessuna nota. Una nota può essere libera o legata a un preventivo: si aggiungono qui, nella scheda Documenti del preventivo o sulle voci d\'agenda.'}</p>}
       {!filtro && note.length > 10 && <button className="btn s" style={{ marginTop: 8 }} onClick={() => setTutte(!tutte)}>{tutte ? 'Mostra solo le ultime 10' : `Mostra tutte (${note.length})`}</button>}
     </section>
   );

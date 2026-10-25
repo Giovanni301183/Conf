@@ -239,7 +239,7 @@ async function loadDocumenti() {
   if (error) { cloud.docErr = error.message; S.docs = []; return; }
   cloud.docErr = ''; S.docs = data;
 }
-const dbErr = (m: string) => (/documenti_legato/.test(m) ? "il documento deve restare legato a un preventivo o a una voce d'agenda"
+const dbErr = (m: string) => (/documenti_legato/.test(m) ? "il documento deve restare legato a un preventivo o a una voce d'agenda (per le note libere serve la migrazione 20261025030000_note_libere.sql)"
   : /etichette/.test(m) ? 'manca la migrazione 20261025020000_etichette_note.sql (va eseguita nel SQL Editor di Supabase)' : m);
 export async function caricaFile(f: File, dove: { preventivo_id?: string | null; scadenza_id?: string | null }, cartella: string): Promise<string> {
   if (!supabase) return 'I documenti si salvano solo con il server.';
@@ -254,7 +254,9 @@ export async function caricaFile(f: File, dove: { preventivo_id?: string | null;
 }
 export async function salvaNota(n: { id?: string; titolo: string; testo: string; cartella: string; etichette: string[]; preventivo_id?: string | null; scadenza_id?: string | null }): Promise<string> {
   if (!supabase) return 'Le note si salvano solo con il server.';
-  const v = { titolo: n.titolo.trim().slice(0, 200), testo: n.testo.trim() || null, cartella: n.cartella, etichette: n.etichette };
+  const v: Record<string, unknown> = { titolo: n.titolo.trim().slice(0, 200), testo: n.testo.trim() || null, cartella: n.cartella, etichette: n.etichette };
+  // Il collegamento al preventivo si cambia solo se il modulo lo mostra (dalla Home); altrove resta quello di prima.
+  if (n.id && n.preventivo_id !== undefined) v.preventivo_id = n.preventivo_id || null;
   if (!v.titolo) return 'Serve un titolo.';
   const { error } = n.id ? await supabase.from('documenti').update(v).eq('id', n.id)
     : await supabase.from('documenti').insert({ ...v, tipo: 'nota', preventivo_id: n.preventivo_id || null, scadenza_id: n.scadenza_id || null });
