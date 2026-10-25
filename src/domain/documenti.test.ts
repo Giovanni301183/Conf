@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cartellaPer, cerca, conEtichette, documentiDi, estensione, fByte, nomeSicuro, percorsoPer, perCartella, perEtichetta, suggerisciEtichette, suggerisciPreventivi, type Documento } from './documenti';
+import { cartellaPer, cerca, conEtichette, documentiDi, estensione, fByte, nomeSicuro, percorsoPer, perCartella, perEtichetta, pulisciEtichette, suggerisciEtichette, suggerisciPreventivi, type Documento } from './documenti';
 
 const doc = (p: Partial<Documento>): Documento => ({ id: 'x', preventivo_id: null, scadenza_id: null, cartella: 'altro', tipo: 'file', titolo: 'a.pdf', testo: null,
   percorso: null, mime: null, dimensione: null, creato_da: 'a@terranovasrl.net', creato: '2026-10-22T08:00:00Z', modificato: null, ...p });
@@ -77,5 +77,15 @@ describe('suggerimenti', () => {
     expect(suggerisciPreventivi('Sentito Rossi Energia per i pali', A).map(e => e.id)).toEqual(['b', 'a']);
     expect(suggerisciPreventivi('Novità sul tracker foggia', A).map(e => e.id)).toEqual(['b']);
     expect(suggerisciPreventivi('Un bar e Ne', A)).toEqual([]);
+  });
+});
+
+describe('etichette da AI e Telegram', () => {
+  it('accetta chiavi, nomi e liste separate da virgola, scarta il resto', () => {
+    expect(pulisciEtichette(['acquisti', 'Opportunità'])).toEqual(['acquisti', 'opportunita']);
+    expect(pulisciEtichette('Vendita, qualità, boh, vendita')).toEqual(['vendita', 'qualita']);
+    expect(pulisciEtichette('sviluppo')).toEqual(['sviluppo']);
+    expect(pulisciEtichette('')).toEqual([]);
+    expect(pulisciEtichette(null)).toEqual([]);
   });
 });

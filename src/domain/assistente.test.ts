@@ -36,4 +36,15 @@ describe('strumenti dell\'assistente', () => {
     expect(esegui('proponi_email', { a: null, oggetto: 'Aggiornamento', testo: 'Buongiorno, …' }, A, 't11').proposta).toMatchObject({ tipo: 'email', a: '', oggetto: 'Aggiornamento' });
     expect(esegui('proponi_email', { a: 'x@y.it', oggetto: 'X', testo: ' ' }, A, 't12').errore).toBe(true);
   });
+  it('propone una nota con etichette, libera o legata a un preventivo', () => {
+    const N = { ...D, preventivi: [{ id: 'p1', num: '2026/014', nome: 'Impianto Rossi', cliente: 'Rossi Srl' }],
+      appunti: [{ id: 'n1', quando: '2026-10-20', commessa: '', titolo: 'Acciaio', testo: 'prezzi in salita', etichette: ['vendita'] }] };
+    const r = esegui('proponi_nota', { titolo: 'Idea serre', testo: '', etichette: ['sviluppo', 'idea'], preventivo: null }, N, 'n1').proposta as any;
+    expect(r).toMatchObject({ tipo: 'nota', preventivo_id: null, etichette: ['sviluppo', 'idea'] });
+    expect((esegui('proponi_nota', { titolo: 'Pali', testo: 'x', etichette: [], preventivo: '2026/014' }, N, 'n2').proposta as any).preventivo_id).toBe('p1');
+    expect(esegui('proponi_nota', { titolo: 'Pali', testo: '', etichette: [], preventivo: 'Bianchi' }, N, 'n3').errore).toBe(true);
+    const e = esegui('proponi_etichette', { note: [{ id: 'n1', aggiungi: ['acquisti'], togli: ['vendita'] }] }, N, 'n4').proposta as any;
+    expect(e.note).toEqual([{ id: 'n1', titolo: 'Acciaio', prima: ['vendita'], dopo: ['acquisti'] }]);
+    expect(esegui('cerca_appunti', { testo: 'vendita' }, N, 'n5').testo).toContain('id n1');
+  });
 });

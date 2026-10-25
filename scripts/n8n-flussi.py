@@ -85,6 +85,7 @@ Oggi è {{ $now.setZone('Europe/Rome').setLocale('it').toFormat('cccc d LLLL yyy
 Cosa fai: registri urgenze, cose da fare, promemoria, scadenze e appuntamenti; leggi l'agenda; segni le voci fatte; le assegni ai colleghi.
 Fai anche preventivi: per uno nuovo mandi il modulo da compilare (modulo_preventivo); l'offerta PowerPoint arriva in chat privata, da inoltrare al cliente.
 Prepari bozze di email dagli appunti (email_da_appunto), che l'operatore apre e invia da Gmail.
+Salvi note (appunti) con le etichette del tema, libere o di una commessa (crea_nota, modifica_nota).
 
 Regole:
 - Se il messaggio segnala un problema o dice "urgente", crea una voce di genere "urgenza" (per oggi, salvo data diversa). Titolo breve e chiaro (es. "Mancano bulloni in cantiere: preparare il materiale"); i dettagli vanno nella nota.
@@ -105,6 +106,7 @@ Regole:
 - Il riferimento (rif) è solo il nome breve dell'impianto, il titolo della copertina: mai note o dati tecnici. Profilo (IPE/IPEA), asse (2,5/3,0 mm), omega (2,0/1,8 mm), fondazione e cuscinetto in metri vanno nei campi delle righe.
 - Layout: se un messaggio ha [allegato: …] è un file o una foto mandati al bot. Se è il layout dell'impianto, mettilo nel preventivo giusto con carica_layout (file_id e nome dall'allegato; se il preventivo non è chiaro chiedi quale, cercandolo con cerca_commesse). Per un preventivo nuovo passa file_id e file_nome a prepara_preventivo: da un DXF i tracker si contano da soli, falli confermare. Il DXF va mandato come file, non come foto. Nell'immagine fatta dal DXF le scritte non compaiono. L'allegato resta valido anche nei messaggi dopo.
 - Email da un appunto ("manda a Rossi l'aggiornamento della nota sui pali"): trova l'appunto con cerca_appunti (parole del titolo o della commessa; per una commessa passa anche preventivo_id da cerca_commesse); se ce n'è più di uno plausibile chiedi quale, elencando titolo e data. Poi usa email_da_appunto con l'id, le indicazioni dette (a chi, tono, cose da aggiungere) e l'indirizzo se lo conosci. Email senza appunto ("preparami una mail a Rossi per dire che il montaggio slitta al 10"): NON cercare appunti, usa subito email_da_appunto senza id, con il contenuto detto dall'operatore in appunto (e preventivo_id se cita una commessa). La bozza arriva in chat privata con i pulsanti per aprirla nell'app Gmail del telefono o in Gmail dal computer: non riscriverne il testo in chat (nel gruppo mai). Nessuna email parte da sola: la invia l'operatore da Gmail.
+- Note e etichette ("segnati che…", "prendi nota…", "metti negli appunti…"): salva con crea_nota. Scegli tu da 0 a 3 etichette che descrivono davvero il tema, tra: acquisti, vendita, opportunita, sviluppo, tecnico, produzione, cantiere, logistica, qualita, amministrazione, marketing, personale, riunione, idea (es. ordine di acciaio al fornitore = acquisti; nuovo cliente interessato = opportunita, vendita; un'idea per un prodotto = sviluppo, idea). Se cita una commessa, trovala con cerca_commesse e passa preventivo_id; altrimenti la nota resta libera. Per cambiare le etichette o la commessa di una nota già salvata ("metti acquisti alla nota sull'acciaio") trovala con cerca_appunti (fonte documenti) e usa modifica_nota con il suo id. Dopo, riassumi in una riga: titolo, temi e commessa (o "libera").
 - Più preventivi per lo stesso cliente che cambiano solo il materiale ("fammi un preventivo IPEA con asse 2,5, uno IPEA con asse 3 e uno IPE con asse 2,5"): ogni combinazione la dice l'operatore, non aggiungerne e non indovinarne. Serve un preventivo base già salvato con tracker, località e margini: se non c'è manda il modulo (modulo_preventivo) per compilarlo con la prima combinazione e chiedi di riscriverti quando l'ha creato; se c'è, trovalo con cerca_commesse. Ripeti l'elenco delle combinazioni, una per riga, e chiedi conferma; poi usa crea_varianti con l'id del base e l'elenco. Ogni variante diventa un preventivo con il suo numero (successivo); in chat privata arrivano le offerte PDF del base e di tutte le varianti. Riporta il confronto (testo) e gli avvisi.
 - Il listino non si modifica da qui: se te lo chiedono, rispondi che si cambia nell'app (scheda Listino).
 - Dopo un preventivo riporta il riepilogo dello strumento (testo), gli avvisi importanti e se l'offerta è arrivata in privato. Costi e margini solo a chi li ha chiesti: non scriverli mai nel gruppo, lì dì solo che l'offerta è in privato.
@@ -214,6 +216,16 @@ chat = [
          + ', richiesta: ' + fa('richiesta', 'Indicazioni per la bozza: a chi è rivolta, tono (lei/tu), cose da aggiungere', 'string', '')
          + ', a: ' + fa('a', 'Indirizzi email dei destinatari separati da virgola, vuoto se non detti', 'string', '')
          + ', preventivo_id: ' + fa('preventivo_id', 'id della commessa per il contesto, vuoto se nessuna', 'string', '') + " }).filter(([, v]) => v !== '' && v != null))"),
+    tool('crea_nota', [2720, 860], "Salva una nota (appunto) nei Documenti dell'app, libera o legata a una commessa, con le etichette del tema. Restituisce id e una riga di riepilogo.",
+         "Object.fromEntries(Object.entries({ azione: 'nota', telegram_id: " + TID + ', titolo: ' + fa('titolo', 'Titolo breve della nota')
+         + ', testo: ' + fa('testo', 'Testo della nota in parole semplici; vuoto se basta il titolo', 'string', '')
+         + ', etichette: ' + fa('etichette', 'Da 0 a 3 temi separati da virgola tra: acquisti, vendita, opportunita, sviluppo, tecnico, produzione, cantiere, logistica, qualita, amministrazione, marketing, personale, riunione, idea', 'string', '')
+         + ', preventivo_id: ' + fa('preventivo_id', 'id della commessa da cerca_commesse; vuoto per una nota libera', 'string', '') + " }).filter(([, v]) => v !== '' && v != null))"),
+    tool('modifica_nota', [2840, 860], "Cambia le etichette (aggiunge e/o toglie) o la commessa di una nota già salvata (id da cerca_appunti, fonte documenti). Solo chi l'ha scritta o un amministratore.",
+         "Object.fromEntries(Object.entries({ azione: 'nota_modifica', telegram_id: " + TID + ', id: ' + fa('id', 'id della nota da cerca_appunti')
+         + ', aggiungi: ' + fa('aggiungi', 'Etichette da aggiungere, separate da virgola; vuoto se nessuna', 'string', '')
+         + ', togli: ' + fa('togli', 'Etichette da togliere, separate da virgola; vuoto se nessuna', 'string', '')
+         + ', preventivo_id: ' + fa('preventivo_id', "id della commessa a cui legarla; 'nessuno' per renderla libera; vuoto se invariata", 'string', '') + " }).filter(([, v]) => v !== '' && v != null))"),
     tool('modifica_voce', [1520, 860], 'Agisce su una voce esistente (id da leggi_agenda o crea_voce). azione: prendi (me ne occupo io), risolvi (fatta), aggiorna (cambia i campi indicati), elimina.',
          'Object.fromEntries(Object.entries({ azione: ' + fa('azione', 'Una tra: prendi, risolvi, aggiorna, elimina')
          + ', telegram_id: ' + TID + ', id: ' + fa('id', 'id della voce')
@@ -237,7 +249,7 @@ chat_conn = {
     'Modello': {'ai_languageModel': [[{'node': 'Assistente', 'type': 'ai_languageModel', 'index': 0}]]},
     'Memoria': {'ai_memory': [[{'node': 'Assistente', 'type': 'ai_memory', 'index': 0}]]},
     **{t: {'ai_tool': [[{'node': 'Assistente', 'type': 'ai_tool', 'index': 0}]]}
-       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account', 'prepara_preventivo', 'invia_offerta', 'carica_layout', 'modulo_preventivo', 'cerca_appunti', 'email_da_appunto', 'crea_varianti', 'margini_preventivo']},
+       for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account', 'prepara_preventivo', 'invia_offerta', 'carica_layout', 'modulo_preventivo', 'cerca_appunti', 'email_da_appunto', 'crea_varianti', 'margini_preventivo', 'crea_nota', 'modifica_nota']},
 }
 
 # ---------- Flusso 2: avvisi e riepilogo ----------
@@ -340,3 +352,9 @@ if SEGRETO and BYPASS:
     with open(os.path.join(ROOT, 'n8n', 'da-importare', 'incolla-avvisi-riunioni.json'), 'w', encoding='utf-8') as f:
         f.write(json.dumps(pezzo, ensure_ascii=False, indent=1).replace('INSERISCI_CODICE_BYPASS', BYPASS))
     print('Scritto n8n/da-importare/incolla-avvisi-riunioni.json (nodi da incollare nel flusso)')
+    # Strumenti delle note con etichette: si incollano accanto agli altri strumenti dell'Assistente, gia' collegati.
+    nomi = ['crea_nota', 'modifica_nota']
+    pezzo = {'nodes': [n for n in tutti if n['name'] in nomi], 'connections': {k: v for k, v in chat_conn.items() if k in nomi}}
+    with open(os.path.join(ROOT, 'n8n', 'da-importare', 'incolla-note.json'), 'w', encoding='utf-8') as f:
+        f.write(json.dumps(pezzo, ensure_ascii=False, indent=1).replace('INSERISCI_CODICE_BYPASS', BYPASS))
+    print('Scritto n8n/da-importare/incolla-note.json (strumenti delle note da incollare nel flusso)')

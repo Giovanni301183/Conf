@@ -5,6 +5,7 @@
 //         modulo (pulsante in chat privata che apre il modulo del preventivo, pagina modulo.html: vedi modulo.ts);
 //         preventivo, offerta, layout, varianti, margini (preventivo creato o cambiato da Telegram, sue varianti di materiale e offerte in chat privata: vedi _preventivo.ts);
 //         appunti, email (cerca un appunto e ne manda in chat privata la bozza di email scritta dall'AI, da aprire in Gmail: vedi _email.ts);
+//         nota, nota_modifica (nota nei Documenti, libera o di una commessa, con le etichette del tema; cambio di etichette e commessa);
 //         pe (pulsante sotto una email in arrivo: la trasforma in appunto, promemoria o riunione);
 //         riepilogo, annuncio (del sistema: riepilogo del mattino e avviso nel gruppo di una voce nuova);
 //         avvisi_riunioni (del sistema, ogni 10 minuti: appuntamenti che iniziano tra poco, in privato a chi li ha creati e a chi sono assegnati);
@@ -17,6 +18,7 @@ import { marginiBot, preventivoBot, variantiBot } from './_preventivo.js';
 import { linkGmail, scriviBozza } from './_email.js';
 import { indirizzo, leggiEmail, type Commessa, type Lettura } from './_posta.js';
 import { chiaveAvviso, daAvvisare, linkRiunione, minutiA } from '../src/domain/riunione.js';
+import { ETICHETTE, nomiEtichette, pulisciEtichette } from '../src/domain/documenti.js';
 
 export const GENERI = ['attivita', 'promemoria', 'scadenza', 'appuntamento', 'urgenza'] as const;
 export const CATEGORIE = ['STRUTTURA', 'BULLONERIA', 'ELETTROMECCANICO', 'ELETTRONICO'] as const;
@@ -164,7 +166,9 @@ async function apriModulo(b: any, chat: number, origine: string) {
 /** Appunti (note dei documenti e note delle voci d'agenda) che contengono tutte le parole cercate, i più recenti prima. */
 async function cercaAppunti(db: Db, b: any) {
   const pid = String(b.preventivo_id ?? '').trim();
-  let qd = db.from('documenti').select('id, titolo, testo, preventivo_id, creato').eq('tipo', 'nota');
+  let qd = db.from('documenti').select('id, titolo, testo, preventivo_id, creato, etichette').eq('tipo', 'nota');
+  const tema = pulisciEtichette(b.etichetta);
+  if (tema.length) qd = qd.overlaps('etichette', tema);
   let qv = db.from('scadenze').select('id, titolo, nota, giorno, preventivo_id').not('nota', 'is', null);
   if (pid) { qd = qd.eq('preventivo_id', pid); qv = qv.eq('preventivo_id', pid); }
   const [{ data: dd, error }, { data: vv }, ctx] = await Promise.all([
@@ -172,11 +176,12 @@ async function cercaAppunti(db: Db, b: any) {
   if (error) return fail(error.message);
   const comm = (id: string | null) => (id ? ctx.commesse.get(id)?.nome || null : null);
   const tutti = [
-    ...(dd || []).map((d: any) => ({ id: d.id, fonte: 'documenti', titolo: d.titolo, testo: d.testo || '', data: String(d.creato).slice(0, 10), commessa: comm(d.preventivo_id) })),
-    ...(vv || []).map((v: any) => ({ id: v.id, fonte: 'agenda', titolo: v.titolo, testo: v.nota || '', data: v.giorno, commessa: comm(v.preventivo_id) })),
+    ...(dd || []).map((d: any) => ({ id: d.id, fonte: 'documenti', titolo: d.titolo, testo: d.testo || '', data: String(d.creato).slice(0, 10), commessa: comm(d.preventivo_id), temi: nomiEtichette(d.etichette) })),
+    // Le note dell'agenda non hanno etichette: con un tema scelto restano fuori.
+    ...(tema.length ? [] : vv || []).map((v: any) => ({ id: v.id, fonte: 'agenda', titolo: v.titolo, testo: v.nota || '', data: v.giorno, commessa: comm(v.preventivo_id), temi: '' })),
   ].sort((a, x) => x.data.localeCompare(a.data));
   const parole = norm(String(b.cerca ?? '')).split(/\s+/).filter(Boolean);
-  const trovati = tutti.filter(a => { const t = norm([a.titolo, a.testo, a.commessa].join(' ')); return parole.every(w => t.includes(w)); })
+  const trovati = tutti.filter(a => { const t = norm([a.titolo, a.testo, a.commessa, a.temi].join(' ')); return parole.every(w => t.includes(w)); })
     .slice(0, 10).map(({ testo, ...a }) => ({ ...a, estratto: testo.length > 300 ? testo.slice(0, 300) + '…' : testo }));
   return { ok: true, trovati };
 }
@@ -222,15 +227,49 @@ async function emailDaAppunto(db: Db, b: any, io: Me, chat: number, origine: str
   return { ok: true, oggetto: r.oggetto, testo: `Ti ho mandato in privato la bozza «${r.oggetto}» con i pulsanti per aprirla in Gmail, dal telefono o dal computer.` };
 }
 
+/* ---------- Note (Documenti) ---------- */
+const temiTesto = (kk: string[]) => (kk.length ? ` · temi: ${nomiEtichette(kk)}` : '');
+/** Nota nuova nei Documenti, scritta da Telegram: libera o legata a una commessa, con le etichette del tema. */
+async function creaNota(db: Db, b: any, io: Me) {
+  const titolo = String(b.titolo ?? '').trim().slice(0, 200), testo = String(b.testo ?? '').trim().slice(0, 20_000) || null;
+  if (!titolo) return fail('Serve un titolo breve per la nota.');
+  const pid = String(b.preventivo_id ?? '').trim() || null, etichette = pulisciEtichette(b.etichette);
+  const p = pid ? (await db.from('preventivi').select('id, nome').eq('id', pid).maybeSingle()).data : null;
+  if (pid && !p) return fail("Preventivo non trovato: cercalo prima con l'azione commesse e usa il suo id, oppure salva la nota libera.");
+  const { data, error } = await db.from('documenti').insert({ tipo: 'nota', cartella: 'altro', titolo, testo, etichette, preventivo_id: pid, creato_da: io.email }).select('id').single();
+  if (error) return fail(error.message);
+  return { ok: true, id: data.id, testo: `📝 Nota salvata${p ? ' in ' + p.nome : ' (libera)'}: ${titolo}${temiTesto(etichette)}` };
+}
+/** Cambia etichette (aggiunge/toglie) e, se detta, la commessa di una nota. Come nell'app: solo l'autore o un amministratore. */
+async function modificaNota(db: Db, b: any, io: Me) {
+  const { data: d } = await db.from('documenti').select('id, titolo, etichette, preventivo_id, scadenza_id, creato_da').eq('id', String(b.id ?? '')).eq('tipo', 'nota').maybeSingle();
+  if (!d) return fail("Nota non trovata: cercala con l'azione appunti e usa il suo id (solo le note dei documenti, non quelle dell'agenda).");
+  if (d.creato_da !== io.email && io.ruolo !== 'admin') return fail("Può cambiarla solo chi l'ha scritta o un amministratore.");
+  const togli = pulisciEtichette(b.togli), patch: Record<string, unknown> = {};
+  const etichette = [...new Set([...(d.etichette || []).filter((k: string) => !togli.includes(k)), ...pulisciEtichette(b.aggiungi)])];
+  if (etichette.join() !== (d.etichette || []).join()) patch.etichette = etichette;
+  const pid = String(b.preventivo_id ?? '').trim();
+  if (pid === 'nessuno') patch.preventivo_id = null;
+  else if (pid) {
+    if (!(await db.from('preventivi').select('id').eq('id', pid).maybeSingle()).data) return fail("Preventivo non trovato: cercalo con l'azione commesse.");
+    patch.preventivo_id = pid;
+  }
+  if (!Object.keys(patch).length) return fail('Niente da cambiare: la nota ha già queste etichette.');
+  const { error } = await db.from('documenti').update(patch).eq('id', d.id);
+  if (error) return fail(error.message);
+  return { ok: true, testo: `🏷 Nota aggiornata: ${d.titolo}${temiTesto(etichette) || ' · nessuna etichetta'}` };
+}
+
 /* ---------- Email in arrivo ---------- */
 export type Proposta = Lettura & { oggetto: string; link?: string };
 /** Messaggio in chat privata con la lettura dell'email e i pulsanti "pe:<id>:<scelta>" (a appunto, p promemoria, r riunione, x ignora). */
 export function propostaTelegram(id: string, l: Proposta, commessa: string | null, oggi: string) {
   const giorno = l.giorno || prossimoLavorativo(oggi), b = (text: string, s: string) => [{ text, callback_data: `pe:${id}:${s}` }];
   const text = [`📧 Email${l.mittente ? ' di ' + l.mittente : ''}`, l.oggetto ? `Oggetto: ${l.oggetto}` : '', '', `👉 ${l.titolo}`, l.riassunto, '',
-    l.link ? `🎥 ${l.link}` : '', commessa ? `Commessa: ${commessa}` : "Commessa: non riconosciuta (per salvarla come appunto scrivi la commessa sopra l'inoltro)", '', 'Cosa ne faccio?']
+    l.link ? `🎥 ${l.link}` : '', commessa ? `Commessa: ${commessa}` : 'Commessa: non riconosciuta (l\'appunto resta libero)',
+    l.etichette?.length ? `Temi: ${nomiEtichette(l.etichette)}` : '', '', 'Cosa ne faccio?']
     .filter((x, i, a) => x || (i > 0 && a[i - 1])).join('\n').slice(0, 4000);
-  const tasti = [...(commessa ? [b('📝 Appunto nella commessa', 'a')] : []), b(`🔔 Promemoria ${giornoIt(giorno)}`, 'p'),
+  const tasti = [b(commessa ? '📝 Appunto nella commessa' : '📝 Appunto', 'a'), b(`🔔 Promemoria ${giornoIt(giorno)}`, 'p'),
     ...(l.giorno ? [b(`📅 Riunione ${giornoIt(l.giorno)}${l.ora ? ' ' + l.ora : ''}`, 'r')] : []), b('🗑 Ignora', 'x')];
   return { text, reply_markup: { inline_keyboard: tasti } };
 }
@@ -299,11 +338,12 @@ async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
   let testo: string;
   if (scelta === 'x') testo = 'Ok, email ignorata.';
   else if (scelta === 'a') {
-    if (!d.preventivo_id) return fail("Senza commessa l'appunto non si può salvare: scegli promemoria.");
-    const { error } = await db.from('documenti').insert({ preventivo_id: d.preventivo_id, tipo: 'nota', cartella: 'cliente', titolo: d.titolo, testo: nota, creato_da: io.email });
+    const etichette = pulisciEtichette(d.etichette);
+    const { error } = await db.from('documenti').insert({ preventivo_id: d.preventivo_id || null, tipo: 'nota', cartella: d.preventivo_id ? 'cliente' : 'altro',
+      titolo: d.titolo, testo: nota, etichette, creato_da: io.email });
     if (error) return fail(error.message);
-    const { data: c } = await db.from('preventivi').select('nome').eq('id', d.preventivo_id).maybeSingle();
-    testo = `📝 Appunto salvato in Documenti${c ? ' di ' + c.nome : ''}: ${d.titolo}`;
+    const { data: c } = d.preventivo_id ? await db.from('preventivi').select('nome').eq('id', d.preventivo_id).maybeSingle() : { data: null };
+    testo = `📝 Appunto salvato${c ? ' in Documenti di ' + c.nome : ' tra le note (libero)'}: ${d.titolo}${temiTesto(etichette)}`;
   } else if (scelta === 'p' || scelta === 'r') {
     if (scelta === 'r' && !d.giorno) return fail("Nell'email non c'è la data della riunione: scegli promemoria e correggila nell'app.");
     const { data: v, error } = await db.from('scadenze').insert({ genere: scelta === 'r' ? 'appuntamento' : 'promemoria', giorno: d.giorno || prossimoLavorativo(oggi),
@@ -368,6 +408,9 @@ export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''):
   if (az === 'appunti') return cercaAppunti(db, b);
   if (az === 'email') return emailDaAppunto(db, b, io, tid, origine);
   if (az === 'pe') return sceltaPosta(db, b, io, oggi);
+  if (az === 'nota') return creaNota(db, b, io);
+  if (az === 'nota_modifica') return modificaNota(db, b, io);
+  if (az === 'etichette') return { ok: true, etichette: ETICHETTE.map(([k, l]) => ({ chiave: k, nome: l })) };
 
   if (az === 'colleghi') {
     const { data } = await db.from('utenti').select('email, nome').eq('attivo', true).order('nome');

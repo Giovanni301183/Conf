@@ -2,6 +2,7 @@
 // e propone titolo, riassunto, giorno, ora e commessa. Non crea niente: la proposta arriva in chat privata su Telegram
 // e chi l'ha inoltrata sceglie con un pulsante se farne un appunto, un promemoria o una riunione (azioni posta e pe di /api/agenda).
 import Anthropic from '@anthropic-ai/sdk';
+import { ETICHETTE, pulisciEtichette } from '../src/domain/documenti.js';
 
 const MODELLO = 'claude-opus-5-5';
 
@@ -15,8 +16,10 @@ const SCHEMA = {
     ora: { type: 'string', description: 'Ora HH:MM della riunione o scadenza; vuoto se non c\'è.' },
     riunione: { type: 'boolean', description: "true se l'email propone o fissa una riunione, una call o un incontro." },
     preventivo_id: { type: 'string', description: "id della commessa dell'elenco a cui si riferisce l'email; vuoto se non è chiaro." },
+    etichette: { type: 'array', items: { type: 'string', enum: ETICHETTE.map(([k]) => k) },
+      description: 'Da 0 a 3 temi: ' + ETICHETTE.map(([k, l]) => `${k} = ${l}`).join(', ') },
   },
-  required: ['titolo', 'riassunto', 'mittente', 'giorno', 'ora', 'riunione', 'preventivo_id'],
+  required: ['titolo', 'riassunto', 'mittente', 'giorno', 'ora', 'riunione', 'preventivo_id', 'etichette'],
   additionalProperties: false,
 };
 
@@ -26,12 +29,13 @@ Regole:
 - Se sopra l'email inoltrata il collega ha scritto due righe (commessa, cosa fare, quando), hanno la precedenza sull'email.
 - Usa solo quello che c'è scritto: non inventare date, quantità, prezzi o impegni. Date relative ("venerdì prossimo") → AAAA-MM-GG da oggi.
 - La commessa la scegli solo dall'elenco che ti passo, se nome, cliente, numero o riferimento corrispondono davvero; altrimenti vuoto.
+- Etichette: da 0 a 3 temi che descrivono davvero l'email (es. offerta di un fornitore = acquisti; richiesta di un nuovo cliente = opportunita e vendita; reclamo = qualita).
 - Testo semplice, niente markdown.
 Rispondi con il JSON richiesto.`;
 
 export interface Commessa { id: string; nome: string; cliente: string | null; num: string | null; rif: string | null }
 export interface EmailIn { da: string; oggetto: string; testo: string; data?: string }
-export interface Lettura { titolo: string; riassunto: string; mittente: string; giorno: string; ora: string; riunione: boolean; preventivo_id: string }
+export interface Lettura { titolo: string; riassunto: string; mittente: string; giorno: string; ora: string; riunione: boolean; preventivo_id: string; etichette?: string[] }
 
 /** Tiene solo i campi validi della risposta dell'AI: date e ore ben scritte, commessa presente nell'elenco. */
 export function pulisciLettura(x: any, commesse: Commessa[]): Lettura {
@@ -40,7 +44,7 @@ export function pulisciLettura(x: any, commesse: Commessa[]): Lettura {
   return {
     titolo: s(x.titolo, 200) || 'Email da guardare', riassunto: s(x.riassunto, 4000), mittente: s(x.mittente, 200),
     giorno: /^\d{4}-\d{2}-\d{2}$/.test(giorno) ? giorno : '', ora: /^([01]\d|2[0-3]):[0-5]\d$/.test(ora) ? ora : '',
-    riunione: x.riunione === true, preventivo_id: commesse.some(c => c.id === pid) ? pid : '',
+    riunione: x.riunione === true, preventivo_id: commesse.some(c => c.id === pid) ? pid : '', etichette: pulisciEtichette(x.etichette).slice(0, 3),
   };
 }
 

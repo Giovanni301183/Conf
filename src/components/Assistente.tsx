@@ -2,11 +2,11 @@
 // con Conferma e Annulla; solo la conferma cambia listino, distinte o calendario, con gli stessi strumenti dell'app.
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { datiPerAssistente, type Appunto, type Proposta } from '../domain/assistente';
-import { nomeEtichetta } from '../domain/documenti';
+import { nomiEtichette } from '../domain/documenti';
 import { sostituisci } from '../domain/referenze';
 import { clone } from '../domain/model';
 import { S, commit, save } from '../store/state';
-import { chiediAssistente, online, salvaScadenza } from '../store/remote';
+import { aggiornaDoc, chiediAssistente, online, salvaNota, salvaScadenza } from '../store/remote';
 import { apriGmail } from './Email';
 import { TabellaVarianti, scaricaOfferte } from './Varianti';
 import { archVarianti } from '../store/actions';
@@ -20,7 +20,7 @@ const Riconoscimento: any = typeof window !== 'undefined' ? (window as any).Spee
 /** Appunti per l'assistente: note dei documenti e note degli eventi, i più recenti prima, con il nome della commessa. */
 function appunti(): Appunto[] {
   const comm = (id?: string | null) => (id && S.arch.find(a => a.id === id)?.nome) || '';
-  const note = S.docs.filter(d => d.tipo === 'nota').map(d => ({ quando: String(d.creato || '').slice(0, 10), commessa: comm(d.preventivo_id), titolo: d.titolo + (d.etichette?.length ? ` [${d.etichette.map(nomeEtichetta).join(', ')}]` : ''), testo: (d.testo || '').slice(0, 2000) }));
+  const note = S.docs.filter(d => d.tipo === 'nota').map(d => ({ quando: String(d.creato || '').slice(0, 10), commessa: comm(d.preventivo_id), titolo: d.titolo, testo: (d.testo || '').slice(0, 2000), id: d.id, etichette: d.etichette || [] }));
   const eventi = S.scad.filter(x => x.nota).map(x => ({ quando: x.giorno, commessa: comm(x.preventivo_id), titolo: 'Evento: ' + x.titolo, testo: String(x.nota).slice(0, 2000) }));
   return [...note, ...eventi].sort((a, b) => b.quando.localeCompare(a.quando)).slice(0, 300);
 }
@@ -79,6 +79,18 @@ function Card({ p, stato, onFatto }: { p: Proposta; stato?: string; onFatto: (es
         if (e) throw new Error(e);
         commit(); onFatto('✓ Evento aggiunto al calendario', `Proposta ${p.id} confermata: evento creato nel calendario.`);
       }
+      else if (p.tipo === 'nota') {
+        const e = await salvaNota({ titolo: p.titolo, testo: p.testo, cartella: 'altro', etichette: p.etichette, preventivo_id: p.preventivo_id });
+        if (e) throw new Error(e);
+        commit(); onFatto('✓ Nota salvata' + (p.commessa ? ' in ' + p.commessa : ' (libera)'), `Proposta ${p.id} confermata: nota salvata.`);
+      }
+      else if (p.tipo === 'etichette') {
+        const errori: string[] = [];
+        for (const n of p.note) { const e = await aggiornaDoc(n.id, { etichette: n.dopo }); if (e) errori.push(`${n.titolo}: ${e}`); }
+        commit();
+        if (errori.length === p.note.length) throw new Error(errori.join('; '));
+        onFatto('✓ Etichette aggiornate' + (errori.length ? ` (non riuscite: ${errori.join('; ')})` : ''), `Proposta ${p.id} confermata: etichette cambiate su ${p.note.length - errori.length} note.`);
+      }
     } catch (err) { onFatto('Non riuscito: ' + (err as Error).message, `Proposta ${p.id} non applicata: ${(err as Error).message}.`); }
     setBusy(false);
   };
@@ -91,6 +103,14 @@ function Card({ p, stato, onFatto }: { p: Proposta; stato?: string; onFatto: (es
       </> : p.tipo === 'varianti' ? <>
         <b>Varianti di {p.nome}</b>
         <TabellaVarianti id={p.base} vv={p.varianti} />
+      </> : p.tipo === 'nota' ? <>
+        <b>Nuova nota{p.commessa ? ' · ' + p.commessa : ' libera'}</b>
+        <div>{p.titolo}</div>
+        {p.testo && <div className="muted" style={{ whiteSpace: 'pre-wrap' }}>{p.testo}</div>}
+        {p.etichette.length > 0 && <div className="muted">Temi: {nomiEtichette(p.etichette)}</div>}
+      </> : p.tipo === 'etichette' ? <>
+        <b>Etichette delle note</b>
+        <ul>{p.note.map(n => <li key={n.id}>{n.titolo}: {nomiEtichette(n.prima) || '—'} → <b>{nomiEtichette(n.dopo) || 'nessuna'}</b></li>)}</ul>
       </> : <>
         <b>Nuovo evento</b>
         <div>{p.titolo}</div>
