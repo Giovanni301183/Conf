@@ -537,6 +537,7 @@ table.arch td input{width:100%;max-width:260px}
 .dpanel.over{background:var(--soft);outline-color:var(--acc)}
 .dbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
 .dbar .dq{flex:1;min-width:180px;max-width:320px}
+.dbar .dsel{width:auto;max-width:220px;font-size:13px;padding:5px 6px}
 .etqs{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;font-weight:400}
 .etq{--ec:#8a9196;display:inline-flex;align-items:center;gap:5px;border:1px solid color-mix(in srgb,var(--ec) 45%,transparent);background:transparent;color:var(--ink2);border-radius:20px;padding:2px 9px;font:inherit;font-size:12px;line-height:1.5}
 button.etq{cursor:pointer}button.etq:hover{border-color:var(--ec)}

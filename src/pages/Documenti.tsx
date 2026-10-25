@@ -37,10 +37,10 @@ const notaVuota = (cartella: Cartella = 'altro'): Nota => ({ titolo: '', testo: 
 const scambia = (xx: string[], k: string) => xx.includes(k) ? xx.filter(x => x !== k) : [...xx, k];
 /** Finestra per scegliere uno o più file. */
 const scegliFile = (fatto: (ff: File[]) => void) => { const i = document.createElement('input'); i.type = 'file'; i.multiple = true; i.onchange = () => i.files && fatto([...i.files]); i.click(); };
-/** Carica i file come allegati della nota: ritorna quanti ne sono andati. */
-async function allega(notaId: string, ff: File[]) {
+/** Carica i file come allegati della nota, nella sua cartella: ritorna quanti ne sono andati. */
+async function allega(notaId: string, ff: File[], cartella: Cartella) {
   let ok = 0;
-  for (const f of ff) { const e = await caricaFile(f, { nota_id: notaId }, cartellaPer(f.name, f.type)); if (e) toast(e); else ok++; }
+  for (const f of ff) { const e = await caricaFile(f, { nota_id: notaId }, cartella); if (e) toast(e); else ok++; }
   if (ok) await ricaricaDocumenti();
   return ok;
 }
@@ -85,7 +85,7 @@ function ModuloNota({ n, set, chiudi, dove }: { n: Nota; set: (n: Nota) => void;
     setBusy(true);
     const { errore, id } = await salvaNota({ ...n, ...dove, ...(scelgo ? { preventivo_id: n.preventivo_id } : {}) });
     if (errore) { setBusy(false); toast('Nota non salvata: ' + errore); return; }
-    const ok = file.length && id ? await allega(id, file) : 0;
+    const ok = file.length && id ? await allega(id, file, n.cartella) : 0;
     setBusy(false);
     toast((n.id ? 'Nota aggiornata' : 'Nota aggiunta') + (ok ? ` con ${ok === 1 ? 'un allegato' : ok + ' allegati'}` : '')); chiudi(); commit();
   };
@@ -158,7 +158,7 @@ function Voce({ d, thumb, onEdit, conVoce }: { d: Documento; thumb?: string; onE
       <div className="dact">
         {d.tipo === 'file' && <button className="btn s" onClick={() => apriFile(d, true)}>Scarica</button>}
         {d.tipo === 'nota' && <button className="btn s" disabled={carico > 0} title="Allega un documento, una foto o un PDF a questa nota"
-          onClick={() => scegliFile(async ff => { setCarico(ff.length); const ok = await allega(d.id, ff); setCarico(0); if (ok) toast(ok === 1 ? 'Allegato aggiunto' : `${ok} allegati aggiunti`); commit(); })}>
+          onClick={() => scegliFile(async ff => { setCarico(ff.length); const ok = await allega(d.id, ff, d.cartella); setCarico(0); if (ok) toast(ok === 1 ? 'Allegato aggiunto' : `${ok} allegati aggiunti`); commit(); })}>
           {carico ? `Carico… (${carico})` : '📎 Allega'}</button>}
         {d.tipo === 'nota' && online() && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la nota a un collega: diventa una voce «Da fare» nella sua agenda">👤 Assegna</button>}
         {d.tipo === 'nota' && !email && <button className="btn s" onClick={() => setEmail(true)} title="Scrivi un'email di aggiornamento da questo appunto">✉ Email</button>}
@@ -249,11 +249,12 @@ export function Documenti() {
  *  Una nota puo' essere libera (solo con le etichette) o legata a un preventivo, scelto qui o suggerito dal testo. */
 export function NoteHome() {
   const [q, setQ] = useState(''), [nota, setNota] = useState<Nota | null>(null), [tutte, setTutte] = useState(false);
-  const [temi, setTemi] = useState<string[]>([]);
+  const [temi, setTemi] = useState<string[]>([]), [cart, setCart] = useState<Cartella | ''>('');
   const no = docNonDisponibili();
   if (no) return null;
-  const tutteNote = S.docs.filter(d => d.tipo === 'nota'), filtro = !!q || temi.length > 0;
-  const note = conEtichette(cerca(tutteNote, q), temi).sort((a, b) => (b.modificato || b.creato).localeCompare(a.modificato || a.creato));
+  const tutteNote = S.docs.filter(d => d.tipo === 'nota'), nC = perCartella(tutteNote), inCartella = cart ? tutteNote.filter(d => d.cartella === cart) : tutteNote;
+  const filtro = !!q || temi.length > 0 || !!cart;
+  const note = conEtichette(cerca(inCartella, q), temi).sort((a, b) => (b.modificato || b.creato).localeCompare(a.modificato || a.creato));
   const viste = tutte || filtro ? note : note.slice(0, 10);
   const nomeP = (id: string | null) => (id && S.arch.find(e => e.id === id)?.nome) || '';
   return (
@@ -261,8 +262,11 @@ export function NoteHome() {
       <h2 style={{ marginTop: 0 }}>Note<span className="sp" />
         {!nota && <button className="btn s p" onClick={() => setNota({ ...notaVuota(), preventivo_id: S.prev._id || '' })}>+ Nota</button>}</h2>
       <div className="dbar"><input className="dq" value={q} placeholder="Cerca nelle note…" onChange={e => setQ(e.target.value)} />
+        <select className="dsel" value={cart} onChange={e => setCart(e.target.value as Cartella | '')} title="Mostra solo le note di una cartella">
+          <option value="">Tutte le cartelle</option>
+          {CARTELLE.filter(([k]) => nC[k] || cart === k).map(([k, l]) => <option key={k} value={k}>{l} ({nC[k] || 0})</option>)}</select>
         <span className="muted small">{note.length} not{note.length === 1 ? 'a' : 'e'}{filtro ? ' trovat' + (note.length === 1 ? 'a' : 'e') : ''}</span></div>
-      <FiltroEtichette docs={tutteNote} sel={temi} set={setTemi} />
+      <FiltroEtichette docs={inCartella} sel={temi} set={setTemi} />
       {nota && <ModuloNota n={nota} set={setNota} chiudi={() => setNota(null)} dove={{}} />}
       {viste.length ? viste.map(d => <Fragment key={d.id}>
         {nomeP(d.preventivo_id) && <div className="muted small" style={{ marginTop: 8 }}>{nomeP(d.preventivo_id)}</div>}

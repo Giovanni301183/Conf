@@ -261,6 +261,7 @@ export async function salvaNota(n: { id?: string; titolo: string; testo: string;
   const { data, error } = n.id ? await supabase.from('documenti').update(v).eq('id', n.id).select('id').single()
     : await supabase.from('documenti').insert({ ...v, tipo: 'nota', preventivo_id: n.preventivo_id || null, scadenza_id: n.scadenza_id || null }).select('id').single();
   if (error) return { errore: dbErr(error.message) };
+  if (n.id) await cartellaAllegati(n.id, n.cartella);
   await loadDocumenti(); return { errore: '', id: data.id };
 }
 /** Nota assegnata a un collega: diventa una voce «Da fare» per il collega (annunciata su Telegram come le altre voci assegnate),
@@ -276,9 +277,14 @@ export async function assegnaNota(d: Documento, a: string, giorno: string): Prom
   }
   await Promise.all([loadScadenze(), loadDocumenti()]); return '';
 }
+/** Gli allegati seguono la cartella della nota. Le regole del database lasciano spostare solo i propri (o tutti, all'amministratore). */
+async function cartellaAllegati(notaId: string, cartella: string) {
+  if (S.docs.some(d => d.nota_id === notaId && d.cartella !== cartella)) await supabase!.from('documenti').update({ cartella }).eq('nota_id', notaId);
+}
 export async function aggiornaDoc(id: string, patch: Partial<Pick<Documento, 'titolo' | 'cartella' | 'testo' | 'etichette'>>): Promise<string> {
   const { error } = await supabase!.from('documenti').update(patch).eq('id', id);
   if (error) return dbErr(error.message);
+  if (patch.cartella) await cartellaAllegati(id, patch.cartella);
   await loadDocumenti(); return '';
 }
 export async function eliminaDoc(d: Documento): Promise<string> {
