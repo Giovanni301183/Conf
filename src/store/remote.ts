@@ -241,27 +241,27 @@ async function loadDocumenti() {
 }
 const dbErr = (m: string) => (/documenti_legato/.test(m) ? "il documento deve restare legato a un preventivo o a una voce d'agenda (per le note libere serve la migrazione 20261025030000_note_libere.sql)"
   : /etichette/.test(m) ? 'manca la migrazione 20261025020000_etichette_note.sql (va eseguita nel SQL Editor di Supabase)' : m);
-export async function caricaFile(f: File, dove: { preventivo_id?: string | null; scadenza_id?: string | null }, cartella: string): Promise<string> {
+export async function caricaFile(f: File, dove: { preventivo_id?: string | null; scadenza_id?: string | null; nota_id?: string | null }, cartella: string): Promise<string> {
   if (!supabase) return 'I documenti si salvano solo con il server.';
   if (f.size > LIMITE_MB * 1024 * 1024) return `"${f.name}" supera ${LIMITE_MB} MB.`;
-  const percorso = percorsoPer(dove.preventivo_id || null, crypto.randomUUID(), f.name);
+  const percorso = percorsoPer(dove.nota_id ? 'note' : dove.preventivo_id || null, crypto.randomUUID(), f.name);
   const up = await supabase.storage.from(BUCKET).upload(percorso, f, { contentType: f.type || undefined, upsert: false });
   if (up.error) return `"${f.name}" non caricato: ${up.error.message}`;
-  const { error } = await supabase.from('documenti').insert({ preventivo_id: dove.preventivo_id || null, scadenza_id: dove.scadenza_id || null, cartella, tipo: 'file',
+  const { error } = await supabase.from('documenti').insert({ preventivo_id: dove.preventivo_id || null, scadenza_id: dove.scadenza_id || null, nota_id: dove.nota_id || null, cartella, tipo: 'file',
     titolo: f.name.slice(0, 200), percorso, mime: f.type || null, dimensione: f.size });
-  if (error) { await supabase.storage.from(BUCKET).remove([percorso]); return `"${f.name}" non salvato: ${dbErr(error.message)}`; }
+  if (error) { await supabase.storage.from(BUCKET).remove([percorso]); return `"${f.name}" non salvato: ${/nota_id/.test(error.message) ? 'manca la migrazione 20261025040000_allegati_note.sql' : dbErr(error.message)}`; }
   return '';
 }
-export async function salvaNota(n: { id?: string; titolo: string; testo: string; cartella: string; etichette: string[]; preventivo_id?: string | null; scadenza_id?: string | null }): Promise<string> {
-  if (!supabase) return 'Le note si salvano solo con il server.';
+export async function salvaNota(n: { id?: string; titolo: string; testo: string; cartella: string; etichette: string[]; preventivo_id?: string | null; scadenza_id?: string | null }): Promise<{ errore: string; id?: string }> {
+  if (!supabase) return { errore: 'Le note si salvano solo con il server.' };
   const v: Record<string, unknown> = { titolo: n.titolo.trim().slice(0, 200), testo: n.testo.trim() || null, cartella: n.cartella, etichette: n.etichette };
   // Il collegamento al preventivo si cambia solo se il modulo lo mostra (dalla Home); altrove resta quello di prima.
   if (n.id && n.preventivo_id !== undefined) v.preventivo_id = n.preventivo_id || null;
-  if (!v.titolo) return 'Serve un titolo.';
-  const { error } = n.id ? await supabase.from('documenti').update(v).eq('id', n.id)
-    : await supabase.from('documenti').insert({ ...v, tipo: 'nota', preventivo_id: n.preventivo_id || null, scadenza_id: n.scadenza_id || null });
-  if (error) return dbErr(error.message);
-  await loadDocumenti(); return '';
+  if (!v.titolo) return { errore: 'Serve un titolo.' };
+  const { data, error } = n.id ? await supabase.from('documenti').update(v).eq('id', n.id).select('id').single()
+    : await supabase.from('documenti').insert({ ...v, tipo: 'nota', preventivo_id: n.preventivo_id || null, scadenza_id: n.scadenza_id || null }).select('id').single();
+  if (error) return { errore: dbErr(error.message) };
+  await loadDocumenti(); return { errore: '', id: data.id };
 }
 /** Nota assegnata a un collega: diventa una voce «Da fare» per il collega (annunciata su Telegram come le altre voci assegnate),
  *  con il testo della nota; la nota, se non è già di un'altra voce e la si può modificare, resta allegata alla voce. */
@@ -282,6 +282,9 @@ export async function aggiornaDoc(id: string, patch: Partial<Pick<Documento, 'ti
   await loadDocumenti(); return '';
 }
 export async function eliminaDoc(d: Documento): Promise<string> {
+  // Nota con allegati: prima i file dallo Storage (le righe se ne vanno con la nota).
+  const pp = S.docs.filter(x => x.nota_id === d.id && x.percorso).map(x => x.percorso);
+  if (pp.length) { const { error } = await supabase!.storage.from(BUCKET).remove(pp); if (error) return error.message; }
   if (d.percorso) { const { error } = await supabase!.storage.from(BUCKET).remove([d.percorso]); if (error) return error.message; }
   const { error } = await supabase!.from('documenti').delete().eq('id', d.id);
   if (error) return error.message;

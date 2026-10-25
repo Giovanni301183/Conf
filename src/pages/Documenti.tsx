@@ -1,7 +1,7 @@
 // Documenti e note (DMS leggero): scheda Documenti del preventivo e allegati delle voci d'agenda.
 // File e note si caricano qui; i file stanno nello Storage di Supabase e si aprono con un link temporaneo.
 import { Fragment, useEffect, useState, type CSSProperties } from 'react';
-import { CARTELLE, ETICHETTE, LIMITE_MB, cartellaPer, cerca, coloreEtichetta, conEtichette, documentiDi, estensione, etichetteDi, fByte, immagine, nomeCartella, nomeEtichetta, perCartella, perEtichetta, suggerisciEtichette, suggerisciPreventivi, type Cartella, type Documento } from '../domain/documenti';
+import { CARTELLE, ETICHETTE, LIMITE_MB, allegatiDi, cartellaPer, cerca, coloreEtichetta, conEtichette, documentiDi, estensione, etichetteDi, fByte, immagine, nomeCartella, nomeEtichetta, perCartella, perEtichetta, suggerisciEtichette, suggerisciPreventivi, type Cartella, type Documento } from '../domain/documenti';
 import { S, commit } from '../store/state';
 import { toast } from '../store/actions';
 import { ModuloEmail, contestoEmail } from '../components/Email';
@@ -19,7 +19,8 @@ export async function apriFile(d: Documento, scarica = false) {
   } catch (err) { w?.close(); toast('File non aperto: ' + (err as Error).message); }
 }
 async function togli(d: Documento) {
-  if (!confirm(`Eliminare ${d.tipo === 'nota' ? 'la nota' : 'il file'} "${d.titolo}"? Non si può recuperare.`)) return;
+  const n = d.tipo === 'nota' ? allegatiDi(S.docs, d.id).length : 0;
+  if (!confirm(`Eliminare ${d.tipo === 'nota' ? 'la nota' : 'il file'} "${d.titolo}"${n ? ` e ${n === 1 ? 'il suo allegato' : `i suoi ${n} allegati`}` : ''}? Non si può recuperare.`)) return;
   const e = await eliminaDoc(d); toast(e ? 'Non eliminato: ' + e : 'Eliminato'); commit();
 }
 async function rinomina(d: Documento) {
@@ -34,6 +35,23 @@ async function sposta(d: Documento, cartella: Cartella) {
 type Nota = { id?: string; titolo: string; testo: string; cartella: Cartella; etichette: string[]; preventivo_id?: string };
 const notaVuota = (cartella: Cartella = 'altro'): Nota => ({ titolo: '', testo: '', cartella, etichette: [] });
 const scambia = (xx: string[], k: string) => xx.includes(k) ? xx.filter(x => x !== k) : [...xx, k];
+/** Finestra per scegliere uno o più file. */
+const scegliFile = (fatto: (ff: File[]) => void) => { const i = document.createElement('input'); i.type = 'file'; i.multiple = true; i.onchange = () => i.files && fatto([...i.files]); i.click(); };
+/** Carica i file come allegati della nota: ritorna quanti ne sono andati. */
+async function allega(notaId: string, ff: File[]) {
+  let ok = 0;
+  for (const f of ff) { const e = await caricaFile(f, { nota_id: notaId }, cartellaPer(f.name, f.type)); if (e) toast(e); else ok++; }
+  if (ok) await ricaricaDocumenti();
+  return ok;
+}
+/** Allegati sotto una nota: si aprono con un clic; chi li ha caricati (o l'amministratore) li toglie. */
+function Allegati({ nota }: { nota: Documento }) {
+  const aa = allegatiDi(S.docs, nota.id);
+  if (!aa.length) return null;
+  return <div className="dall">{aa.map(a => <span key={a.id} className="dallf">
+    <a href="#" onClick={e => { e.preventDefault(); apriFile(a); }} title={`${a.titolo} · ${fByte(a.dimensione)} · da ${nomeDi(a.creato_da)}`}>📎 {a.titolo}</a>
+    {puoGestireDoc(a) && <button type="button" className="link" title="Togli l'allegato" onClick={() => togli(a)}>✕</button>}</span>)}</div>;
+}
 
 /** Preventivi dell'archivio per un menu: prima quelli aperti (vinti e in corso), poi persi e non scelti. */
 function OpzioniPreventivi() {
@@ -59,14 +77,17 @@ function FiltroEtichette({ docs, sel, set }: { docs: Documento[]; sel: string[];
 }
 /** Modulo della nota. Mentre si scrive suggerisce i temi e, se il collegamento si sceglie qui, la commessa nominata nel testo. */
 function ModuloNota({ n, set, chiudi, dove }: { n: Nota; set: (n: Nota) => void; chiudi: () => void; dove: { preventivo_id?: string | null; scadenza_id?: string | null } }) {
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false), [file, setFile] = useState<File[]>([]);
   const scelgo = n.preventivo_id !== undefined, scritto = `${n.titolo} ${n.testo}`;
   const sugE = suggerisciEtichette(scritto).filter(k => !n.etichette.includes(k));
   const sugP = scelgo && !n.preventivo_id ? suggerisciPreventivi(scritto, S.arch) : [];
   const salva = async () => {
-    setBusy(true); const e = await salvaNota({ ...n, ...dove, ...(scelgo ? { preventivo_id: n.preventivo_id } : {}) }); setBusy(false);
-    if (e) { toast('Nota non salvata: ' + e); return; }
-    toast(n.id ? 'Nota aggiornata' : 'Nota aggiunta'); chiudi(); commit();
+    setBusy(true);
+    const { errore, id } = await salvaNota({ ...n, ...dove, ...(scelgo ? { preventivo_id: n.preventivo_id } : {}) });
+    if (errore) { setBusy(false); toast('Nota non salvata: ' + errore); return; }
+    const ok = file.length && id ? await allega(id, file) : 0;
+    setBusy(false);
+    toast((n.id ? 'Nota aggiornata' : 'Nota aggiunta') + (ok ? ` con ${ok === 1 ? 'un allegato' : ok + ' allegati'}` : '')); chiudi(); commit();
   };
   return (
     <div className="cform">
@@ -79,11 +100,14 @@ function ModuloNota({ n, set, chiudi, dove }: { n: Nota; set: (n: Nota) => void;
       <div className="f wide">Etichette (tema, anche più di una)<div className="etqs">
         {ETICHETTE.map(([k]) => <Etq key={k} k={k} on={n.etichette.includes(k)} onClick={() => set({ ...n, etichette: scambia(n.etichette, k) })} />)}</div></div>
       <label className="f wide">Testo<textarea rows={4} value={n.testo} onChange={e => set({ ...n, testo: e.target.value })} /></label>
+      <div className="f wide">Allegati (documenti, foto, PDF… massimo {LIMITE_MB} MB ciascuno)<div className="etqs">
+        {file.map((f, i) => <span key={i} className="etq on">📎 {f.name}<button type="button" className="link" onClick={() => setFile(file.filter((_, j) => j !== i))}>✕</button></span>)}
+        <button type="button" className="etq" onClick={() => scegliFile(ff => setFile([...file, ...ff]))}>+ Allega file</button></div></div>
       {(sugE.length > 0 || sugP.length > 0) && <div className="wide etqs sug"><span className="muted small">Sembra:</span>
         {sugE.map(k => <button key={k} type="button" className="etq" style={{ '--ec': coloreEtichetta(k) } as CSSProperties} onClick={() => set({ ...n, etichette: [...n.etichette, k] })}>+ {nomeEtichetta(k)}</button>)}
         {sugP.map(e => <button key={e.id} type="button" className="etq" onClick={() => set({ ...n, preventivo_id: e.id })}>🔗 {e.nome}{e.cliente ? ' · ' + e.cliente : ''}</button>)}</div>}
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
-        <button className="btn p" disabled={busy || !n.titolo.trim()} onClick={salva}>{n.id ? 'Salva modifiche' : 'Aggiungi nota'}</button>
+        <button className="btn p" disabled={busy || !n.titolo.trim()} onClick={salva}>{busy ? 'Salvo…' : n.id ? 'Salva modifiche' : 'Aggiungi nota'}</button>
         <button className="btn" onClick={chiudi}>Annulla</button>
       </div>
     </div>
@@ -113,7 +137,7 @@ function Assegna({ d, chiudi }: { d: Documento; chiudi: () => void }) {
 }
 
 function Voce({ d, thumb, onEdit, conVoce }: { d: Documento; thumb?: string; onEdit: (n: Nota) => void; conVoce: boolean }) {
-  const [email, setEmail] = useState(false), [ass, setAss] = useState(false);
+  const [email, setEmail] = useState(false), [ass, setAss] = useState(false), [carico, setCarico] = useState(0);
   const mio = puoGestireDoc(d), voce = conVoce && d.scadenza_id ? S.scad.find(s => s.id === d.scadenza_id) : null;
   // Voci assegnate nate da questa nota: quella a cui è allegata, o con lo stesso titolo e la stessa commessa.
   const per = d.tipo !== 'nota' ? [] : S.scad.filter(s => s.assegnata_a && (s.id === d.scadenza_id || (s.titolo === d.titolo.trim() && (s.preventivo_id || null) === (d.preventivo_id || null))));
@@ -129,9 +153,13 @@ function Voce({ d, thumb, onEdit, conVoce }: { d: Documento; thumb?: string; onE
         <small>{meta}</small>
         {etichetteDi(d).length > 0 && <div className="etqs">{etichetteDi(d).map(k => <Etq key={k} k={k} />)}</div>}
         {d.testo ? <p className="dtesto">{d.testo}</p> : null}
+        {d.tipo === 'nota' && <Allegati nota={d} />}
       </div>
       <div className="dact">
         {d.tipo === 'file' && <button className="btn s" onClick={() => apriFile(d, true)}>Scarica</button>}
+        {d.tipo === 'nota' && <button className="btn s" disabled={carico > 0} title="Allega un documento, una foto o un PDF a questa nota"
+          onClick={() => scegliFile(async ff => { setCarico(ff.length); const ok = await allega(d.id, ff); setCarico(0); if (ok) toast(ok === 1 ? 'Allegato aggiunto' : `${ok} allegati aggiunti`); commit(); })}>
+          {carico ? `Carico… (${carico})` : '📎 Allega'}</button>}
         {d.tipo === 'nota' && online() && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la nota a un collega: diventa una voce «Da fare» nella sua agenda">👤 Assegna</button>}
         {d.tipo === 'nota' && !email && <button className="btn s" onClick={() => setEmail(true)} title="Scrivi un'email di aggiornamento da questo appunto">✉ Email</button>}
         {mio && <select className="dsel" value={d.cartella} onChange={e => sposta(d, e.target.value as Cartella)} title="Sposta in un'altra cartella">

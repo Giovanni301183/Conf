@@ -6,6 +6,7 @@ export interface Documento {
   id: string; preventivo_id: string | null; scadenza_id: string | null; cartella: Cartella; tipo: 'nota' | 'file';
   titolo: string; testo: string | null; percorso: string | null; mime: string | null; dimensione: number | null;
   creato_da: string; creato: string; modificato: string | null; etichette?: string[] | null;
+  nota_id?: string | null;   // file allegato a una nota
 }
 // Cartelle di ogni commessa, nell'ordine in cui si mostrano: [chiave, etichetta].
 export const CARTELLE: [Cartella, string][] = [
@@ -81,7 +82,7 @@ export function nomeSicuro(nome: string) {
   const s = nome.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_').replace(/_+/g, '_').replace(/^[_.]+|_+$/g, '');
   return (s || 'file').slice(-120);
 }
-/** Percorso nello Storage: cartella del preventivo (o "agenda"), poi una cartella unica per file, poi il nome. */
+/** Percorso nello Storage: cartella del preventivo (o "agenda", o "note" per gli allegati), poi una cartella unica per file, poi il nome. */
 export const percorsoPer = (prevId: string | null, uid: string, nome: string) => `${prevId || 'agenda'}/${uid}/${nomeSicuro(nome)}`;
 
 /** Cartella proposta per un file nuovo: foto e disegni si riconoscono dal tipo o dall'estensione. */
@@ -100,6 +101,8 @@ export function fByte(n: number | null) {
   return `${(b / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
 }
 
+/** File allegati a una nota, nell'ordine in cui sono stati caricati. */
+export const allegatiDi = (docs: Documento[], notaId: string) => docs.filter(d => d.nota_id === notaId).sort((a, b) => a.creato.localeCompare(b.creato));
 /** Documenti di un preventivo (compresi quelli caricati sulle sue voci d'agenda) o di una voce, i piu' recenti prima. */
 export function documentiDi(docs: Documento[], { preventivo, scadenza }: { preventivo?: string; scadenza?: string }) {
   return docs.filter(d => (preventivo && d.preventivo_id === preventivo) || (scadenza && d.scadenza_id === scadenza))

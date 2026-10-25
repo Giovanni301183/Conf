@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cartellaPer, cerca, conEtichette, documentiDi, estensione, fByte, nomeSicuro, percorsoPer, perCartella, perEtichetta, pulisciEtichette, suggerisciEtichette, suggerisciPreventivi, type Documento } from './documenti';
+import { allegatiDi, cartellaPer, cerca, conEtichette, documentiDi, estensione, fByte, nomeSicuro, percorsoPer, perCartella, perEtichetta, pulisciEtichette, suggerisciEtichette, suggerisciPreventivi, type Documento } from './documenti';
 
 const doc = (p: Partial<Documento>): Documento => ({ id: 'x', preventivo_id: null, scadenza_id: null, cartella: 'altro', tipo: 'file', titolo: 'a.pdf', testo: null,
   percorso: null, mime: null, dimensione: null, creato_da: 'a@terranovasrl.net', creato: '2026-10-22T08:00:00Z', modificato: null, ...p });
@@ -87,5 +87,13 @@ describe('etichette da AI e Telegram', () => {
     expect(pulisciEtichette('sviluppo')).toEqual(['sviluppo']);
     expect(pulisciEtichette('')).toEqual([]);
     expect(pulisciEtichette(null)).toEqual([]);
+  });
+});
+
+describe('allegati delle note', () => {
+  it('elenca i file di una nota, i primi caricati prima', () => {
+    const D = [doc({ id: 'n', tipo: 'nota', titolo: 'Nota' }), doc({ id: 'b', nota_id: 'n', creato: '2026-10-25T10:00:00Z' }),
+      doc({ id: 'a', nota_id: 'n', creato: '2026-10-25T09:00:00Z' }), doc({ id: 'c', nota_id: 'altra' })];
+    expect(allegatiDi(D, 'n').map(d => d.id)).toEqual(['a', 'b']);
   });
 });

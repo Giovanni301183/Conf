@@ -80,8 +80,8 @@ function Card({ p, stato, onFatto }: { p: Proposta; stato?: string; onFatto: (es
         commit(); onFatto('✓ Evento aggiunto al calendario', `Proposta ${p.id} confermata: evento creato nel calendario.`);
       }
       else if (p.tipo === 'nota') {
-        const e = await salvaNota({ titolo: p.titolo, testo: p.testo, cartella: 'altro', etichette: p.etichette, preventivo_id: p.preventivo_id });
-        if (e) throw new Error(e);
+        const { errore } = await salvaNota({ titolo: p.titolo, testo: p.testo, cartella: 'altro', etichette: p.etichette, preventivo_id: p.preventivo_id });
+        if (errore) throw new Error(errore);
         commit(); onFatto('✓ Nota salvata' + (p.commessa ? ' in ' + p.commessa : ' (libera)'), `Proposta ${p.id} confermata: nota salvata.`);
       }
       else if (p.tipo === 'etichette') {
