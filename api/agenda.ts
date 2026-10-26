@@ -8,6 +8,7 @@
 //         nota, nota_modifica (nota nei Documenti, libera o di una commessa, con le etichette del tema; cambio di etichette e commessa);
 //         pe (pulsante sotto una email in arrivo: la trasforma in appunto, promemoria o riunione);
 //         riepilogo, annuncio (del sistema: riepilogo del mattino e avviso nel gruppo di una voce nuova);
+//         promemoria_email (del sistema, ogni mattina: a ogni collega le sue voci assegnate scadute o in scadenza, da mandare con Gmail);
 //         avvisi_riunioni (del sistema, ogni 10 minuti: appuntamenti che iniziano tra poco, in privato a chi li ha creati e a chi sono assegnati);
 //         posta (del sistema: email inoltrata all'indirizzo dell'agenda, letta dall'AI e proposta in chat privata a chi l'ha inoltrata: vedi _posta.ts).
 // Regole come nell'app: crea chiunque; modifica ed elimina l'autore o un amministratore; chi ha la voce assegnata la segna fatta;
@@ -132,6 +133,24 @@ export function testoRiepilogo(vv: Voce[], ri: ReturnType<typeof richiami>, oggi
     ...blocco('🔜 Prossimi 3 giorni', pross.map(v => riga(v, ctx))),
     ...blocco('📞 Da richiamare (offerte senza risposta)', ri.map(r => `📞 ${r.nome} · inviata da ${r.giorni} giorni`))];
   return out.length > 2 ? out.join('\n').trim() : `📋 Agenda di ${giornoIt(oggi)}\nNiente in programma, nessuna urgenza. Buon lavoro!`;
+}
+
+/** Promemoria via email, uno per collega: le sue voci assegnate non fatte, scadute o in scadenza nei prossimi 3 giorni, e le urgenze aperte. */
+export function emailPromemoria(vv: Voce[], oggi: string, ctx: Ctx, app: string) {
+  const fra3 = giornoNum(oggi) + 3, perChi = new Map<string, Voce[]>();
+  for (const v of vv) if (v.assegnata_a && !v.fatto && (v.genere === 'urgenza' || giornoNum(v.giorno) <= fra3)) perChi.set(v.assegnata_a, [...(perChi.get(v.assegnata_a) || []), v]);
+  return [...perChi].map(([a, l]) => {
+    const urg = l.filter(v => v.genere === 'urgenza'), scad = l.filter(v => v.genere !== 'urgenza' && v.giorno < oggi), pross = l.filter(v => v.genere !== 'urgenza' && v.giorno >= oggi);
+    const rr = (v: Voce) => '- ' + riga(v, ctx).replace(/ · per [^·]+$/, '') + (v.nota ? `\n  ${v.nota.replace(/\s+/g, ' ').slice(0, 300)}` : '')
+      + (v.creato_da && v.creato_da !== a ? `\n  (assegnata da ${chi(ctx, v.creato_da)})` : '');
+    const blocco = (t: string, x: Voce[]) => (x.length ? [t, ...x.map(rr), ''] : []);
+    const oggetto = `Promemoria: ${[urg.length ? `${urg.length} urgenz${urg.length === 1 ? 'a' : 'e'}` : '', scad.length ? `${scad.length} scadut${scad.length === 1 ? 'a' : 'e'}` : '',
+      pross.length ? `${pross.length} in scadenza` : ''].filter(Boolean).join(', ')}`;
+    const testo = [`Ciao ${chi(ctx, a)},`, '', "queste sono le voci dell'agenda assegnate a te che richiedono attenzione:", '',
+      ...blocco('URGENZE APERTE', urg), ...blocco('SCADUTE', scad), ...blocco('IN SCADENZA (prossimi 3 giorni)', pross),
+      `Quando le hai fatte spuntale nell'app: ${app}`, '', "Email automatica dell'agenda Terranova."].join('\n');
+    return { a, nome: chi(ctx, a), oggetto, testo, voci: l.length };
+  });
 }
 
 /* ---------- Accesso ai dati ---------- */
@@ -401,6 +420,14 @@ export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''):
       db.from('preventivi').select('id, nome, data, stato:prev->>stato, inviata:prev->offerta->>inviata'), contesto(db)]);
     if (error) return fail(error.message);
     return { ok: true, testo: testoRiepilogo(vv as Voce[], richiami((pp || []) as any, oggi), oggi, ctx) };
+  }
+  if (az === 'promemoria_email') {
+    // Ogni mattina: una email per collega con le sue voci assegnate scadute, in scadenza o urgenti (n8n la manda con Gmail).
+    const [{ data: vv, error }, ctx] = await Promise.all([
+      db.from('scadenze').select(COLS).eq('fatto', false).not('assegnata_a', 'is', null).or(`giorno.lte.${isoDi(giornoNum(oggi) + 3)},genere.eq.urgenza`).order('giorno').order('ora', { nullsFirst: true }),
+      contesto(db)]);
+    if (error) return fail(error.message);
+    return { ok: true, email: emailPromemoria(vv as Voce[], oggi, ctx, process.env.APP_URL || 'https://conf-five.vercel.app') };
   }
   if (az === 'annuncio') {
     // Voce appena creata (dall'app o da Telegram): si annunciano nel gruppo le urgenze e le voci assegnate a qualcuno.

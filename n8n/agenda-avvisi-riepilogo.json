@@ -359,6 +359,71 @@
      "name": "Agenda - segreto"
     }
    }
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('Impostazioni riepilogo').item.json.url }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ azione: 'promemoria_email' }) }}",
+    "options": {}
+   },
+   "id": "5e0c1f6a-9b2d-4c7e-8f41-2a6d3b9c7e10",
+   "name": "Promemoria email → app",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    440,
+    640
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Agenda - segreto"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "fieldToSplitOut": "email",
+    "options": {}
+   },
+   "id": "7a1b2c3d-4e5f-4a6b-9c8d-0e1f2a3b4c5d",
+   "name": "Una email per collega",
+   "type": "n8n-nodes-base.splitOut",
+   "typeVersion": 1,
+   "position": [
+    660,
+    640
+   ]
+  },
+  {
+   "parameters": {
+    "sendTo": "={{ $json.a }}",
+    "subject": "={{ $json.oggetto }}",
+    "emailType": "text",
+    "message": "={{ $json.testo }}",
+    "options": {
+     "appendAttribution": false
+    }
+   },
+   "id": "9c8d7e6f-5a4b-4c3d-8e2f-1a0b9c8d7e6f",
+   "name": "Manda il promemoria (Gmail)",
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.1,
+   "position": [
+    880,
+    640
+   ],
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "",
+     "name": "Gmail Agenda"
+    }
+   }
   }
  ],
  "connections": {
@@ -437,6 +502,11 @@
       "node": "Riepilogo → app",
       "type": "main",
       "index": 0
+     },
+     {
+      "node": "Promemoria email → app",
+      "type": "main",
+      "index": 0
      }
     ]
    ]
@@ -468,6 +538,28 @@
     [
      {
       "node": "Riunioni → app",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Promemoria email → app": {
+   "main": [
+    [
+     {
+      "node": "Una email per collega",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Una email per collega": {
+   "main": [
+    [
+     {
+      "node": "Manda il promemoria (Gmail)",
       "type": "main",
       "index": 0
      }

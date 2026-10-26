@@ -65,12 +65,12 @@ function Assegna({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
   );
 }
 
-function Riga({ v, oggi, onEdit, data = true }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean }) {
+function Riga({ v, oggi, onEdit, data = true, allarme = '' }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean; allarme?: '' | 'late' | 'soon' }) {
   const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s), link = s && !s.fatto ? linkRiunione(s.nota) : '';
   // Allegati della voce (file e note): la graffetta mostra quanti sono e apre l'elenco sotto la voce.
   const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [all, setAll] = useState(false), [ass, setAss] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
   return (<>
-    <div className={`cvoce ${s?.fatto ? 'fatto' : ''}`} style={{ '--vc': c } as React.CSSProperties}>
+    <div className={`cvoce ${s?.fatto ? 'fatto' : ''} ${allarme ? 'blink ' + allarme : ''}`} style={{ '--vc': c } as React.CSSProperties}>
       {s ? <input type="checkbox" checked={s.fatto} disabled={!spunta} onChange={() => segna(s)} title={spunta ? 'Fatto' : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
       <div className="vt">
         <b>{ora && <span className="vora">{ora}</span>}{v.titolo}</b>
@@ -110,7 +110,7 @@ export function Allarmi({ compatto = false }: { compatto?: boolean }) {
         <span className="sp" />
         {compatto && <button className="btn s" onClick={() => mostra(true)}>Mostra calendario</button>}
       </h2>
-      {tutte.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} />) : <p className="hint" style={{ margin: 0 }}>Niente di scaduto o in arrivo.</p>}
+      {tutte.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} allarme={prossime.includes(v) ? 'soon' : 'late'} />) : <p className="hint" style={{ margin: 0 }}>Niente di scaduto o in arrivo.</p>}
       {vis.length < tutte.length && <p className="hint" style={{ margin: '6px 0 0' }}>… e altre {tutte.length - vis.length} nel calendario.</p>}
       {!compatto && np.length > 0 && <p className="hint" style={{ margin: '10px 0 0' }}>
         Commesse vinte senza data di avvio della produzione (non compaiono nel calendario): {np.map((e, i) => <span key={e.id}>{i ? ', ' : ''}<a href="#" onClick={ev => { ev.preventDefault(); apri(e.id); }}>{e.nome}</a></span>)}.

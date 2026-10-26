@@ -1,6 +1,6 @@
 // Funzione /api/agenda (chat Telegram via n8n): date nel fuso di Roma, controllo dei campi, permessi, testi.
 import { describe, expect, it } from 'vitest';
-import { oggiISO, permesso, pulisciVoce, richiami, riga, testoRiepilogo, type Ctx, type Voce } from '../api/agenda';
+import { emailPromemoria, oggiISO, permesso, pulisciVoce, richiami, riga, testoRiepilogo, type Ctx, type Voce } from '../api/agenda';
 
 const voce = (o: Partial<Voce> = {}): Voce => ({ id: 'v1', giorno: '2026-10-21', ora: null, genere: 'attivita', categoria: null, titolo: 'Prova', nota: null,
   preventivo_id: null, assegnata_a: null, fatto: false, origine: 'app', creato_da: 'mario@terranovasrl.net', creato: '', ...o });
@@ -43,6 +43,20 @@ describe('/api/agenda', () => {
     expect(t).toContain('🔴 Urgenze aperte'); expect(t).toContain('Mancano bulloni · Ripo Nord');
     expect(t).toContain('📅 15:00 Sopralluogo'); expect(t).toContain('Offerta Beta · inviata da 15 giorni');
     expect(testoRiepilogo([], [], '2026-10-20', ctx)).toContain('Niente in programma');
+  });
+  it('promemoria via email: uno per collega, solo voci assegnate scadute, in scadenza o urgenti', () => {
+    const ee = emailPromemoria([
+      voce({ id: 'a', giorno: '2026-10-19', titolo: 'Ordinare acciaio', assegnata_a: 'luca@terranovasrl.net', creato_da: 'capo@terranovasrl.net', nota: 'Chiedere\nprezzo' }),
+      voce({ id: 'b', giorno: '2026-10-22', titolo: 'Chiamare cliente', assegnata_a: 'luca@terranovasrl.net' }),
+      voce({ id: 'c', giorno: '2026-11-30', titolo: 'Troppo avanti', assegnata_a: 'luca@terranovasrl.net' }),
+      voce({ id: 'd', giorno: '2026-10-19', titolo: 'Già fatta', assegnata_a: 'luca@terranovasrl.net', fatto: true }),
+      voce({ id: 'e', giorno: '2026-12-01', genere: 'urgenza', titolo: 'Bulloni', assegnata_a: 'mario@terranovasrl.net' }),
+      voce({ id: 'f', giorno: '2026-10-19', titolo: 'Di nessuno' })], '2026-10-20', ctx, 'https://app.test');
+    expect(ee.map(e => [e.a, e.voci])).toEqual([['luca@terranovasrl.net', 2], ['mario@terranovasrl.net', 1]]);
+    expect(ee[0].oggetto).toBe('Promemoria: 1 scaduta, 1 in scadenza');
+    expect(ee[0].testo).toContain('Ciao Luca,'); expect(ee[0].testo).toContain('SCADUTE\n- ☑️ lun 19/10 Ordinare acciaio\n  Chiedere prezzo\n  (assegnata da');
+    expect(ee[0].testo).not.toContain('per Luca'); expect(ee[0].testo).toContain('https://app.test');
+    expect(ee[1].oggetto).toBe('Promemoria: 1 urgenza');
   });
   it('riga leggibile', () => {
     expect(riga(voce({ ora: '09:30:00', assegnata_a: 'luca@terranovasrl.net', categoria: 'BULLONERIA', preventivo_id: 'p1' }), ctx))
