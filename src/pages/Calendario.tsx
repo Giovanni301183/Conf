@@ -9,7 +9,7 @@ import { eStato } from '../domain/kpi';
 import { DAY, dDate, dFmt, dToday, isWork, isoDay, monday } from '../domain/plan';
 import { S, commit } from '../store/state';
 import { archOpen, toast } from '../store/actions';
-import { DocPanel, docNonDisponibili } from './Documenti';
+import { DocPanel, NoteHome, docNonDisponibili } from './Documenti';
 import { ModuloEmail, contestoEmail } from '../components/Email';
 import { PermessoAvvisi } from '../components/AvvisiRiunioni';
 import { linkRiunione } from '../domain/riunione';
@@ -249,14 +249,19 @@ export function Calendario() {
             : !bozza && <p className="hint" style={{ margin: 0 }}>Niente in programma.</p>}
         </section>
       </div>
-      <div className="calsep" />
-      <Allarmi />
     </>
   );
 }
 
-/** In cima alla Home: calendario completo, oppure solo gli allarmi se l'utente l'ha nascosto. */
-export const CalendarioHome = () => (S.ui.cal ? <><Calendario /><div className="calsep" /></> : <Allarmi compatto />);
+/** Home: in cima solo il calendario (o, se l'utente l'ha nascosto, gli allarmi in breve); sotto, su due colonne, le note e gli allarmi. */
+export const CalendarioHome = () => {
+  const note = !docNonDisponibili();
+  return (<>
+    {S.ui.cal ? <Calendario /> : <Allarmi compatto />}
+    <div className="calsep" />
+    {S.ui.cal && note ? <div className="calgrid"><NoteHome /><Allarmi /></div> : note ? <NoteHome /> : S.ui.cal && <Allarmi />}
+  </>);
+};
 
 /** Nel preventivo aperto: le sue voci in agenda (date della commessa, richiamo, voci a mano) e l'aggiunta di un promemoria. */
 export function AgendaPreventivo() {
