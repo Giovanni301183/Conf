@@ -201,7 +201,7 @@ function Agenda({ vv, oggi, sel, setSel, onEdit }: { vv: Voce[]; oggi: number; s
   );
 }
 
-export function Calendario() {
+export function Calendario({ sotto }: { sotto?: React.ReactNode }) {
   const oggi = dToday(), t = dDate(oggi);
   const [ym, setYm] = useState({ y: t.getUTCFullYear(), m: t.getUTCMonth() });
   const [sel, setSel] = useState(oggi);
@@ -216,8 +216,8 @@ export function Calendario() {
     <>
       {cloud.scadErr && <div className="warn">L'agenda non si legge dal server ({cloud.scadErr}). Probabilmente manca una migrazione del database
         (<b>20261020000000_calendario_scadenze.sql</b> o <b>20261020010000_agenda.sql</b>): va eseguita nel SQL Editor di Supabase.</div>}
-      <div className="calgrid">
-        <section className="card">
+      <div className="calgrid calhome">
+        <section className="card calmain">
           <div className="calhead">
             <span className="seg"><button className={mese ? 'on' : ''} onClick={() => vista('mese')}>Mese</button><button className={mese ? '' : 'on'} onClick={() => vista('agenda')}>Agenda</button></span>
             {mese && <>
@@ -241,26 +241,39 @@ export function Calendario() {
           <p className="hint" style={{ margin: '8px 0 0' }}>{mese ? 'Clic su un giorno per il dettaglio, doppio clic per aggiungere. ' : ''}Le date delle commesse vengono dal Gantt dei preventivi vinti; il resto si aggiunge a mano, legato o no a un preventivo.</p>
         </section>
 
-        <section className="card">
+        <section className="card calday">
           <h2>{giornoNome(sel)}<span className="sp" />
             {!bozza && <button className="btn s p" onClick={() => nuova()}>+ Aggiungi</button>}</h2>
           {bozza && <Modulo b={bozza} set={setBozza} chiudi={() => setBozza(null)} />}
           {delGiorno.length ? delGiorno.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={modifica} data={false} />)
             : !bozza && <p className="hint" style={{ margin: 0 }}>Niente in programma.</p>}
         </section>
+        {sotto && <div className="calsotto">{sotto}</div>}
       </div>
     </>
   );
 }
 
-/** Home: in cima solo il calendario (o, se l'utente l'ha nascosto, gli allarmi in breve); sotto, su due colonne, le note e gli allarmi. */
+/** Prossimi appuntamenti (da oggi in poi, non ancora fatti), in ordine di data e ora. */
+function Appuntamenti() {
+  const oggi = dToday(), [tutti, setTutti] = useState(false);
+  const vv = vociVisibili().filter(v => v.s?.genere === 'appuntamento' && !v.s.fatto && v.giorno >= oggi)
+    .sort((a, b) => a.giorno - b.giorno || oraBreve(a.s).localeCompare(oraBreve(b.s)));
+  const vis = tutti ? vv : vv.slice(0, 8);
+  return (
+    <div className="card">
+      <h2>Appuntamenti<span className="tag">{vv.length} in programma</span></h2>
+      {vv.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} />) : <p className="hint" style={{ margin: 0 }}>Nessun appuntamento in programma.</p>}
+      {vv.length > 8 && <button className="btn s" style={{ marginTop: 8 }} onClick={() => setTutti(!tutti)}>{tutti ? 'Mostra solo i prossimi 8' : `Mostra tutti (${vv.length})`}</button>}
+    </div>
+  );
+}
+
+/** Home: a sinistra il calendario e sotto, larghi, allarmi, appuntamenti e note; a destra la colonna con tutto il giorno scelto.
+ *  Se l'utente ha nascosto il calendario: allarmi in breve, poi appuntamenti e note a tutta pagina. */
 export const CalendarioHome = () => {
-  const note = !docNonDisponibili();
-  return (<>
-    {S.ui.cal ? <Calendario /> : <Allarmi compatto />}
-    <div className="calsep" />
-    {S.ui.cal && note ? <div className="calgrid"><NoteHome /><Allarmi /></div> : note ? <NoteHome /> : S.ui.cal && <Allarmi />}
-  </>);
+  const sotto = <><Appuntamenti />{!docNonDisponibili() && <NoteHome />}</>;
+  return S.ui.cal ? <Calendario sotto={<><Allarmi />{sotto}</>} /> : <><Allarmi compatto /><div className="calsep" />{sotto}</>;
 };
 
 /** Nel preventivo aperto: le sue voci in agenda (date della commessa, richiamo, voci a mano) e l'aggiunta di un promemoria. */
