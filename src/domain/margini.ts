@@ -38,11 +38,12 @@ export function testoMargini(P: any, R: any): string {
 
 /** Margini che portano il prezzo di vendita al prezzo spot, mantenendo le differenze tra categorie: il margine generale
  *  e quelli propri delle categorie si spostano tutti degli stessi punti (le categorie vuote continuano a seguire il generale).
- *  Il prezzo cresce con lo spostamento: si cerca per bisezione. Ritorna i margini nuovi o il motivo per cui non si arriva. */
+ *  Il prezzo cresce con lo spostamento: si cerca per bisezione, fino al centesimo (i margini tengono tutti i decimali che servono:
+ *  arrotondarli a 4 cifre spostava il prezzo di qualche decina di centesimi). Ritorna i margini nuovi o il motivo per cui non si arriva. */
 export function margineSpot(data: any, P: any, spot: number): { marg: any; delta: number; prezzo: number } | { errore: string } {
   const M = P.marg, ric = M.modo === 'ricarico', propri = MCATS.filter(c => M.cat?.[c] !== '' && M.cat?.[c] != null);
   const valori = [num(M.gen), ...propri.map(c => num(M.cat[c]))];
-  const sposta = (d: number) => ({ ...M, gen: +(num(M.gen) + d).toFixed(4), cat: { ...M.cat, ...Object.fromEntries(propri.map(c => [c, +(num(M.cat[c]) + d).toFixed(4)])) } });
+  const sposta = (d: number) => ({ ...M, gen: +(num(M.gen) + d).toFixed(10), cat: { ...M.cat, ...Object.fromEntries(propri.map(c => [c, +(num(M.cat[c]) + d).toFixed(10)])) } });
   const prezzo = (d: number) => compute(data, { ...P, marg: sposta(d) }).prezzo;
   if (!(spot > 0)) return { errore: 'Scrivi il prezzo spot in euro.' };
   // Limiti: nessun margine sotto il -100 %; col margine sul prezzo ognuno resta sotto il 100 % (col ricarico fino al 1000 %).
@@ -50,7 +51,7 @@ export function margineSpot(data: any, P: any, spot: number): { marg: any; delta
   const pLo = prezzo(lo), pHi = prezzo(hi);
   if (spot < pLo) return { errore: `Prezzo troppo basso: il minimo raggiungibile è circa ${eur(pLo)}.` };
   if (spot > pHi) return { errore: `Prezzo troppo alto: il massimo raggiungibile è circa ${eur(pHi)}.` };
-  for (let i = 0; i < 80 && hi - lo > 1e-5; i++) { const m = (lo + hi) / 2; if (prezzo(m) < spot) lo = m; else hi = m; }
-  const delta = +((lo + hi) / 2).toFixed(4);
+  for (let i = 0; i < 100 && hi - lo > 1e-11; i++) { const m = (lo + hi) / 2; if (prezzo(m) < spot) lo = m; else hi = m; }
+  const delta = +((lo + hi) / 2).toFixed(10);
   return { marg: sposta(delta), delta, prezzo: prezzo(delta) };
 }

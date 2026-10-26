@@ -24,10 +24,13 @@ describe('margini', () => {
   it('prezzo spot: stessi punti a tutti i margini, prezzo raggiunto', () => {
     const spot = Math.round(R.prezzo * 1.05), x: any = margineSpot(data, P, spot);
     expect(x.errore).toBeUndefined();
-    expect(Math.abs(x.prezzo - spot)).toBeLessThan(2);
+    expect(Math.abs(x.prezzo - spot)).toBeLessThan(0.005);   // al centesimo
     expect(x.marg.cat.STRUTTURA - x.marg.gen).toBeCloseTo(7, 3);   // la differenza 25 − 18 resta
     expect(compute(data, { ...P, marg: x.marg }).prezzo).toBeCloseTo(x.prezzo, 2);
     expect((margineSpot(data, P, 1) as any).errore).toMatch(/troppo basso/);
-    expect((margineSpot(data, { ...P, marg: { ...P.marg, modo: 'ricarico' } }, spot) as any).prezzo).toBeCloseTo(spot, -1);
+    // Anche con i centesimi, su un prezzo grande: il prezzo resta quello scritto.
+    const cent = Math.round(R.prezzo * 1.3) + 0.37;
+    expect((margineSpot(data, P, cent) as any).prezzo.toFixed(2)).toBe(cent.toFixed(2));
+    expect((margineSpot(data, { ...P, marg: { ...P.marg, modo: 'ricarico' } }, spot) as any).prezzo).toBeCloseTo(spot, 2);
   });
 });
