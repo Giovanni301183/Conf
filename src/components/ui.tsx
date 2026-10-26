@@ -5,18 +5,20 @@ import { vN } from '../domain/format';
 import { S, commit, getP } from '../store/state';
 import { bump, foldAll, foldIds, isOpen, setSeg, setVal, stepFor } from '../store/actions';
 
-export type InpType = 'num' | 'optnum' | 'pct' | 'txt' | 'lexpr';
+// numtxt: importo oppure testo («Incluso»); vuoto = automatico.
+export type InpType = 'num' | 'optnum' | 'pct' | 'txt' | 'lexpr' | 'numtxt';
 
 function parseVal(type: InpType, v: string) {
   if (type === 'num') return num(v);
   if (type === 'optnum') return v.trim() === '' ? '' : num(v);
   if (type === 'pct') return num(v) / 100;
+  if (type === 'numtxt') { const s = v.trim(); return s === '' ? '' : /^[\d\s.,]+$/.test(s) ? num(s) : v; }
   if (type === 'lexpr') { const s = v.trim(); return s.startsWith('$') ? s.toUpperCase() : s === '' ? '' : num(s); }
   return v;
 }
 function shown(v: any, type: InpType) {
   const isN = type === 'num' || type === 'optnum' || type === 'pct';
-  return type === 'pct' ? vN(Math.round(num(v) * 1e6) / 1e4) : isN || (type === 'lexpr' && typeof v === 'number') ? vN(v) : String(v ?? '');
+  return type === 'pct' ? vN(Math.round(num(v) * 1e6) / 1e4) : isN || ((type === 'lexpr' || type === 'numtxt') && typeof v === 'number') ? vN(v) : String(v ?? '');
 }
 
 const ArrUp = () => <svg viewBox="0 0 10 10"><path d="M2 6.5L5 3.5L8 6.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
@@ -31,8 +33,8 @@ const bumpStop = () => { clearTimeout(bumpT); clearInterval(bumpT); bumpT = unde
 export function Inp({ path, type = 'num', cls = '', ph = '', w = '', list }: { path: string; type?: InpType; cls?: string; ph?: string; w?: string; list?: string }) {
   const v = getP(path);
   const isN = type === 'num' || type === 'optnum' || type === 'pct';
-  // Frecce su ogni campo numerico (non sui segnaposto $LFOND ecc. delle distinte).
-  const spin = isN || (type === 'lexpr' && !(typeof v === 'string' && v.startsWith('$')));
+  // Frecce su ogni campo numerico (non sui segnaposto $LFOND ecc. delle distinte). Importo o testo: sempre, se no scrivendo una lettera il campo si ricreerebbe.
+  const spin = isN || type === 'numtxt' || (type === 'lexpr' && !(typeof v === 'string' && v.startsWith('$')));
   const [draft, setDraft] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const step = spin ? stepFor(path) : 0;
@@ -43,7 +45,7 @@ export function Inp({ path, type = 'num', cls = '', ph = '', w = '', list }: { p
   const el = (
     <input
       ref={ref}
-      className={`${isN ? 'n ' : ''}${cls}`}
+      className={`${isN || type === 'numtxt' ? 'n ' : ''}${cls}`}
       value={draft ?? shown(v, type)}
       placeholder={ph}
       data-path={path}

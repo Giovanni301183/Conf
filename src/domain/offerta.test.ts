@@ -174,6 +174,20 @@ describe('layout DXF', () => {
     expect(tagliaDa('RECINZIONE', 'Cabina')).toBe('');
   });
 
+  it('trasporto «Incluso»: scritto tale e quale e il suo prezzo passa nella struttura', async () => {
+    const P = prev(), D0 = defaultData(), R = compute(D0, P);
+    const trasp = R.lines.find((l: any) => l.riga === 'extra').prezzo;
+    P.offerta.trasporto = 'Incluso';
+    const D = datiOfferta(P, R, D0, 0);
+    expect(D.prezzi.find(c => c.label === 'Trasporto')!.value).toBe('Incluso');
+    expect(D.paragrafi.costo_trasporto).toBe('Incluso');
+    expect(D.liste.servizi.find(x => /trasporto/i.test(x.voce))!.prezzo).toBe('Incluso');
+    expect(D.campi.prezzo_offerta).toBe(fN(R.prezzo, 2));
+    expect(trasp).toBeGreaterThan(0);
+    const { testo } = await compila(P);
+    expect(testo).toContain('Incluso');
+  });
+
   it('slide Layout: il nome dell\'impianto non scende sopra l\'elenco dei tracker', async () => {
     const titolo = async (nome: string) => {
       const P = prev(); P.offerta.nome = nome;
@@ -192,8 +206,8 @@ describe('layout DXF', () => {
     expect(lungo.sz).toBeLessThan(6000);
     expect(lungo.w).toBeLessThan(15765540);   // non arriva al logo
     expect(lungo.fondo).toBeLessThanOrEqual(lungo.yt);
-    // A capo scritto nel testo, con righe simili: il PDF va a capo nello stesso punto del PowerPoint.
-    expect(lungo.righe).toEqual(['Impianto Agrivoltaico Masseria', 'San Pietro in Lama - Lotto 2']);
+    // Su una riga sola, con il carattere più piccolo: il PDF non va a capo.
+    expect(lungo.righe).toEqual(['Impianto Agrivoltaico Masseria San Pietro in Lama - Lotto 2']);
     expect(corto.righe).toEqual(['Masseria Prova']);
   });
 });

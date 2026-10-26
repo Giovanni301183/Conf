@@ -17,7 +17,7 @@ import { MCATS, MIN_CUSC, OPT_LCUSC, OPT_LFOND, clone, defRiga, defaultData, new
 import { pilastri } from '../src/domain/referenze.js';
 import { margineSpot, testoMargini } from '../src/domain/margini.js';
 import { etichetta, nomeVariante, profDa, rigaVariante, variante, type Variante } from '../src/domain/varianti.js';
-import { PROGETTO, compilaPptxBytes, datiOfferta, layoutImg, offPrev } from '../src/domain/offerta.js';
+import { PROGETTO, compilaPptxBytes, datiOfferta, layoutImg, offPrev, prezzoTesto } from '../src/domain/offerta.js';
 import { layoutDaTelegram } from './_layout.js';
 import { inPdf } from './_pdf.js';
 
@@ -117,9 +117,10 @@ export function applica(P: any, b: any, data: any): string | null {
       P.marg.cat[c] = num(v);
     }
   }
-  // Prezzi dell'offerta: trasporto e posa vanno tali e quali nell'offerta (0 = escluso / non inclusa); pieno = prezzo barrato.
+  // Prezzi dell'offerta: trasporto e posa vanno tali e quali nell'offerta (0 = escluso / non inclusa; il trasporto anche a parole); pieno = prezzo barrato.
   for (const k of ['trasporto', 'posa', 'pieno'] as const) if (b[k] != null) {
     if (b[k] === '') { O[k] = ''; continue; }
+    if (k === 'trasporto' && prezzoTesto(b[k])) { O[k] = breve(b[k], 40); continue; }   // «Incluso»: va tale e quale
     const v = num(b[k]); if (!(v >= 0)) return `Importo ${k === 'pieno' ? 'del prezzo pieno' : 'del ' + k} non valido.`; O[k] = v;
   }
   // Servizi opzionali (slide «Forniture e servizi opzionali»): elenco intero come nel modulo; null = elenco standard.

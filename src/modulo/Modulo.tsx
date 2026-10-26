@@ -255,7 +255,7 @@ export function Modulo() {
       <section>
         <h2>Prezzi nell'offerta</h2>
         <div className="due">
-          <Campo label="Trasporto (€)" nota="0 = escluso"><input inputMode="decimal" value={f.trasporto} onChange={e => cambia({ trasporto: e.target.value })} placeholder="escluso" /></Campo>
+          <Campo label="Trasporto (€)" nota="0 = escluso, oppure «Incluso»"><input value={f.trasporto} onChange={e => cambia({ trasporto: e.target.value })} placeholder="escluso" /></Campo>
           <Campo label="Posa in opera (€)" nota="0 = non inclusa"><input inputMode="decimal" value={f.posa} onChange={e => cambia({ posa: e.target.value })} placeholder="non inclusa" /></Campo>
         </div>
         <Campo label="Revisione"><input value={f.rev} onChange={e => cambia({ rev: e.target.value })} /></Campo>

@@ -203,7 +203,7 @@ export function Invia() {
             <button className="btn s" style={{ alignSelf: 'flex-start' }} onClick={() => { S.ui.tab = 'margini'; commit(); }}>Margini per categoria →</button></label>
         </div>
         <div className="grid">
-          <label className="f">Trasporto €<Inp path="prev.offerta.trasporto" type="optnum" ph={traspAuto > 0 ? String(Math.round(traspAuto)) + ' (voci extra)' : 'escluso'} /></label>
+          <label className="f">Trasporto € (o «Incluso»)<Inp path="prev.offerta.trasporto" type="numtxt" ph={traspAuto > 0 ? String(Math.round(traspAuto)) + ' (voci extra)' : 'escluso'} /></label>
           <label className="f">Posa in opera €<Inp path="prev.offerta.posa" type="optnum" ph={mont > 0 ? String(Math.round(mont)) + ' (montaggio)' : 'non inclusa'} /></label>
           <label className="f">Nota posa in opera<Inp path="prev.offerta.posaNota" type="txt" ph="es. (esclusa trivellazione)" /></label>
           <label className="f" style={{ gridColumn: 'span 2' }}>Modalità di posa<Inp path="prev.offerta.posaModo" type="txt" ph="es. con preassemblato in campo" /></label>

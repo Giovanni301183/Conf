@@ -85,6 +85,8 @@ export type DatiOfferta = {
 };
 const euro = (v: number) => fN(v, 2);
 const isTrasporto = (l: any) => /traspor/i.test(l.desc || '');
+/** Prezzo scritto a parole («Incluso», «Compreso nel prezzo»): va nell'offerta tale e quale; '' se è un importo o è vuoto. */
+export const prezzoTesto = (v: unknown) => (typeof v === 'string' && /[^\d\s.,€]/.test(v.trim()) ? v.trim() : '');
 
 /** Raccoglie dal preventivo tutto quello che va nell'offerta. `montTot` = totale della scheda Montaggio (per la posa in opera). */
 export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOfferta {
@@ -100,8 +102,10 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
 
   // Prezzi di vendita. Il modello ha posto solo per il trasporto: le altre voci extra vanno in "struttura e componenti".
   const extra = R.lines.filter((l: any) => l.riga === 'extra'), altre = extra.filter((l: any) => !isTrasporto(l));
-  const pStr = R.lines.filter((l: any) => l.riga !== 'extra' || !isTrasporto(l)).reduce((s: number, l: any) => s + l.prezzo, 0);
-  const trasp = O.trasporto === '' || O.trasporto == null ? extra.filter(isTrasporto).reduce((s: number, l: any) => s + l.prezzo, 0) : num(O.trasporto);
+  // Trasporto «Incluso»: le voci extra di trasporto entrano nel prezzo di struttura e componenti.
+  const traspTxt = prezzoTesto(O.trasporto), traspIncl = /inclus|compres/i.test(traspTxt);
+  const pStr = R.lines.filter((l: any) => l.riga !== 'extra' || !isTrasporto(l) || traspIncl).reduce((s: number, l: any) => s + l.prezzo, 0);
+  const trasp = traspTxt ? 0 : O.trasporto === '' || O.trasporto == null ? extra.filter(isTrasporto).reduce((s: number, l: any) => s + l.prezzo, 0) : num(O.trasporto);
   const pieno = num(O.pieno), posa = O.posa === '' || O.posa == null ? montTot : num(O.posa);
   if (altre.length) avv('prezzi', `Il modello ha posto solo per il trasporto: ${altre.map((l: any) => l.desc || 'voce extra').join(', ')} ${altre.length > 1 ? 'sono incluse' : 'è inclusa'} nel prezzo di struttura e componenti.`);
 
@@ -120,7 +124,7 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
     n_quadri_area: fN(P.imp?.quadA, 0), n_quadri_generali: fN(P.imp?.quadGen, 0),
     prezzo_offerta: euro(pStr), prezzo_listino: euro(pieno), costo_trasporto: euro(trasp), costo_posa: euro(posa),
     // Tabella dei servizi opzionali: il prezzo se c'e', altrimenti «Su richiesta».
-    trasporto_opzionale: trasp > 0 ? `€ ${euro(trasp)} + IVA` : 'Su richiesta', posa_opzionale: posa > 0 ? `€ ${euro(posa)} + IVA` : 'Su richiesta',
+    trasporto_opzionale: traspTxt || (trasp > 0 ? `€ ${euro(trasp)} + IVA` : 'Su richiesta'), posa_opzionale: posa > 0 ? `€ ${euro(posa)} + IVA` : 'Su richiesta',
     nota_posa: O.posaNota || '', modalita_posa: O.posaModo || '',
     prezzo_kwp: R.kwp ? fN(pStr / R.kwp, 0) : '–', peso_struttura_ton: fN(R.steel / 1000, 1), profilo_acciaio: profili ? profili + ' S355' : '',
     // Pesi per categoria (slide Dati di progetto): {{peso_struttura}}, {{peso_bulloneria}}, … e {{peso_totale}}.
@@ -131,7 +135,8 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
   // Righe che senza valore non hanno senso: tolte (null) o sostituite da una dicitura.
   const paragrafi: Record<string, string | null> = {};
   if (!(pieno > pStr)) paragrafi.prezzo_listino = null;
-  if (!(trasp > 0)) paragrafi.costo_trasporto = 'Escluso';
+  if (traspTxt) paragrafi.costo_trasporto = traspTxt;
+  else if (!(trasp > 0)) paragrafi.costo_trasporto = 'Escluso';
   if (!(posa > 0)) paragrafi.costo_posa = 'Non inclusa';
   if (!O.posaModo) paragrafi.modalita_posa = null;
   if (!(num(P.imp?.quadA) > 0)) paragrafi.n_quadri_area = null;
@@ -171,7 +176,7 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
   }
   const prezzi = [
     { label: 'Struttura e componenti', value: `€ ${campi.prezzo_offerta} + IVA`, strike: pieno > pStr ? `€ ${campi.prezzo_listino}` : undefined },
-    { label: 'Trasporto', value: trasp > 0 ? `€ ${campi.costo_trasporto} + IVA` : 'Escluso' },
+    { label: 'Trasporto', value: traspTxt || (trasp > 0 ? `€ ${campi.costo_trasporto} + IVA` : 'Escluso') },
     { label: 'Posa in opera', value: posa > 0 ? `€ ${campi.costo_posa} + IVA` : 'Non inclusa', nota: [O.posaNota, O.posaModo].filter(Boolean).join(' · ') || undefined },
     { label: 'Prezzo per kWp', value: `${campi.prezzo_kwp} €/kWp` },
   ];
@@ -264,7 +269,11 @@ function titoloLayout(x: string, nome: string) {
   const fondo = Math.min(...altre.filter(f => f.y > by + +o[4] / 2 && f.x < destra).map(f => f.y)) - 8 * EMU;   // un po' d'aria sopra l'elenco
   const W = Math.max(+o[3], destra - bx), wPt = (W / EMU) * 0.95;   // margine: la misura dei caratteri è approssimata
   let sz = sz0, n = 1;
-  for (; sz > 20; sz--) { n = nRighe(aCapo(nome, wPt, sz, (spc0 * sz) / sz0), wPt, sz, (spc0 * sz) / sz0); if (by + n * ((ln0 * sz) / sz0) * EMU <= fondo) break; }
+  // Meglio su una riga sola: si va a capo solo se il carattere scenderebbe sotto 32 pt.
+  for (; sz > 20; sz--) {
+    n = nRighe(aCapo(nome, wPt, sz, (spc0 * sz) / sz0), wPt, sz, (spc0 * sz) / sz0);
+    if (by + n * ((ln0 * sz) / sz0) * EMU <= fondo && (n === 1 || sz <= 32)) break;
+  }
   const k = sz / sz0;
   let nuovo = sp.replace(o[0], `<a:off x="${bx}" y="${by}"/><a:ext cx="${W}" cy="${Math.round(n * ln0 * k * EMU)}"/>`)
     .replace(/(<a:rPr\b[^>]*\bsz=")\d+("[^>]*\bspc=")-?\d+/g, `$1${sz * 100}$2${Math.round(spc0 * k * 100)}`)
