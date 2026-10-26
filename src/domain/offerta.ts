@@ -6,6 +6,8 @@ import JSZip from 'jszip';
 import { pesoTot } from './compute.js';
 import { fDate, fN, fPeso } from './format.js';
 import { CATS, defOfferta, num } from './model.js';
+import { prezzoServizio, serviziDi } from './servizi.js';
+export { SERVIZI0, prezzoServizio, serviziDi, type Servizio } from './servizi.js';
 
 /* ---------- Impostazioni condivise (nel listino, valgono per tutti i preventivi) ---------- */
 // Nelle voci si possono usare i segnaposto del modello: {{profilo_pilastri}} e {{spessore_asse}} prendono il materiale del preventivo.
@@ -137,6 +139,8 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
   const liste = {
     tracker: righe.map(r => ({ quantita: fN(r.n, 0), moduli: r.taglia, potenza_tracker: fN(num(r.taglia) * R.wp, 0), potenza_riga: fN((r.n * num(r.taglia) * R.wp) / 1000, 2) })),
     inclusi: cfg.inclusi.map((v: string) => String(v).trim()).filter(Boolean).map((voce: string) => ({ voce })),
+    servizi: serviziDi(O).filter(x => x.on !== false && String(x.voce || '').trim())
+      .map(x => ({ voce: String(x.voce).trim(), prezzo: prezzoServizio(x, { trasporto: campi.trasporto_opzionale, posa: campi.posa_opzionale }) })),
   };
 
   // Campi obbligatori vuoti: «Non disponibile» se segnati così, altrimenti «–» e l'app non genera l'offerta
@@ -193,7 +197,9 @@ function paraText(p: string, text: string) {
 
 // Riga di tabella fatta di forme: quelle con descrizione {{#nome}} sono la riga d'esempio ({{#nome:alterna}}, lo sfondo
 // a righe alterne, solo nelle righe dispari). Si ricopiano una sotto l'altra per ogni elemento; le forme con descrizione
-// {{segue:nome}} (totale, note) scendono di conseguenza. Oltre 2 righe le righe si stringono nello spazio di 2, sopra il logo.
+// {{segue:nome}} (totale, note) scendono di conseguenza. Oltre RIGHE_MAX le righe si stringono in quello spazio (tracker: 2, sopra il logo).
+// Quante righe ci stanno a grandezza piena; oltre, si stringono in quello spazio.
+const RIGHE_MAX: Record<string, number> = { tracker: 2, servizi: 8 };
 const offRe = /<a:off x="(-?\d+)" y="(-?\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/;
 function righeForme(x: string, nome: string, items: Record<string, string>[], campi: Record<string, string>) {
   const forma = (d: string) => new RegExp(String.raw`<p:sp>(?:(?!<p:sp>)[\s\S])*?descr="${reEsc(d)}"[\s\S]*?</p:sp>`, 'g');
@@ -203,7 +209,7 @@ function righeForme(x: string, nome: string, items: Record<string, string>[], ca
   if (!riga.length) return x;
   const pos = (s: string) => { const o = offRe.exec(s)!; return { m: o[0], x: +o[1], y: +o[2], w: +o[3], h: +o[4] }; };
   const y0 = Math.min(...riga.map(f => pos(f.s).y)), h = Math.max(...riga.map(f => pos(f.s).h));
-  const n = items.length, hh = n > 2 ? Math.round((h * 2) / n) : h;
+  const n = items.length, max = RIGHE_MAX[nome] ?? 2, hh = n > max ? Math.round((h * max) / n) : h;
   let id = Math.max(0, ...[...x.matchAll(/<p:cNvPr id="(\d+)"/g)].map(m => +m[1]));
   const nuove = items.map((it, i) => riga.filter(f => !f.alterna || i % 2 === 0).map(f => {
     const p = pos(f.s), y = y0 + i * hh + Math.round(((p.y - y0) * hh) / h);
@@ -212,7 +218,7 @@ function righeForme(x: string, nome: string, items: Record<string, string>[], ca
   }).join('')).join('');
   const SEGNO = '<!--righe-->';
   riga.forEach((f, i) => { x = x.replace(f.s, i === 0 ? SEGNO : ''); });
-  const dy = (Math.min(n, 2) - 1) * h;   // esatto: niente arrotondamenti delle righe strette
+  const dy = (Math.min(n, max) - 1) * h;   // esatto: niente arrotondamenti delle righe strette
   x = x.replace(forma(`{{segue:${nome}}}`), s => { const p = pos(s); return s.replace(p.m, `<a:off x="${p.x}" y="${p.y + dy}"/><a:ext cx="${p.w}" cy="${p.h}"/>`).replace(/ descr="[^"]*"/, ''); });
   return x.replace(SEGNO, nuove);
 }

@@ -589,3 +589,9 @@ button.etq{cursor:pointer}button.etq:hover{border-color:var(--ec)}
 .evid{animation:evid 2.6s ease-out}
 @keyframes evid{0%,40%{box-shadow:0 0 0 3px var(--acc);background:color-mix(in srgb,var(--acc) 10%,transparent)}100%{box-shadow:0 0 0 3px transparent}}
 @media (prefers-reduced-motion:reduce){.evid{animation:none;box-shadow:0 0 0 3px var(--acc)}}
+
+/* Invia preventivo: tabella dei servizi opzionali */
+table.servizi td{vertical-align:middle}
+table.servizi td input:not([type=checkbox]){width:100%;min-width:140px}
+table.servizi td:nth-child(2){width:45%}
+table.servizi tr.spento td:not(:first-child){opacity:.5}

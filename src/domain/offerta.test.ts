@@ -104,6 +104,19 @@ describe('offerta', () => {
     expect(testo).toContain('Su richiesta');
   });
 
+  it('servizi opzionali: elenco standard, oppure scelto e prezzato nel preventivo', async () => {
+    const std = await compila(prev());
+    expect(std.D.liste.servizi.map(x => x.voce)).toHaveLength(8);
+    expect(std.testo).toContain('Pull-out test'); expect(std.testo).toContain('Prolunga pali (+10 cm)');
+    const P = prev();
+    P.offerta.servizi = [{ k: 'trasporto', voce: 'Trasporto in cantiere', prezzo: '', on: true }, { voce: 'Pull-out test', prezzo: '1.500', on: true },
+      { voce: 'Supervisione al montaggio', prezzo: 'Incluso nel prezzo', on: true }, { voce: 'Prolunga pali (+10 cm)', prezzo: '', on: false }, { voce: 'Collaudo', prezzo: '0', on: true }];
+    const { D, testo } = await compila(P);
+    expect(D.liste.servizi).toEqual([{ voce: 'Trasporto in cantiere', prezzo: D.campi.trasporto_opzionale }, { voce: 'Pull-out test', prezzo: '€ 1.500,00 + IVA' },
+      { voce: 'Supervisione al montaggio', prezzo: 'Incluso nel prezzo' }, { voce: 'Collaudo', prezzo: 'Incluso' }]);
+    expect(testo).toContain('€ 1.500,00 + IVA'); expect(testo).not.toContain('Prolunga pali'); expect(testo).not.toContain('{{voce}}');
+  });
+
   it('campi obbligatori: mancanti bloccano, «non disponibile» compare senza unità', async () => {
     const P = prev();
     let D = datiOfferta(P, compute(defaultData(), P), defaultData(), 0);

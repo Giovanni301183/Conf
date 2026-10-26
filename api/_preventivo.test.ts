@@ -18,6 +18,15 @@ describe('preventivo da Telegram: campi', () => {
     expect(applica(P, { margine: 100 }, d)).toMatch(/sotto il 100/);
     expect(applica(P, { margini: { LISTINO: 5 } }, d)).toMatch(/sconosciuta/);
   });
+  it('servizi opzionali dal modulo: si salvano, si rileggono, null torna allo standard', () => {
+    const P: any = newPrev(), d = defaultData();
+    expect(applica(P, { servizi: [{ k: 'posa', voce: ' Posa in opera ', prezzo: '', on: true }, { voce: 'Pull-out test', prezzo: '900', on: false }, { voce: '' }] }, d)).toBeNull();
+    expect(P.offerta.servizi).toEqual([{ k: 'posa', voce: 'Posa in opera', prezzo: '', on: true }, { voce: 'Pull-out test', prezzo: '900', on: false }]);
+    expect(campiModulo(P).servizi).toEqual(P.offerta.servizi);
+    expect(applica(P, { servizi: 'non è un elenco' }, d)).toMatch(/Servizi opzionali/);
+    expect(applica(P, { servizi: null }, d)).toBeNull();
+    expect([P.offerta.servizi, campiModulo(P).servizi]).toEqual([undefined, null]);
+  });
   it("informazioni generali e condizioni commerciali dell'offerta, anche nel modulo", () => {
     const P: any = newPrev(), d = defaultData();
     expect(applica(P, { email: ' mario@rossi.it ', zona: 'Periferia', resa: 'DAP cantiere', pagamento: "30% all'ordine", consegna: '8 settimane', validita: '30 giorni' }, d)).toBeNull();

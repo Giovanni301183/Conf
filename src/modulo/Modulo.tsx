@@ -4,6 +4,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { disegna, leggiDxf } from '../domain/dxf';
 import { eur, fL, fN } from '../domain/format';
+import { SERVIZI0, type Servizio } from '../domain/servizi';
 
 const tg: any = (window as any).Telegram?.WebApp;
 const parametri = new URLSearchParams(location.search);
@@ -14,12 +15,12 @@ type Campi = {
   cliente: string; rif: string; localita: string; referente: string; email: string; zona: string; rev: string; wp: string; modulo: string; righe: Riga[];
   resa: string; pagamento: string; consegna: string; validita: string;
   margine: string; margini: Record<string, string>; trasporto: string; posa: string; pieno: string; layout: Layout | null | false;
-  prog: Record<string, string>; lat: string; lng: string;
+  prog: Record<string, string>; lat: string; lng: string; servizi: Servizio[] | null;   // null = elenco standard dei servizi opzionali
   [componente: string]: any;   // quadri e sensori (centralina, piranometro…): numero di pezzi, vuoto = 0
 };
 const rigaNuova = (taglia = '36'): Riga => ({ n: '', taglia, tipo: 'Agrivoltaico', prof: 'IPE 140', asse: '2,5', omega: '2,0', lFond: 3, lCusc: 2.3 });
 const vuoti = (): Campi => ({ cliente: parametri.get('cliente') || '', rif: '', localita: '', referente: '', email: '', zona: '', resa: '', pagamento: '', consegna: '', validita: '', rev: '0', wp: '600', modulo: '', righe: [rigaNuova()],
-  margine: '', margini: {}, trasporto: '', posa: '', pieno: '', layout: null, prog: {}, lat: '', lng: '' });
+  margine: '', margini: {}, trasporto: '', posa: '', pieno: '', layout: null, prog: {}, lat: '', lng: '', servizi: null });
 const CATEGORIE_ESP = ['I', 'II', 'III', 'IV', 'V'], CORROSIVITA = ['C1', 'C2', 'C3', 'C4', 'C5', 'CX'];
 
 async function chiama(azione: string, campi: unknown = {}) {
@@ -74,6 +75,8 @@ export function Modulo() {
   }, []);
 
   const cambia = (p: Partial<Campi>) => { setF(x => ({ ...x, ...p })); setPrev(null); };
+  const servizi = f.servizi ?? SERVIZI0.map(x => ({ ...x }));
+  const cambiaServizi = (g: (l: Servizio[]) => void) => { const l = servizi.map(x => ({ ...x })); g(l); cambia({ servizi: l }); };
   const cambiaRiga = (i: number, p: Partial<Riga>) => cambia({ righe: f.righe.map((r, j) => {
     if (j !== i) return r;
     const n = { ...r, ...p }, min = cfg?.opzioni.minCusc[n.tipo] ?? 2.3;
@@ -259,6 +262,21 @@ export function Modulo() {
       </section>
 
       <section>
+        <h2>Servizi opzionali</h2>
+        <p className="muted">Togli la spunta ai servizi da non proporre. Prezzo vuoto: trasporto e posa dai prezzi qui sopra, gli altri «Su richiesta»; un numero diventa «€ … + IVA» (0 = incluso), un testo va tale e quale.</p>
+        {servizi.map((x, i) => <div key={i} className="servizio">
+          <input type="checkbox" checked={x.on !== false} onChange={e => cambiaServizi(l => { l[i].on = e.target.checked; })} aria-label="In offerta" />
+          <input value={x.voce} placeholder="Servizio" onChange={e => cambiaServizi(l => { l[i].voce = e.target.value; })} />
+          <input className="prz" value={x.prezzo} placeholder={x.k === 'trasporto' ? 'dal trasporto' : x.k === 'posa' ? 'dalla posa' : 'Su richiesta'} onChange={e => cambiaServizi(l => { l[i].prezzo = e.target.value; })} />
+          <button type="button" className="sec x" onClick={() => cambiaServizi(l => { l.splice(i, 1); })} aria-label="Togli">✕</button>
+        </div>)}
+        <div className="azioni">
+          <button type="button" className="sec" onClick={() => cambiaServizi(l => { l.push({ voce: '', prezzo: '', on: true }); })}>+ Aggiungi servizio</button>
+          {f.servizi ? <button type="button" className="sec" onClick={() => cambia({ servizi: null })}>Elenco standard</button> : null}
+        </div>
+      </section>
+
+      <section>
         <h2>Condizioni commerciali</h2>
         <div className="due">
           <Campo label="Resa (Incoterms 2020)"><input value={f.resa} onChange={e => cambia({ resa: e.target.value })} placeholder="es. DAP cantiere" /></Campo>
@@ -292,6 +310,7 @@ export function Modulo() {
             <dt>Titolo</dt><dd>{prev.offerta.titolo || '–'}</dd>
             <dt>Potenza</dt><dd>{prev.offerta.potenza}</dd>
             <dt>Tracker</dt><dd>{prev.offerta.tracker.join(' · ')}</dd>
+            {prev.offerta.servizi ? <><dt>Servizi opzionali</dt><dd>{prev.offerta.servizi.map((x: any) => `${x.voce}: ${x.prezzo}`).join(' · ') || 'nessuno'}</dd></> : null}
             {prev.offerta.prezzi.map((p: any) => <Fragment key={p.label}><dt>{p.label}</dt><dd>{p.strike ? <s>{p.strike}</s> : null} {p.value}{p.nota ? <small> · {p.nota}</small> : null}</dd></Fragment>)}
             <dt>Layout</dt><dd>{prev.offerta.layout || 'nessuno (slide vuota)'}</dd>
           </dl>

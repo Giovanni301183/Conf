@@ -47,3 +47,8 @@ dd{margin:0;font-weight:500;overflow-wrap:anywhere}
 .avv{margin-top:12px;font-size:13.5px;color:var(--warn)}
 .avv p{margin:4px 0}
 @media (max-width:360px){.due{grid-template-columns:1fr}}
+/* Servizi opzionali: spunta, nome, prezzo e ✕ su una riga; sotto i 420 px il prezzo va a capo */
+.servizio{display:grid;grid-template-columns:24px minmax(0,1fr) 120px 42px;gap:6px;align-items:center;margin-bottom:8px}
+.servizio input[type=checkbox]{width:20px;height:20px;min-height:0;accent-color:var(--acc)}
+.servizio .x{width:42px;min-height:42px;padding:0;margin:0}
+@media (max-width:420px){.servizio{grid-template-columns:24px minmax(0,1fr) 42px}.servizio .prz{grid-column:2;grid-row:2}}

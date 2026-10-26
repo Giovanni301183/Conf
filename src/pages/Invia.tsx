@@ -4,7 +4,7 @@ import { DateInp, Fold, Inp, TabTools } from '../components/ui';
 import { eur, fP } from '../domain/format';
 import { disegna, immagineInPng, leggiDxf } from '../domain/dxf';
 import { fDate, fN, fileName, download } from '../domain/format';
-import { DOVE, GARANZIE0, INCLUSI0, OBBLIGATORI, PROGETTO, bloccoOfferta, compilaPptx, datiOfferta, layoutImg, offCfg, offPrev, type DatiOfferta } from '../domain/offerta';
+import { DOVE, GARANZIE0, INCLUSI0, OBBLIGATORI, PROGETTO, SERVIZI0, bloccoOfferta, compilaPptx, datiOfferta, layoutImg, offCfg, offPrev, prezzoServizio, serviziDi, type DatiOfferta, type Servizio } from '../domain/offerta';
 import { buildMont } from '../domain/plan';
 import { R, S, commit, save } from '../store/state';
 import { archPatch, archSave, isDirty, toast, vaiA } from '../store/actions';
@@ -41,6 +41,33 @@ function Obbl({ D, k, l, path, ph }: { D: DatiOfferta; k: string; l: string; pat
     <span className="ndck"><input type="checkbox" checked={!!O.nd[k]} onChange={e => { O.nd[k] = e.target.checked; save(); commit(); }} /> non disponibile</span></label>;
 }
 const ndAll = (keys: string[]) => { const O = offPrev(S.prev); keys.forEach(k => { O.nd[k] = true; }); save(); commit(); };
+
+/** Slide «Forniture e servizi opzionali»: quali servizi vanno nell'offerta, con che nome e che prezzo. Vale per questo preventivo. */
+function Servizi({ D }: { D: DatiOfferta }) {
+  const O = offPrev(S.prev), ss = serviziDi(O), auto = { trasporto: D.campi.trasporto_opzionale, posa: D.campi.posa_opzionale };
+  const cambia = (f: (l: Servizio[]) => void) => { const l = serviziDi(O); f(l); O.servizi = l; save(); commit(); };
+  const sposta = (i: number, d: number) => cambia(l => { const j = i + d; if (j >= 0 && j < l.length) [l[i], l[j]] = [l[j], l[i]]; });
+  const standard = JSON.stringify(ss) === JSON.stringify(SERVIZI0);
+  return <>
+    <p className="hint">Togli la spunta ai servizi da non proporre, correggi i nomi e i prezzi. Prezzo vuoto: trasporto e posa prendono i prezzi qui sopra, gli altri «Su richiesta»;
+      un numero diventa «€ … + IVA» (0 = «Incluso»), un testo va tale e quale. Vale solo per questo preventivo.</p>
+    <div className="wrap"><table className="servizi"><tbody>
+      <tr><th>In offerta</th><th>Servizio</th><th>Prezzo</th><th>Nell'offerta</th><th></th></tr>
+      {ss.map((x, i) => <tr key={i} className={x.on === false ? 'spento' : ''}>
+        <td><input type="checkbox" checked={x.on !== false} onChange={e => cambia(l => { l[i].on = e.target.checked; })} aria-label="In offerta" /></td>
+        <td><input value={x.voce} onChange={e => cambia(l => { l[i].voce = e.target.value; })} placeholder="Nome del servizio" /></td>
+        <td><input value={x.prezzo} onChange={e => cambia(l => { l[i].prezzo = e.target.value; })} placeholder={x.k ? auto[x.k] : 'Su richiesta'} /></td>
+        <td className="small">{x.on === false ? <span className="muted">non proposto</span> : prezzoServizio(x, auto)}</td>
+        <td className="acts"><button className="btn s" disabled={!i} onClick={() => sposta(i, -1)} title="Sposta su">↑</button>
+          <button className="btn s" disabled={i === ss.length - 1} onClick={() => sposta(i, 1)} title="Sposta giù">↓</button>
+          <button className="btn x" onClick={() => cambia(l => { l.splice(i, 1); })} title="Togli dall'elenco">✕</button></td>
+      </tr>)}
+    </tbody></table></div>
+    <div className="toolbar"><button className="btn s" onClick={() => cambia(l => { l.push({ voce: '', prezzo: '', on: true }); })}>+ Aggiungi servizio</button>
+      {!standard && <button className="btn s" onClick={() => { if (confirm("Tornare all'elenco standard dei servizi?")) { delete O.servizi; save(); commit(); } }}>Ripristina elenco standard</button>}
+      {D.liste.servizi.length > 8 && <span className="muted small">Oltre 8 servizi le righe nella slide si stringono.</span>}</div>
+  </>;
+}
 
 const MODELLO = `${import.meta.env.BASE_URL}offerta/modello-offerta.pptx`;
 const oggi = () => new Date().toISOString().slice(0, 10);
@@ -185,7 +212,9 @@ export function Invia() {
           <div key={i} className="pill"><span className="pl">{c.label}</span><span className="pv">{c.strike ? <s>{c.strike}</s> : null}<b>{c.value}</b>{c.nota ? <em>{c.nota}</em> : null}</span></div>))}</div>
       </>}</Fold>
 
-      <Fold id="in-comm" step={6} title="Condizioni commerciali" sum={`Pagamento: ${D.campi.pagamento} · validità ${D.campi.validita}`}>{() => <>
+      <Fold id="in-serv" step={6} title="Forniture e servizi opzionali" sum={`${D.liste.servizi.length} in offerta: ${D.liste.servizi.map(x => x.voce).join(', ') || 'nessuno'}`}>{() => <Servizi D={D} />}</Fold>
+
+      <Fold id="in-comm" step={7} title="Condizioni commerciali" sum={`Pagamento: ${D.campi.pagamento} · validità ${D.campi.validita}`}>{() => <>
         <p className="hint">Slide «Condizioni commerciali». Valuta (EUR) e prezzi IVA esclusa sono fissi; resa, consegna e validità vanno compilate o segnate «non disponibile» (il pagamento vuoto diventa «Da concordare»).</p>
         <div className="grid">
           <Obbl D={D} k="resa" l="Resa (Incoterms 2020)" path="prev.offerta.resa" ph="es. DAP cantiere, EXW Marsala" />
@@ -195,7 +224,7 @@ export function Invia() {
         </div>
       </>}</Fold>
 
-      <Fold id="in-incl" step={7} title="Incluso nel prezzo e garanzie" sum={`${D.liste.inclusi.length} voci incluse · garanzia ${cfg.garanzie.struttura} anni · vale per tutti i preventivi`}>{() => <>
+      <Fold id="in-incl" step={8} title="Incluso nel prezzo e garanzie" sum={`${D.liste.inclusi.length} voci incluse · garanzia ${cfg.garanzie.struttura} anni · vale per tutti i preventivi`}>{() => <>
         <p className="hint">Elenco "Incluso nel prezzo" della slide Investimento (una voce per riga) e anni della slide Garanzie. Sono impostazioni comuni: valgono per tutti i preventivi. Nelle voci, <code>{'{{profilo_pilastri}}'}</code> e <code>{'{{spessore_asse}}'}</code> diventano il profilo e lo spessore dell'asse del preventivo (es. IPEA 140, 2,5).</p>
         <label className="f" style={{ marginBottom: 14 }}>Incluso nel prezzo
           <textarea rows={7} value={cfg.inclusi.join('\n')} onChange={e => { cfg.inclusi = e.target.value.split('\n'); save(); commit(); }} /></label>

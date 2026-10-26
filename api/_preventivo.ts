@@ -122,6 +122,14 @@ export function applica(P: any, b: any, data: any): string | null {
     if (b[k] === '') { O[k] = ''; continue; }
     const v = num(b[k]); if (!(v >= 0)) return `Importo ${k === 'pieno' ? 'del prezzo pieno' : 'del ' + k} non valido.`; O[k] = v;
   }
+  // Servizi opzionali (slide «Forniture e servizi opzionali»): elenco intero come nel modulo; null = elenco standard.
+  if (b.servizi === null) delete O.servizi;
+  else if (b.servizi != null) {
+    const ss = daJson(b.servizi);
+    if (!Array.isArray(ss) || ss.length > 20) return 'Servizi opzionali non leggibili: serve un elenco (al massimo 20) di voce, prezzo e in offerta sì/no.';
+    O.servizi = ss.filter((x: any) => x && !vuoto(x.voce)).map((x: any) => ({ ...(x.k === 'trasporto' || x.k === 'posa' ? { k: x.k } : {}),
+      voce: breve(x.voce, 120), prezzo: breve(x.prezzo ?? '', 40), on: x.on !== false }));
+  }
   // Layout preparato nel modulo (DXF disegnato o immagine ridotta nel telefono); false = toglierlo.
   if (b.layout === false) Object.assign(O, { layout: '', layoutW: 0, layoutH: 0, layoutNome: '', dxf: null });
   else if (b.layout && typeof b.layout === 'object') {
@@ -143,7 +151,7 @@ export function campiModulo(P: any) {
     ...Object.fromEntries(IMPIANTO.map(([k, c]) => [k, num(P.imp?.[c]) ? s(P.imp[c]) : ''])),
     prog: Object.fromEntries(PROGETTO.map(([k]) => [k, s(O.prog[k])])), lat: s(P.luogo?.lat), lng: s(P.luogo?.lng),
     margine: s(P.marg?.gen), margini: Object.fromEntries(MCATS.map(c => [c, s(P.marg?.cat?.[c])])),
-    trasporto: s(O.trasporto), posa: s(O.posa), pieno: s(O.pieno), ...Object.fromEntries(OFFERTA_TESTI.map(k => [k, s(O[k])])),
+    trasporto: s(O.trasporto), posa: s(O.posa), pieno: s(O.pieno), servizi: Array.isArray(O.servizi) ? O.servizi : null, ...Object.fromEntries(OFFERTA_TESTI.map(k => [k, s(O[k])])),
     layout: O.layout ? { url: O.layout, w: O.layoutW, h: O.layoutH, nome: O.layoutNome, dxf: O.dxf } : null,
   };
 }
@@ -250,7 +258,7 @@ export async function anteprima(db: Db, b: any, oggi: string): Promise<Record<st
   const { P, data } = p, R = compute(data, P), { D, avvisi } = offertaDi(P, R, data), c = D.campi;
   return { ok: true, testo: riepilogo(P, R), costo: R.total, prezzo: R.prezzo, kwp: R.kwp,
     offerta: { titolo: c.nome_impianto, potenza: `${c.potenza_kwp} kWp · pannelli ${c.potenza_modulo_w} W`,
-      tracker: D.righe.map(r => `${r.n} × ${r.taglia} moduli`), prezzi: D.prezzi, layout: P.offerta.layoutNome || '' },
+      tracker: D.righe.map(r => `${r.n} × ${r.taglia} moduli`), prezzi: D.prezzi, servizi: D.liste.servizi, layout: P.offerta.layoutNome || '' },
     avvisi: [...new Set([...R.warn, ...avvisi])] };
 }
 
