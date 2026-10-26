@@ -173,4 +173,23 @@ describe('layout DXF', () => {
     expect(tagliaDa('TRACKER', 'Struttura 22 moduli')).toBe('22');
     expect(tagliaDa('RECINZIONE', 'Cabina')).toBe('');
   });
+
+  it('slide Layout: il nome dell\'impianto non scende sopra l\'elenco dei tracker', async () => {
+    const titolo = async (nome: string) => {
+      const P = prev(); P.offerta.nome = nome;
+      const { out } = await compila(P);
+      const x = await out.file('ppt/slides/slide6.xml')!.async('string');
+      const sp = [...x.matchAll(/<p:sp>[\s\S]*?<\/p:sp>/g)].map(m => m[0]);
+      const pos = (s: string) => /<a:off x="\d+" y="(\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/.exec(s)!.slice(1).map(Number);
+      const [y, w, h] = pos(sp.find(s => s.includes(nome))!), [yt] = pos(sp.find(s => s.includes('TRACKER TTS'))!);
+      return { sz: +/sz="(\d+)"/.exec(sp.find(s => s.includes(nome))!)![1], w, fondo: y + h, yt };
+    };
+    const corto = await titolo('Masseria Prova');
+    expect(corto.sz).toBe(6000);
+    expect(corto.fondo).toBeLessThanOrEqual(corto.yt);
+    const lungo = await titolo('Impianto Agrivoltaico Masseria San Pietro in Lama - Lotto 2');
+    expect(lungo.sz).toBeLessThan(6000);
+    expect(lungo.w).toBeLessThan(15765540);   // non arriva al logo
+    expect(lungo.fondo).toBeLessThanOrEqual(lungo.yt);
+  });
 });

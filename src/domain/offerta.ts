@@ -223,6 +223,44 @@ function righeForme(x: string, nome: string, items: Record<string, string>[], ca
   return x.replace(SEGNO, nuove);
 }
 
+// Larghezza dei caratteri (millesimi di em) di Open Sauce Bold, il carattere dei titoli del modello; gli altri contano come una «n» larga.
+const CAR = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,-'&/()";
+const LAR = ('591 643 621 643 640 368 644 605 258 258 596 302 903 605 652 643 643 391 576 383 606 546 844 582 565 555 ' +
+  '710 698 767 728 621 604 819 752 280 394 670 546 929 755 820 666 822 689 696 630 737 702 1112 723 700 628 ' +
+  '670 451 648 662 647 656 662 592 668 662 268 244 274 365 181 747 473 299 299').split(' ').map(Number);
+const largh = (t: string, sz: number, spc: number) =>   // in punti; spc = spaziatura tra lettere in punti
+  [...t.normalize('NFD').replace(/\p{M}/gu, '')].reduce((s, c) => s + ((LAR[CAR.indexOf(c)] ?? 680) / 1000) * sz + spc, 0);
+// Quante righe occupa il testo andando a capo a parole, come PowerPoint, in una larghezza di w punti.
+function aCapo(t: string, w: number, sz: number, spc: number) {
+  const righe: string[] = [];
+  for (const p of t.split(/\s+/).filter(Boolean)) {
+    const ult = righe.length ? righe[righe.length - 1] + ' ' + p : '';
+    if (ult && largh(ult, sz, spc) <= w) righe[righe.length - 1] = ult; else righe.push(p);
+  }
+  return Math.max(1, righe.reduce((n, r) => n + Math.ceil(largh(r, sz, spc) / w), 0));   // una parola troppo lunga si spezza
+}
+
+// Nome dell'impianto nella slide Layout: a 60 pt un nome lungo andava a capo sopra l'elenco dei tracker.
+// Il riquadro si allarga fino al logo e il carattere (con interlinea e spaziatura) scende finché il nome sta sopra l'elenco.
+const EMU = 12700;   // per punto
+function titoloLayout(x: string, nome: string) {
+  const sp = /<p:sp>(?:(?!<p:sp>)[\s\S])*?\{\{nome_impianto\}\}[\s\S]*?<\/p:sp>/.exec(x)?.[0];
+  const o = sp && offRe.exec(sp), r = sp && /<a:rPr\b[^>]*\bsz="(\d+)"[^>]*\bspc="(-?\d+)"/.exec(sp), l = sp && /<a:spcPts val="(\d+)"\/>/.exec(sp);
+  if (!sp || !o || !r || !l || !nome.trim()) return x;
+  const [bx, by] = [+o[1], +o[2]], sz0 = +r[1] / 100, spc0 = +r[2] / 100, ln0 = +l[1] / 100;
+  // Le altre forme: a destra (il logo) fanno da bordo, sotto (l'elenco dei tracker) da fondo.
+  const altre = [...x.replace(sp, '').matchAll(new RegExp(offRe, 'g'))].map(m => ({ x: +m[1], y: +m[2], w: +m[3], h: +m[4] })).filter(f => f.w && f.h);
+  const destra = Math.min(18288000, ...altre.filter(f => f.x > bx + +o[3] / 2 && f.y < by + +o[4]).map(f => f.x)) - 300000;
+  const fondo = Math.min(...altre.filter(f => f.y > by + +o[4] / 2 && f.x < destra).map(f => f.y)) - 8 * EMU;   // un po' d'aria sopra l'elenco
+  const W = Math.max(+o[3], destra - bx), wPt = (W / EMU) * 0.95;   // margine: la misura dei caratteri è approssimata
+  let sz = sz0, n = 1;
+  for (; sz > 20; sz--) { n = aCapo(nome, wPt, sz, (spc0 * sz) / sz0); if (by + n * ((ln0 * sz) / sz0) * EMU <= fondo) break; }
+  const k = sz / sz0, nuovo = sp.replace(o[0], `<a:off x="${bx}" y="${by}"/><a:ext cx="${W}" cy="${Math.round(n * ln0 * k * EMU)}"/>`)
+    .replace(/(<a:rPr\b[^>]*\bsz=")\d+("[^>]*\bspc=")-?\d+/g, `$1${sz * 100}$2${Math.round(spc0 * k * 100)}`)
+    .replace(/<a:spcPts val="\d+"\/>/g, `<a:spcPts val="${Math.round(ln0 * k * 100)}"/>`);
+  return x.replace(sp, nuovo);
+}
+
 const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 export const compilaPptx = async (modello: ArrayBuffer, D: DatiOfferta, layout?: Layout) =>
   (await compila(modello, D, layout)).generateAsync({ type: 'blob', mimeType: PPTX, compression: 'DEFLATE' });
@@ -281,6 +319,7 @@ async function compila(modello: ArrayBuffer | Uint8Array, D: DatiOfferta, layout
         x = x.replace(pm[0], pic);
       }
     }
+    if (pm) x = titoloLayout(x, D.campi.nome_impianto ?? '');
     // Campo senza valore: via anche unità e prefissi del suo pezzo di testo («– mm», «cat. –» → «Non disponibile»).
     for (const k of D.senza) x = x.replace(new RegExp(String.raw`<a:t>[^<]*\{\{${k}\}\}[^<]*</a:t>`, 'g'), `<a:t>${esc(D.campi[k])}</a:t>`);
     x = tokens(x, D.campi);
