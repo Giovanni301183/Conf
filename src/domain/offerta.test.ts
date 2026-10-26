@@ -181,8 +181,9 @@ describe('layout DXF', () => {
       const x = await out.file('ppt/slides/slide6.xml')!.async('string');
       const sp = [...x.matchAll(/<p:sp>[\s\S]*?<\/p:sp>/g)].map(m => m[0]);
       const pos = (s: string) => /<a:off x="\d+" y="(\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/.exec(s)!.slice(1).map(Number);
-      const [y, w, h] = pos(sp.find(s => s.includes(nome))!), [yt] = pos(sp.find(s => s.includes('TRACKER TTS'))!);
-      return { sz: +/sz="(\d+)"/.exec(sp.find(s => s.includes(nome))!)![1], w, fondo: y + h, yt };
+      const [y, w, h] = pos(sp.find(s => s.includes('Masseria'))!), [yt] = pos(sp.find(s => s.includes('TRACKER TTS'))!);
+      const t = sp.find(s => s.includes('Masseria'))!;
+      return { sz: +/sz="(\d+)"/.exec(t)![1], w, fondo: y + h, yt, righe: t.split('<a:br>').map(r => r.replace(/<[^>]+>/g, '')) };
     };
     const corto = await titolo('Masseria Prova');
     expect(corto.sz).toBe(6000);
@@ -191,5 +192,8 @@ describe('layout DXF', () => {
     expect(lungo.sz).toBeLessThan(6000);
     expect(lungo.w).toBeLessThan(15765540);   // non arriva al logo
     expect(lungo.fondo).toBeLessThanOrEqual(lungo.yt);
+    // A capo scritto nel testo, con righe simili: il PDF va a capo nello stesso punto del PowerPoint.
+    expect(lungo.righe).toEqual(['Impianto Agrivoltaico Masseria', 'San Pietro in Lama - Lotto 2']);
+    expect(corto.righe).toEqual(['Masseria Prova']);
   });
 });

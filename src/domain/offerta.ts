@@ -230,14 +230,24 @@ const LAR = ('591 643 621 643 640 368 644 605 258 258 596 302 903 605 652 643 64
   '670 451 648 662 647 656 662 592 668 662 268 244 274 365 181 747 473 299 299').split(' ').map(Number);
 const largh = (t: string, sz: number, spc: number) =>   // in punti; spc = spaziatura tra lettere in punti
   [...t.normalize('NFD').replace(/\p{M}/gu, '')].reduce((s, c) => s + ((LAR[CAR.indexOf(c)] ?? 680) / 1000) * sz + spc, 0);
-// Quante righe occupa il testo andando a capo a parole, come PowerPoint, in una larghezza di w punti.
+// Righe del testo andando a capo a parole in una larghezza di w punti.
 function aCapo(t: string, w: number, sz: number, spc: number) {
   const righe: string[] = [];
   for (const p of t.split(/\s+/).filter(Boolean)) {
     const ult = righe.length ? righe[righe.length - 1] + ' ' + p : '';
     if (ult && largh(ult, sz, spc) <= w) righe[righe.length - 1] = ult; else righe.push(p);
   }
-  return Math.max(1, righe.reduce((n, r) => n + Math.ceil(largh(r, sz, spc) / w), 0));   // una parola troppo lunga si spezza
+  return righe.length ? righe : [''];
+}
+// Righe occupate davvero: una parola più larga del riquadro si spezza.
+const nRighe = (righe: string[], w: number, sz: number, spc: number) => righe.reduce((n, r) => n + Math.max(1, Math.ceil(largh(r, sz, spc) / w)), 0);
+// Stesse righe ma di lunghezza simile («… Masseria San Pietro / in Lama - Lotto 2», non una parola sola sotto):
+// la larghezza più stretta che non aggiunge righe.
+function equilibra(t: string, w: number, sz: number, spc: number) {
+  const n = aCapo(t, w, sz, spc).length;
+  let [lo, hi] = [0, w];
+  for (let i = 0; i < 20; i++) { const m = (lo + hi) / 2; if (aCapo(t, m, sz, spc).length > n) lo = m; else hi = m; }
+  return aCapo(t, hi, sz, spc);
 }
 
 // Nome dell'impianto nella slide Layout: a 60 pt un nome lungo andava a capo sopra l'elenco dei tracker.
@@ -254,10 +264,14 @@ function titoloLayout(x: string, nome: string) {
   const fondo = Math.min(...altre.filter(f => f.y > by + +o[4] / 2 && f.x < destra).map(f => f.y)) - 8 * EMU;   // un po' d'aria sopra l'elenco
   const W = Math.max(+o[3], destra - bx), wPt = (W / EMU) * 0.95;   // margine: la misura dei caratteri è approssimata
   let sz = sz0, n = 1;
-  for (; sz > 20; sz--) { n = aCapo(nome, wPt, sz, (spc0 * sz) / sz0); if (by + n * ((ln0 * sz) / sz0) * EMU <= fondo) break; }
-  const k = sz / sz0, nuovo = sp.replace(o[0], `<a:off x="${bx}" y="${by}"/><a:ext cx="${W}" cy="${Math.round(n * ln0 * k * EMU)}"/>`)
+  for (; sz > 20; sz--) { n = nRighe(aCapo(nome, wPt, sz, (spc0 * sz) / sz0), wPt, sz, (spc0 * sz) / sz0); if (by + n * ((ln0 * sz) / sz0) * EMU <= fondo) break; }
+  const k = sz / sz0;
+  let nuovo = sp.replace(o[0], `<a:off x="${bx}" y="${by}"/><a:ext cx="${W}" cy="${Math.round(n * ln0 * k * EMU)}"/>`)
     .replace(/(<a:rPr\b[^>]*\bsz=")\d+("[^>]*\bspc=")-?\d+/g, `$1${sz * 100}$2${Math.round(spc0 * k * 100)}`)
     .replace(/<a:spcPts val="\d+"\/>/g, `<a:spcPts val="${Math.round(ln0 * k * 100)}"/>`);
+  // A capo scritti nel testo: il convertitore PDF misura le lettere un po' diversamente e andrebbe a capo altrove.
+  const run = /<a:r>(<a:rPr\b[\s\S]*?<\/a:rPr>|<a:rPr\b[^>]*\/>)<a:t>\{\{nome_impianto\}\}<\/a:t><\/a:r>/.exec(nuovo);
+  if (run) nuovo = nuovo.replace(run[0], equilibra(nome, wPt, sz, spc0 * k).map(t => `<a:r>${run[1]}<a:t>${esc(t)}</a:t></a:r>`).join(`<a:br>${run[1]}</a:br>`));
   return x.replace(sp, nuovo);
 }
 
