@@ -43,6 +43,25 @@ export const OBBLIGATORI: readonly (readonly [string, string, string])[] = [
   ['resa', 'Resa', 'Condizioni commerciali'], ['consegna', 'Tempi di consegna', 'Condizioni commerciali'], ['validita', "Validità dell'offerta", 'Condizioni commerciali'],
 ];
 export const ND = 'Non disponibile';
+/** Dove si corregge un avviso o si compila un campo obbligatorio: scheda, tendina e (se c'è) il campo su cui mettere il cursore. */
+export type Dove = { tab: string; fold: string; path?: string; nome: string };
+export const DOVE: Record<string, Dove> = {
+  numero: { tab: 'config', fold: 'cf-comm', path: 'prev.num', nome: 'Configura → Commessa' },
+  cliente: { tab: 'config', fold: 'cf-comm', path: 'prev.cliente', nome: 'Configura → Commessa' },
+  localita: { tab: 'config', fold: 'cf-comm', path: 'prev.luogo.nome', nome: 'Configura → Commessa' },
+  coordinate: { tab: 'config', fold: 'cf-comm', path: 'prev.luogo.nome', nome: 'Configura → Commessa (Trova sulla mappa)' },
+  modulo_modello: { tab: 'config', fold: 'cf-mod', path: 'prev.modulo.marca', nome: 'Configura → Moduli fotovoltaici' },
+  tracker: { tab: 'config', fold: 'cf-trk', nome: 'Configura → Tracker' },
+  margine: { tab: 'invia', fold: 'in-prz', path: 'prev.marg.gen', nome: "Prezzi nell'offerta" },
+  prezzi: { tab: 'invia', fold: 'in-prz', nome: "Prezzi nell'offerta" },
+  layout: { tab: 'invia', fold: 'in-lay', nome: "Layout dell'impianto" },
+  ignoti: { tab: 'invia', fold: 'in-incl', nome: 'Incluso nel prezzo e garanzie' },
+  referente: { tab: 'invia', fold: 'in-int', path: 'prev.offerta.referente', nome: "Intestazione dell'offerta" },
+  email_referente: { tab: 'invia', fold: 'in-int', path: 'prev.offerta.email', nome: "Intestazione dell'offerta" },
+  zona: { tab: 'invia', fold: 'in-int', path: 'prev.offerta.zona', nome: "Intestazione dell'offerta" },
+  ...Object.fromEntries(PROGETTO.map(([k]) => [k, { tab: 'invia', fold: 'in-prog', path: `prev.offerta.prog.${k}`, nome: 'Dati di progetto' }])),
+  ...Object.fromEntries((['resa', 'consegna', 'validita'] as const).map(k => [k, { tab: 'invia', fold: 'in-comm', path: `prev.offerta.${k}`, nome: 'Condizioni commerciali' }])),
+};
 export function offPrev(P: any) {
   if (!P.offerta) P.offerta = defOfferta();
   const o = P.offerta;
@@ -58,6 +77,7 @@ export type DatiOfferta = {
   righe: { n: number; taglia: string }[];
   prezzi: { label: string; value: string; strike?: string; nota?: string }[];
   avvisi: string[];
+  avvisiDove: string[];                                // per ogni avviso, dove si corregge (chiave di DOVE, '' = da nessuna parte)
   mancanti: string[];                                  // campi obbligatori vuoti e non segnati «non disponibile»
   senza: string[];                                     // segnaposto senza valore: nel modello resta solo «–» o «Non disponibile», senza unità
 };
@@ -66,7 +86,8 @@ const isTrasporto = (l: any) => /traspor/i.test(l.desc || '');
 
 /** Raccoglie dal preventivo tutto quello che va nell'offerta. `montTot` = totale della scheda Montaggio (per la posa in opera). */
 export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOfferta {
-  const O = offPrev(P), cfg = offCfg(data), avvisi: string[] = [];
+  const O = offPrev(P), cfg = offCfg(data), avvisi: string[] = [], avvisiDove: string[] = [];
+  const avv = (dove: string, t: string) => { avvisi.push(t); avvisiDove.push(dove); };
   // Tracker per taglia (in ordine decrescente, come nel modello).
   const perTaglia = new Map<string, number>();
   P.righe.forEach((r: any) => { if (num(r.n) > 0) perTaglia.set(String(r.taglia), (perTaglia.get(String(r.taglia)) || 0) + num(r.n)); });
@@ -80,7 +101,7 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
   const pStr = R.lines.filter((l: any) => l.riga !== 'extra' || !isTrasporto(l)).reduce((s: number, l: any) => s + l.prezzo, 0);
   const trasp = O.trasporto === '' || O.trasporto == null ? extra.filter(isTrasporto).reduce((s: number, l: any) => s + l.prezzo, 0) : num(O.trasporto);
   const pieno = num(O.pieno), posa = O.posa === '' || O.posa == null ? montTot : num(O.posa);
-  if (altre.length) avvisi.push(`Il modello ha posto solo per il trasporto: ${altre.map((l: any) => l.desc || 'voce extra').join(', ')} ${altre.length > 1 ? 'sono incluse' : 'è inclusa'} nel prezzo di struttura e componenti.`);
+  if (altre.length) avv('prezzi', `Il modello ha posto solo per il trasporto: ${altre.map((l: any) => l.desc || 'voce extra').join(', ')} ${altre.length > 1 ? 'sono incluse' : 'è inclusa'} nel prezzo di struttura e componenti.`);
 
   const lu = P.luogo || {}, pr = O.prog;
   const campi: Record<string, string> = {
@@ -131,18 +152,18 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
   // Segnaposto scritti a mano nelle voci incluse che il modello non conosce: nel PDF spariscono, meglio dirlo.
   const ignoti = [...new Set<string>(cfg.inclusi.join(' ').match(/\{\{[^{}]*\}\}/g) || [])].filter(t => !(t.slice(2, -2) in campi));
 
-  if (!P.num) avvisi.push("Il preventivo non ha ancora un numero: salvalo per assegnarlo (in copertina comparirebbe «–»).");
-  if (!P.cliente) avvisi.push('Manca il cliente (Configura → Commessa).');
-  if (!righe.length) avvisi.push('Nessun tracker nel preventivo.');
-  if (!(R.prezzo > 0)) avvisi.push('Il prezzo di vendita è zero.');
-  if (R.total > 0 && R.prezzo - R.total < 0.5) avvisi.push("Margine 0 %: nell'offerta il prezzo di vendita è uguale al costo. Imposta il margine qui sotto (Prezzi) o nella scheda Margini.");
-  if (!O.layout) avvisi.push('Nessun layout caricato: la slide del layout resterà vuota, senza disegno.');
-  if (mancanti.length) avvisi.push(`Da compilare o segnare «non disponibile»: ${mancanti.join(', ')}.`);
-  if (ignoti.length) avvisi.push(`Nelle voci incluse ${ignoti.join(', ')} non ${ignoti.length > 1 ? 'sono campi' : 'è un campo'} del modello: nell'offerta ${ignoti.length > 1 ? 'spariranno' : 'sparirà'}.`);
+  if (!P.num) avv('numero', "Il preventivo non ha ancora un numero: salvalo per assegnarlo (in copertina comparirebbe «–»).");
+  if (!P.cliente) avv('cliente', 'Manca il cliente (Configura → Commessa).');
+  if (!righe.length) avv('tracker', 'Nessun tracker nel preventivo.');
+  if (!(R.prezzo > 0)) avv('margine', 'Il prezzo di vendita è zero.');
+  if (R.total > 0 && R.prezzo - R.total < 0.5) avv('margine', "Margine 0 %: nell'offerta il prezzo di vendita è uguale al costo. Imposta il margine qui sotto (Prezzi) o nella scheda Margini.");
+  if (!O.layout) avv('layout', 'Nessun layout caricato: la slide del layout resterà vuota, senza disegno.');
+  if (mancanti.length) avv(OBBLIGATORI.find(o => o[1] === mancanti[0])![0], `Da compilare o segnare «non disponibile»: ${mancanti.join(', ')}.`);
+  if (ignoti.length) avv('ignoti', `Nelle voci incluse ${ignoti.join(', ')} non ${ignoti.length > 1 ? 'sono campi' : 'è un campo'} del modello: nell'offerta ${ignoti.length > 1 ? 'spariranno' : 'sparirà'}.`);
   if (O.dxf) {
     const diff = [...new Set([...Object.keys(O.dxf), ...righe.map(r => r.taglia)])]
       .filter(t => (O.dxf![t] || 0) !== (perTaglia.get(t) || 0)).map(t => `${t} moduli: DXF ${O.dxf![t] || 0}, preventivo ${perTaglia.get(t) || 0}`);
-    if (diff.length) avvisi.push('Il DXF non corrisponde al preventivo · ' + diff.join(' · '));
+    if (diff.length) avv('layout', 'Il DXF non corrisponde al preventivo · ' + diff.join(' · '));
   }
   const prezzi = [
     { label: 'Struttura e componenti', value: `€ ${campi.prezzo_offerta} + IVA`, strike: pieno > pStr ? `€ ${campi.prezzo_listino}` : undefined },
@@ -150,7 +171,7 @@ export function datiOfferta(P: any, R: any, data: any, montTot: number): DatiOff
     { label: 'Posa in opera', value: posa > 0 ? `€ ${campi.costo_posa} + IVA` : 'Non inclusa', nota: [O.posaNota, O.posaModo].filter(Boolean).join(' · ') || undefined },
     { label: 'Prezzo per kWp', value: `${campi.prezzo_kwp} €/kWp` },
   ];
-  return { campi, liste, paragrafi, righe, prezzi, avvisi, mancanti, senza };
+  return { campi, liste, paragrafi, righe, prezzi, avvisi, avvisiDove, mancanti, senza };
 }
 /** Errore da mostrare se l'offerta non si può generare (campi obbligatori), altrimenti ''. */
 export const bloccoOfferta = (D: DatiOfferta) =>

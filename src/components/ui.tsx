@@ -46,6 +46,7 @@ export function Inp({ path, type = 'num', cls = '', ph = '', w = '', list }: { p
       className={`${isN ? 'n ' : ''}${cls}`}
       value={draft ?? shown(v, type)}
       placeholder={ph}
+      data-path={path}
       list={list}
       inputMode={isN ? 'decimal' : undefined}
       style={w && !spin ? { width: w } : undefined}

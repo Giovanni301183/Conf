@@ -4,10 +4,10 @@ import { DateInp, Fold, Inp, TabTools } from '../components/ui';
 import { eur, fP } from '../domain/format';
 import { disegna, immagineInPng, leggiDxf } from '../domain/dxf';
 import { fDate, fN, fileName, download } from '../domain/format';
-import { GARANZIE0, INCLUSI0, OBBLIGATORI, PROGETTO, bloccoOfferta, compilaPptx, datiOfferta, layoutImg, offCfg, offPrev, type DatiOfferta } from '../domain/offerta';
+import { DOVE, GARANZIE0, INCLUSI0, OBBLIGATORI, PROGETTO, bloccoOfferta, compilaPptx, datiOfferta, layoutImg, offCfg, offPrev, type DatiOfferta } from '../domain/offerta';
 import { buildMont } from '../domain/plan';
 import { R, S, commit, save } from '../store/state';
-import { archPatch, archSave, isDirty, toast } from '../store/actions';
+import { archPatch, archSave, isDirty, toast, vaiA } from '../store/actions';
 import { online, pdfOfferta, propostaSito } from '../store/remote';
 import { StatoTag } from './Cruscotto';
 
@@ -105,13 +105,13 @@ export function Invia() {
       <TabTools />
 
       <Fold id="in-ck" step={1} title="Controllo dei dati" sum={D.avvisi.length ? <span style={{ color: 'var(--warn)' }}>{D.avvisi.length} da verificare</span> : '✓ Tutto pronto'}>{() => <>
-        {D.avvisi.length ? <div className="warn" style={{ marginTop: 0 }}>{D.avvisi.map((a, i) => <div key={i}>{a}</div>)}</div> : <p className="hint">Tutti i dati necessari ci sono.</p>}
+        {D.avvisi.length ? <div className="warn" style={{ marginTop: 0 }}>{D.avvisi.map((a, i) => { const d = DOVE[D.avvisiDove[i]]; return <div key={i} className="avvrow"><span>{a}</span>{d && <button className="btn s" onClick={() => vaiA(d)} title={'Apre ' + d.nome}>Vai →</button>}</div>; })}</div> : <p className="hint">Tutti i dati necessari ci sono.</p>}
         {manc.length ? <>
           <h3>Campi obbligatori</h3>
           <p className="hint">Finché questi campi non sono compilati o segnati «non disponibile», l'offerta non si genera. Nel PDF i campi non disponibili compaiono come «Non disponibile».</p>
           <div className="wrap"><table><tbody>
             <tr><th>Campo</th><th>Dove si compila</th><th></th></tr>
-            {manc.map(([k, l, dove]) => <tr key={k}><td>{l}</td><td className="small">{dove === 'Configura' ? <a href="#" onClick={e => { e.preventDefault(); S.ui.tab = 'config'; commit(); }}>Configura</a> : 'qui sotto, ' + dove}</td>
+            {manc.map(([k, l, dove]) => <tr key={k}><td>{l}</td><td className="small">{DOVE[k] ? <a href="#" onClick={e => { e.preventDefault(); vaiA(DOVE[k]); }}>{DOVE[k].nome} →</a> : dove}</td>
               <td className="acts"><button className="btn s" onClick={() => ndAll([k])}>Non disponibile</button></td></tr>)}
           </tbody></table></div>
           {manc.length > 1 && <div className="toolbar"><button className="btn s" onClick={() => { if (confirm(`Segnare come «non disponibile» tutti i ${manc.length} campi mancanti?`)) ndAll(manc.map(o => o[0])); }}>Segna tutti non disponibili</button></div>}

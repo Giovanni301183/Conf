@@ -581,3 +581,11 @@ button.etq{cursor:pointer}button.etq:hover{border-color:var(--ec)}
 .callegati .ditem .dact{width:100%;justify-content:flex-start}
 @media (max-width:760px){.dgrid{grid-template-columns:1fr}.dcart{position:static;flex-direction:row;flex-wrap:wrap}.ditem .dact{width:100%;justify-content:flex-start}}
 .aiin{display:block;width:100%;box-sizing:border-box;margin:4px 0;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;resize:vertical}
+
+/* Controllo dei dati: ogni avviso con il suo «Vai →»; il punto raggiunto si illumina per un attimo */
+.avvrow{display:flex;align-items:center;gap:10px;padding:3px 0}
+.avvrow>span{flex:1;min-width:0}
+.avvrow .btn{flex:none}
+.evid{animation:evid 2.6s ease-out}
+@keyframes evid{0%,40%{box-shadow:0 0 0 3px var(--acc);background:color-mix(in srgb,var(--acc) 10%,transparent)}100%{box-shadow:0 0 0 3px transparent}}
+@media (prefers-reduced-motion:reduce){.evid{animation:none;box-shadow:0 0 0 3px var(--acc)}}

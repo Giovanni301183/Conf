@@ -6,7 +6,7 @@ import { compute } from './compute';
 import { leggiDxf, tagliaDa } from './dxf';
 import { fN } from './format';
 import { defaultData, newPrev } from './model';
-import { OBBLIGATORI, bloccoOfferta, compilaPptx, datiOfferta, offCfg } from './offerta';
+import { DOVE, OBBLIGATORI, bloccoOfferta, compilaPptx, datiOfferta, offCfg } from './offerta';
 
 const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'), c => c.charCodeAt(0));
 
@@ -125,6 +125,11 @@ describe('offerta', () => {
     const D0 = defaultData(); offCfg(D0).inclusi = ['Voce con {{campo_inventato}}'];
     const D = datiOfferta(P, compute(D0, P), D0, 0);
     expect(D.avvisi.join(' ')).toContain('{{campo_inventato}}');
+    // Ogni avviso sa dove si corregge, e ogni campo obbligatorio ha la sua destinazione.
+    expect(D.avvisiDove).toHaveLength(D.avvisi.length);
+    expect(D.avvisiDove[D.avvisi.findIndex(t => t.includes('{{campo_inventato}}'))]).toBe('ignoti');
+    expect(D.avvisiDove.filter(Boolean).every(k => DOVE[k])).toBe(true);
+    expect(OBBLIGATORI.filter(([k]) => !DOVE[k])).toEqual([]);
     const zip = await JSZip.loadAsync(readFileSync('public/offerta/modello-offerta.pptx'));
     const s5 = await zip.file('ppt/slides/slide5.xml')!.async('string');
     expect(s5).toContain('<a:t>{{modulo_tipo}}</a:t>');

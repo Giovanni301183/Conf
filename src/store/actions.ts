@@ -9,6 +9,7 @@ import { infoSettore, settoreDi, type Settore } from '../domain/settori';
 const apriSettore = (k: Settore) => { S.ui.set = k; S.ui.sopen = true; S.ui.area = infoSettore(k).gruppo; };
 import { daNonScegliere, etichetta, nomeVariante, variante, type Variante } from '../domain/varianti';
 import { KEY_ARCH, KEY_DRAFT, KEY_PREV, R, S, commit, getP, load, save, setP, store, unstore } from './state';
+import type { Tab } from './state';
 import { delArch, isAdmin, online, pushArch } from './remote';
 
 /* ---------- Avvisi ---------- */
@@ -250,6 +251,19 @@ export function foldAll(on: boolean) {
 export function printCosti() {
   S.ui.tab = 'costi'; S.ui.folds['co-riep'] = true; S.ui.folds['co-cat'] = true;
   flushSync(commit); setTimeout(() => window.print(), 50);
+}
+/** Porta dove si corregge un dato: apre la scheda e la tendina, ci scorre, la evidenzia e mette il cursore sul campo (se indicato). */
+export function vaiA(d: { tab: string; fold: string; path?: string }) {
+  S.ui.tab = d.tab as Tab; S.ui.folds[d.fold] = true; flushSync(commit);
+  requestAnimationFrame(() => {
+    const f = document.querySelector<HTMLElement>(`[data-fold="${d.fold}"]`); if (!f) return;
+    const campo = d.path ? f.querySelector<HTMLInputElement>(`[data-path="${d.path}"]`) : null;
+    (campo || f).scrollIntoView({ behavior: 'smooth', block: campo ? 'center' : 'start' });
+    campo?.focus({ preventScroll: true });
+    const ev = campo?.closest<HTMLElement>('.f') || f;
+    ev.classList.remove('evid'); void ev.offsetWidth; ev.classList.add('evid');
+    setTimeout(() => ev.classList.remove('evid'), 2600);
+  });
 }
 // Stampa solo le tendine indicate (classe pcard), A4 orizzontale; tutto torna com'era dopo la stampa.
 export function printPage(ids: string[]) {
