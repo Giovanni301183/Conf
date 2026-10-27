@@ -17,7 +17,8 @@ import { MCATS, MIN_CUSC, OPT_LCUSC, OPT_LFOND, clone, defRiga, defaultData, new
 import { pilastri } from '../src/domain/referenze.js';
 import { margineSpot, testoMargini } from '../src/domain/margini.js';
 import { etichetta, nomeVariante, profDa, rigaVariante, variante, type Variante } from '../src/domain/varianti.js';
-import { PROGETTO, compilaPptxBytes, datiOfferta, layoutImg, offPrev, prezzoTesto } from '../src/domain/offerta.js';
+import { PROGETTO, compilaPptxBytes, layoutImg, offPrev, prezzoTesto } from '../src/domain/offerta.js';
+import { datiOffertaDi, modelloOfferta } from '../src/domain/offertaFisso.js';
 import { layoutDaTelegram } from './_layout.js';
 import { inPdf } from './_pdf.js';
 
@@ -166,19 +167,20 @@ export function riepilogo(P: any, R: any) {
     `€/Wp vendita ${R.kwp ? fN(R.prezzo / (R.kwp * 1000), 4) : '–'}`].join('\n');
 }
 
-// Modello PowerPoint: dal disco della funzione (vercel.json → includeFiles) o, se manca, dal sito stesso.
-async function modello(): Promise<Uint8Array> {
-  try { return await readFile(join(process.cwd(), 'public', 'offerta', 'modello-offerta.pptx')); } catch { /* sotto */ }
+// Modello PowerPoint del settore del preventivo: dal disco della funzione (vercel.json → includeFiles) o, se manca, dal sito stesso.
+async function modello(P: any): Promise<Uint8Array> {
+  const file = modelloOfferta(P);
+  try { return await readFile(join(process.cwd(), 'public', 'offerta', file)); } catch { /* sotto */ }
   const host = process.env.VERCEL_URL, by = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
   if (!host) throw new Error('modello dell\'offerta non trovato');
-  const r = await fetch(`https://${host}/offerta/modello-offerta.pptx`, { headers: by ? { 'x-vercel-protection-bypass': by } : {} });
+  const r = await fetch(`https://${host}/offerta/${file}`, { headers: by ? { 'x-vercel-protection-bypass': by } : {} });
   if (!r.ok) throw new Error(`modello dell'offerta non trovato (${r.status})`);
   return new Uint8Array(await r.arrayBuffer());
 }
 
 // La posa vuota nell'app viene dal totale della scheda Montaggio, che qui non si calcola: senza importo detto, "non inclusa".
 const offertaDi = (P: any, R: any, data: any) => {
-  const D = datiOfferta(P, R, data, 0);
+  const D = datiOffertaDi(P, R, data, 0);
   return { D, avvisi: D.avvisi.filter(a => !/salvalo per assegnarlo/.test(a)) };
 };
 
@@ -188,7 +190,7 @@ async function inviaOfferta(P: any, R: any, data: any, chat: number): Promise<{ 
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return { errore: "Sul server manca TELEGRAM_BOT_TOKEN (Vercel → Settings → Environment Variables): l'offerta non si può mandare.", avvisi };
   const O = P.offerta;
-  const bytes = await compilaPptxBytes(await modello(), D, layoutImg(O));
+  const bytes = await compilaPptxBytes(await modello(P), D, layoutImg(O));
   const nome = `Offerta_${P.num ? fileName(P.num) + '_' : ''}${fileName(P.cliente || P._nome || 'cliente')}${O.rev && O.rev !== '0' ? '_rev' + fileName(O.rev) : ''}`;
   const pdf = await inPdf(bytes, nome + '.pptx');
   if (!pdf) avvisi.unshift('PDF non disponibile in questo momento: ti ho mandato il PowerPoint.');
@@ -212,6 +214,9 @@ async function prepara(db: Db, b: any, oggi: string): Promise<{ errore: string }
     const { data: e } = await db.from('preventivi').select('id, nome, prev, dati').eq('id', id).maybeSingle();
     if (!e) return { errore: 'Preventivo non trovato: cercalo con cerca_commesse e usa il suo id.' };
     P = normPrev(clone(e.prev)); P._id = e.id; P._nome = e.nome; data = e.dati;
+    // I comandi del bot (righe, materiali, margini, layout) sono dei tracker: di un impianto fisso per ora si manda solo l'offerta.
+    if (P.settore === 'fisso' && b.azione !== 'offerta')
+      return { errore: "È un preventivo di impianti fissi: dal bot per ora puoi solo mandarne l'offerta (azione offerta); le modifiche si fanno nell'app." };
   }
   if (!data) {
     const { data: l } = await db.from('listino').select('dati').maybeSingle();

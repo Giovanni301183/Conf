@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import { compute } from '../domain/compute';
 import { defaultData, newPrev } from '../domain/model';
+import { normListinoFisso } from '../domain/fissoCosti';
 import { PASSI, infoSettore, type Settore } from '../domain/settori';
 
 export const KEY_DATA = 'tracker_prev_data_v1', KEY_PREV = 'tracker_prev_prev_v1', KEY_UI = 'tracker_prev_ui_v1';
@@ -39,6 +40,7 @@ export const S: State = {
 };
 
 // Risultato del calcolo sul preventivo aperto: si aggiorna a ogni commit().
+normListinoFisso(S.data);
 export let R = compute(S.data, S.prev);
 
 /** Esegue f come se fosse aperto un altro preventivo (es. le date di una commessa in archivio), poi rimette tutto com'era. */

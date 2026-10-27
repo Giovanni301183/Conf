@@ -2,7 +2,7 @@
 // nella loro categoria. Usati dalla scheda Margini e dal riepilogo mandato su Telegram (azione "margini" di /api/agenda).
 import { compute, tot } from './compute.js';
 import { eur, fN, fP } from './format.js';
-import { LAV_CAT, MCATS, ZINC_CAT, num } from './model.js';
+import { LAV_CAT, ZINC_CAT, mcatsDi, num } from './model.js';
 
 /** Costo e prezzo per categoria. */
 export function perCategoria(R: any): Record<string, { c: number; p: number }> {
@@ -19,13 +19,13 @@ export function perCategoria(R: any): Record<string, { c: number; p: number }> {
 export function testoMargini(P: any, R: any): string {
   const M = P.marg, ric = M.modo === 'ricarico', C = R.total, V = R.prezzo, mg = V - C, byCat = perCategoria(R);
   const wp = (x: number) => (R.kwp ? fN(x / (R.kwp * 1000), 4) : '–'), pct = (c: number, p: number) => (p ? fP(((p - c) / p) * 100) : '–');
-  const cat = [...MCATS, 'NON TROVATO'].filter(c => byCat[c] && (byCat[c].c || byCat[c].p)).map(c => {
+  const cat = [...mcatsDi(P), 'NON TROVATO'].filter(c => byCat[c] && (byCat[c].c || byCat[c].p)).map(c => {
     const n = byCat[c], proprio = M.cat?.[c] !== '' && M.cat?.[c] != null;
     return `• ${c}: costo ${eur(n.c)} → prezzo ${eur(n.p)} · margine ${eur(n.p - n.c)} (${pct(n.c, n.p)})${proprio ? ` · ${ric ? 'ricarico' : 'margine'} proprio ${fP(num(M.cat[c]))}` : ''}`;
   });
-  const righe = P.righe.map((r: any, i: number) => {
-    const rr = R.righe[i];
-    return rr?.n ? `• R${i + 1} ${fN(rr.n, 0)} × ${r.taglia} moduli ${r.tipo === 'Basso' ? 'basso' : 'agri'}: ${eur(rr.tot / rr.n)} → ${eur(rr.prezzo / rr.n)} a tracker` : '';
+  const righe = R.righe.map((rr: any, i: number) => {
+    const r = P.righe[i], nome = rr.conf ? `${rr.rid} ${fN(rr.n, 0)} × ${rr.conf.split(' · ')[0]}` : `R${i + 1} ${fN(rr.n, 0)} × ${r.taglia} moduli ${r.tipo === 'Basso' ? 'basso' : 'agri'}`;
+    return rr?.n ? `• ${nome}: ${eur(rr.tot / rr.n)} → ${eur(rr.prezzo / rr.n)} a ${R.unita || 'tracker'}` : '';
   }).filter(Boolean);
   return [`📊 Margini · N° ${P.num || '–'} · ${[P.cliente, P.rif].filter(Boolean).join(' · ') || 'senza nome'}`,
     `${ric ? 'Ricarico sul costo' : 'Margine sul prezzo'} generale ${fP(num(M.gen))}`, '',
@@ -33,7 +33,7 @@ export function testoMargini(P: any, R: any): string {
     `TOTALE: costo ${eur(C)} → prezzo ${eur(V)}`,
     `Margine ${eur(mg)} · sul prezzo ${V ? fP((mg / V) * 100) : '–'} · ricarico sul costo ${C ? fP((mg / C) * 100) : '–'}`,
     `€/Wp costo → vendita: ${wp(C)} → ${wp(V)}`,
-    ...(righe.length ? ['', 'Per tracker (costo → prezzo):', ...righe] : [])].join('\n');
+    ...(righe.length ? ['', `Per ${R.unita || 'tracker'} (costo → prezzo):`, ...righe] : [])].join('\n');
 }
 
 /** Margini che portano il prezzo di vendita al prezzo spot, mantenendo le differenze tra categorie: il margine generale
@@ -41,7 +41,7 @@ export function testoMargini(P: any, R: any): string {
  *  Il prezzo cresce con lo spostamento: si cerca per bisezione, fino al centesimo (i margini tengono tutti i decimali che servono:
  *  arrotondarli a 4 cifre spostava il prezzo di qualche decina di centesimi). Ritorna i margini nuovi o il motivo per cui non si arriva. */
 export function margineSpot(data: any, P: any, spot: number): { marg: any; delta: number; prezzo: number } | { errore: string } {
-  const M = P.marg, ric = M.modo === 'ricarico', propri = MCATS.filter(c => M.cat?.[c] !== '' && M.cat?.[c] != null);
+  const M = P.marg, ric = M.modo === 'ricarico', propri = mcatsDi(P).filter(c => M.cat?.[c] !== '' && M.cat?.[c] != null);
   const valori = [num(M.gen), ...propri.map(c => num(M.cat[c]))];
   const sposta = (d: number) => ({ ...M, gen: +(num(M.gen) + d).toFixed(10), cat: { ...M.cat, ...Object.fromEntries(propri.map(c => [c, +(num(M.cat[c]) + d).toFixed(10)])) } });
   const prezzo = (d: number) => compute(data, { ...P, marg: sposta(d) }).prezzo;

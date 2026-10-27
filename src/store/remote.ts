@@ -2,6 +2,7 @@
 import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { linkType, supabase } from '../lib/supabase';
 import type { Scadenza } from '../domain/calendario';
+import { normListinoFisso } from '../domain/fissoCosti';
 import { LIMITE_MB, percorsoPer, type Documento } from '../domain/documenti';
 import { KEY_ARCH, KEY_DRAFT, KEY_SCAD, S, commit, load, setSaveHook, store, unstore } from './state';
 
@@ -97,7 +98,7 @@ async function loadListino(force: boolean) {
   if (data.aggiornato === listinoTs) return;
   // Le modifiche di un collega arrivano solo se qui non ci sono modifiche al listino ancora da inviare.
   if (!force && JSON.stringify(S.data) !== synced) return;
-  S.data = data.dati; synced = JSON.stringify(S.data); listinoTs = data.aggiornato;
+  S.data = data.dati; normListinoFisso(S.data); synced = JSON.stringify(S.data); listinoTs = data.aggiornato;
   store('tracker_prev_data_v1', S.data);
 }
 setSaveHook(() => {

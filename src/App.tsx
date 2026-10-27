@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useToastState } from './components/ui';
 import { eur, fN } from './domain/format';
 import { R, S, TABS, commit, useStore, type Tab } from './store/state';
-import { archSave, isBlank, isDirty, newPreventivo, onFilePicked, printCosti, setFileInput, setToast } from './store/actions';
+import { allineaSettore, archSave, isBlank, isDirty, newPreventivo, onFilePicked, printCosti, setFileInput, setToast } from './store/actions';
 import { Home, Preventivi } from './pages/Preventivi';
 import { Listino } from './pages/Listino';
 import { Distinte } from './pages/Distinte';
@@ -20,8 +20,9 @@ import { Presenza } from './components/Presenza';
 import { Assistente } from './components/Assistente';
 import { Telegram } from './components/Telegram';
 import { nScadute } from './pages/Calendario';
-import { InSviluppo } from './pages/InSviluppo';
-import { AREE, PASSI as PASSI0, SETTORI, infoSettore, type Settore } from './domain/settori';
+import { AltroSettore, InSviluppo } from './pages/InSviluppo';
+import { ConfiguraFisso, DistintaFisso } from './pages/Fisso';
+import { AREE, PASSI as PASSI0, SETTORI, infoSettore, schedaPronta, settoreDi, type Settore } from './domain/settori';
 import { cloud, isAdmin, logout, setCloudToast } from './store/remote';
 import { AvvisiRiunioni } from './components/AvvisiRiunioni';
 
@@ -29,7 +30,9 @@ const VIEWS: Record<Tab, () => React.ReactNode> = {
   archivio: Home, prev: Preventivi, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
   extra: Extra, margini: Margini, invia: Invia, docs: Documenti, lavor: Lavorazione, mont: Montaggio, utenti: Utenti,
 };
-const goTab = (t: Tab, set?: Settore) => { S.ui.tab = t; if (set) S.ui.set = set; window.scrollTo(0, 0); commit(); };
+// Schede proprie degli impianti fissi; le altre sono comuni a tutti i settori.
+const VIEWS_FISSO: Partial<Record<Tab, () => React.ReactNode>> = { config: ConfiguraFisso, distinte: DistintaFisso };
+const goTab = (t: Tab, set?: Settore) => { S.ui.tab = t; if (set) { S.ui.set = set; allineaSettore(); } window.scrollTo(0, 0); commit(); };
 const save = () => { (document.activeElement as HTMLElement | null)?.blur?.(); archSave(false); commit(); };
 
 // Barra laterale: Home e archivio, poi i settori (ognuno con la sua cascata di schede, aperto uno alla volta), poi i dati comuni.
@@ -80,9 +83,11 @@ export default function App() {
 
   if (cloud.fase !== 'locale' && cloud.fase !== 'pronto') return <><Accesso />{node}</>;
   // Le schede di un settore non ancora pronto mostrano la pagina «in sviluppo».
-  const set = infoSettore(S.ui.set), passo = PASSI.includes(S.ui.tab), View = passo && !set.pronto ? InSviluppo : VIEWS[S.ui.tab];
+  // Con aperto un preventivo di un altro settore, le schede del settore chiedono se tornare al suo o iniziarne uno nuovo.
+  const set = infoSettore(S.ui.set), passo = PASSI.includes(S.ui.tab), pronta = schedaPronta(set, S.ui.tab), altro = passo && pronta && settoreDi(S.prev) !== set.k;
+  const View = passo && !pronta ? InSviluppo : altro ? AltroSettore : (set.k === 'fisso' && VIEWS_FISSO[S.ui.tab]) || VIEWS[S.ui.tab];
   // In Home, nell'archivio e nei settori in sviluppo la barra in alto non mostra preventivo e valori: resta solo il pulsante del menu sugli schermi stretti.
-  const home = S.ui.tab === 'archivio' || S.ui.tab === 'prev' || (passo && !set.pronto);
+  const home = S.ui.tab === 'archivio' || S.ui.tab === 'prev' || (passo && !pronta);
   const dirty = isDirty(), nSc = cloud.fase === 'pronto' || cloud.fase === 'locale' ? nScadute() : 0;
   return (
     <div className="app">
@@ -103,13 +108,13 @@ export default function App() {
               return (
                 <div key={g} className={`nset area${aperta ? ' open' : ''}`}>
                   <button className={`nsh${qui && !aperta ? ' cur' : ''}`} aria-expanded={aperta} onClick={() => apriArea(g, ss)}><Ico d={CHEV} /><span>{g}</span>
-                    {ss.every(s => !s.pronto) && <em className="nsoon">in sviluppo</em>}</button>
+                    {ss.every(s => !s.pronto && !s.pronte) && <em className="nsoon">in sviluppo</em>}</button>
                   {aperta && (solo ? passi(ss[0]) : ss.map(s => {
                     const su = S.ui.set === s.k && S.ui.sopen;
                     return (
                       <div key={s.k} className={`nset${su ? ' open' : ''}`}>
                         <button className="nsh" aria-expanded={su} onClick={() => apriSet(s.k)}><Ico d={CHEV} /><span>{s.nome}</span>
-                          {!s.pronto && <em className="nsoon">in sviluppo</em>}</button>
+                          {!s.pronto && <em className="nsoon">{s.pronte ? 'in parte' : 'in sviluppo'}</em>}</button>
                         {su && passi(s)}
                       </div>
                     );
@@ -153,7 +158,7 @@ export default function App() {
               <Kpi label="€/Wp vendita" value={R.kwp ? fN(R.prezzo / (R.kwp * 1000), 4) : "–"} />
             </div>
             <div className="actions">
-              <button className="btn" onClick={() => { newPreventivo(); commit(); }}>Nuovo</button>
+              <button className="btn" onClick={() => { newPreventivo(passo ? set.k : 'tracker'); commit(); }}>Nuovo</button>
               <button className="btn" onClick={save} title="Salva nell'archivio (Ctrl+S)">Salva</button>
               <button className="btn p" onClick={printCosti} title="Stampa / PDF"><span className="lg">Stampa / </span>PDF</button>
             </div>

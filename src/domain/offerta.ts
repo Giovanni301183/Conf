@@ -7,7 +7,7 @@ import { pesoTot } from './compute.js';
 import { fDate, fN, fPeso } from './format.js';
 import { CATS, defOfferta, num } from './model.js';
 import { prezzoServizio, serviziDi } from './servizi.js';
-export { SERVIZI0, prezzoServizio, serviziDi, type Servizio } from './servizi.js';
+export { SERVIZI0, SERVIZI_FISSO0, prezzoServizio, servizi0, serviziDi, type Servizio } from './servizi.js';
 
 /* ---------- Impostazioni condivise (nel listino, valgono per tutti i preventivi) ---------- */
 // Nelle voci si possono usare i segnaposto del modello: {{profilo_pilastri}} e {{spessore_asse}} prendono il materiale del preventivo.
@@ -204,7 +204,8 @@ function paraText(p: string, text: string) {
 // a righe alterne, solo nelle righe dispari). Si ricopiano una sotto l'altra per ogni elemento; le forme con descrizione
 // {{segue:nome}} (totale, note) scendono di conseguenza. Oltre RIGHE_MAX le righe si stringono in quello spazio (tracker: 2, sopra il logo).
 // Quante righe ci stanno a grandezza piena; oltre, si stringono in quello spazio.
-const RIGHE_MAX: Record<string, number> = { tracker: 2, servizi: 8 };
+// Impianti fissi: voci (Investimento), configurazione (Soluzione proposta), geometria (Calcolo strutturale), taglie (slide della struttura).
+const RIGHE_MAX: Record<string, number> = { tracker: 2, servizi: 8, voci: 4, configurazione: 4, geometria: 3, taglie: 3 };
 const offRe = /<a:off x="(-?\d+)" y="(-?\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/;
 function righeForme(x: string, nome: string, items: Record<string, string>[], campi: Record<string, string>) {
   const forma = (d: string) => new RegExp(String.raw`<p:sp>(?:(?!<p:sp>)[\s\S])*?descr="${reEsc(d)}"[\s\S]*?</p:sp>`, 'g');

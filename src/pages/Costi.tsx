@@ -4,7 +4,7 @@ import { Fold, MiniBar, Seg, TabTools } from '../components/ui';
 import { VIEWS, addTo, buildTree, pesoTot, tot, zero } from '../domain/compute';
 import { exportCSV } from '../domain/excel';
 import { eur, fDate, fL, fN, fPeso, fQ, pct } from '../domain/format';
-import { CATS, COLS, num } from '../domain/model';
+import { COLS, num } from '../domain/model';
 import { R, S, commit } from '../store/state';
 
 export const vCols = () => COLS.filter(([k]) => k !== 'altro' || (R && R.T.altro));
@@ -45,8 +45,13 @@ function treeRows(v: string, total: number) {
   return out;
 }
 
+/** Configurazione di una riga del riepilogo: i fissi la portano nel calcolo, i tracker la leggono dalla riga del preventivo. */
+export const confRiga = (P: any, rr: any, i: number) => rr.conf ?? (() => { const r = P.righe[i];
+  return `${r.taglia} moduli · ${r.tipo} · ${r.prof} · asse ${r.asse} · omega ${r.omega}${r.tipo === 'Basso' ? '' : ' · fond. ' + fL(r.lFond) + ' m'} · cusc. ${fL(r.lCusc)} m`; })();
+export const ridRiga = (rr: any, i: number) => rr.rid ?? `R${i + 1}`;
+
 export function Costi() {
-  const P = S.prev, T = R.T, total = R.total;
+  const P = S.prev, T = R.T, total = R.total, CATS = R.cats, fisso = R.settore === 'fisso', un = R.unita;
   const big = COLS.filter(([k]) => T[k]).sort((a, b) => T[b[0]] - T[a[0]]).slice(0, 2).map(([k, l]) => `${l} ${pct(T[k], total)}`).join(' · ');
   const sImp = R.lines.filter(l => l.riga === 'imp').reduce((s, l) => s + tot(l), 0), sEx = R.lines.filter(l => l.riga === 'extra').reduce((s, l) => s + tot(l), 0);
   const v = S.ui.view;
@@ -57,27 +62,27 @@ export function Costi() {
         act={<button className="btn noprint" onClick={exportCSV}>Esporta CSV</button>}>{() => <>
         <div className="meta">
           <div>N° preventivo<b>{P.num || '–'}</b></div><div>Cliente<b>{P.cliente || '–'}</b></div><div>Commessa<b>{P.rif || '–'}</b></div>
-          <div>Data<b>{fDate(P.data)}</b></div><div>Modulo<b>{P.modulo.marca || '–'} · {fN(R.wp, 0)} Wp</b></div>
+          <div>Data<b>{fDate(P.data)}</b></div><div>Modulo<b>{fisso ? '' : (P.modulo.marca || '–') + ' · '}{fN(R.wp, 0)} Wp</b></div>
         </div>
         <div className="meta">
           {CATS.map(c => <div key={c}>Peso {c.toLowerCase()}<b>{fPeso(R.pesi[c])}</b></div>)}
           <div>Peso totale<b>{fPeso(pesoTot(R.pesi))}</b></div>
         </div>
         <div className="wrap"><table><tbody>
-          <tr><th>Riga</th><th>Configurazione</th><th className="n">N.</th><th className="n">kWp</th><th className="n">€ / tracker</th><th className="n">Totale €</th></tr>
-          {P.righe.map((r, i) => { const rr = R.righe[i], kw = (rr.moduli * R.wp) / 1000; return (
-            <tr key={i}><td><span className="rid">R{i + 1}</span></td>
-              <td>{r.taglia} moduli · {r.tipo} · {r.prof} · asse {r.asse} · omega {r.omega}{r.tipo === 'Basso' ? '' : ' · fond. ' + fL(r.lFond) + ' m'} · cusc. {fL(r.lCusc)} m</td>
+          <tr><th>Riga</th><th>Configurazione</th><th className="n">N.</th><th className="n">kWp</th><th className="n">€ / {un}</th><th className="n">Totale €</th></tr>
+          {R.righe.map((rr, i) => { const kw = (rr.moduli * R.wp) / 1000; return (
+            <tr key={i}><td><span className="rid">{ridRiga(rr, i)}</span></td>
+              <td>{confRiga(P, rr, i)}</td>
               <td className="n">{fN(rr.n, 0)}</td><td className="n">{fN(kw, 2)}</td><td className="n">{rr.n ? fN(rr.tot / rr.n) : '–'}</td><td className="n">{fN(rr.tot)}</td></tr>); })}
-          <tr><td></td><td>Componenti di impianto (quadri, centralina meteo)</td><td colSpan={3}></td><td className="n">{fN(sImp)}</td></tr>
+          {!fisso && <tr><td></td><td>Componenti di impianto (quadri, centralina meteo)</td><td colSpan={3}></td><td className="n">{fN(sImp)}</td></tr>}
           {sEx ? <tr><td></td><td>Voci extra</td><td colSpan={3}></td><td className="n">{fN(sEx)}</td></tr> : null}
           <tr className="tot"><td colSpan={2}>TOTALE · {fN(R.nModuli, 0)} moduli</td><td className="n">{fN(R.nTracker, 0)}</td><td className="n">{fN(R.kwp, 2)}</td><td></td><td className="n">{fN(total)}</td></tr>
         </tbody></table></div>
         <h3>Pesi per categoria (kg)</h3>
         <div className="wrap"><table><tbody>
-          <tr><th>Riga</th>{CATS.map(c => <th key={c} className="n">{c.charAt(0) + c.slice(1).toLowerCase()}</th>)}<th className="n">Totale</th><th className="n">Per tracker</th></tr>
-          {P.righe.map((r, i) => { const rr = R.righe[i], t = pesoTot(rr.pesi); return (
-            <tr key={i}><td><span className="rid">R{i + 1}</span> <span className="muted small">{fN(rr.n, 0)} × {r.taglia} moduli</span></td>
+          <tr><th>Riga</th>{CATS.map(c => <th key={c} className="n">{c.charAt(0) + c.slice(1).toLowerCase()}</th>)}<th className="n">Totale</th><th className="n">Per {un}</th></tr>
+          {R.righe.map((rr, i) => { const t = pesoTot(rr.pesi); return (
+            <tr key={i}><td><span className="rid">{ridRiga(rr, i)}</span> <span className="muted small">{fN(rr.n, 0)} × {rr.conf ? rr.conf.split(' · ')[0] : P.righe[i].taglia + ' moduli'}</span></td>
               {CATS.map(c => <td key={c} className="n">{fN(rr.pesi[c], 1)}</td>)}<td className="n"><b>{fN(t, 1)}</b></td><td className="n">{rr.n ? fN(t / rr.n, 1) : '–'}</td></tr>); })}
           {(() => { const imp = R.lines.filter(l => l.riga === 'imp'); if (!imp.length) return null; const pi = Object.fromEntries(CATS.map(c => [c, imp.filter(l => l.cat === c).reduce((s, l) => s + l.peso, 0)]));
             return <tr><td>Componenti di impianto</td>{CATS.map(c => <td key={c} className="n">{fN(pi[c], 1)}</td>)}<td className="n"><b>{fN(pesoTot(pi), 1)}</b></td><td></td></tr>; })()}

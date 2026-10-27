@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:dxf": "python scripts/dxf-fisso-locale.py",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run"

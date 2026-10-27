@@ -1,6 +1,7 @@
 // Calcolo dei costi e albero di esplosione.
-import { CATS, EXTRA_VOCI, IMP, LAV_CAT, ZINC_CAT, hasOwnMarg, margFactor, num } from './model.js';
+import { CATS, EXTRA_VOCI, FCATS, IMP, LAV_CAT, ZINC_CAT, hasOwnMarg, margFactor, num } from './model.js';
 import { fL } from './format.js';
+import { lineeFisso } from './fissoCosti.js';
 /* ======================= CALCOLO ======================= */
 export function evalQ(expr,drv){
   let tot=0;
@@ -27,9 +28,16 @@ export function costLine(it,q,L,mz){
 export const tot=o=>o.mat+o.zinc+o.lav+o.acq+o.altro;
 export function rigaLabel(r,i){return `R${i+1} · ${r.taglia} mod · ${r.tipo} · ×${num(r.n)}`;}
 
-export const pesoZero=()=>Object.fromEntries(CATS.map(c=>[c,0])) as Record<string,number>;
-export const pesoTot=(p:Record<string,number>)=>CATS.reduce((s,c)=>s+(p[c]||0),0);
+export const pesoZero=(cats=CATS)=>Object.fromEntries(cats.map(c=>[c,0])) as Record<string,number>;
+// Somma di tutte le categorie presenti (tracker o fissi).
+export const pesoTot=(p:Record<string,number>)=>Object.values(p||{}).reduce((s,x)=>s+(x||0),0);
+// Gli impianti fissi hanno righe proprie (una per taglia, domain/fissoCosti.ts); voci extra, totali e margini sono comuni.
+// unita = cosa conta una riga ("tracker" o "struttura"): le voci extra «per tracker» di un fisso valgono per struttura.
 export function compute(data,prev){
+  if(prev?.settore==='fisso'){
+    const f=lineeFisso(data,prev);
+    return chiudi(prev,f.lines,f.righe,new Set(f.warn),{kwp:f.kwp,wp:f.wp,nTracker:f.nStrutture,nModuli:f.nModuli,cats:FCATS,unita:'struttura',settore:'fisso'});
+  }
   const mz=num(data.params.maggZinc);
   const map=new Map<any,any>(data.listino.map(x=>[x.c,x]));
   const lines:any[]=[], warn=new Set<string>();
@@ -62,7 +70,12 @@ export function compute(data,prev){
     const it=map.get(code); if(!it){warn.add(`Codice "${code}" non trovato nel listino`);continue;}
     lines.push({riga:'imp',rigaLabel:'IMPIANTO (indipendente dal n. tracker)',gruppo:g,cat:it.cat,sub:it.sub,code,desc:it.d,L:'',q,qPer:q,sd:it.sd,...costLine(it,q,0,mz)});
   }
-  const kwp=nModuli*wp/1000;
+  return chiudi(prev,lines,righe,warn,{kwp:nModuli*wp/1000,wp,nTracker,nModuli,cats:CATS,unita:'tracker',settore:'tracker'});
+}
+
+/** Voci extra, totali, pesi per categoria e prezzi con i margini: comune a tutti i settori. */
+function chiudi(prev,lines:any[],righe:any[],warn:Set<string>,o:{kwp:number,wp:number,nTracker:number,nModuli:number,cats:string[],unita:string,settore:string}){
+  const {kwp,nTracker,cats}=o;
   const base=lines.reduce((s,l)=>s+tot(l),0);
   for(const e of prev.extra){
     const v=num(e.val); let imp=0,q=1;
@@ -72,7 +85,7 @@ export function compute(data,prev){
   }
   const T={peso:0,mat:0,zinc:0,lav:0,acq:0,altro:0};
   // Pesi per categoria (kg): totali e per riga tracker; le voci extra non pesano.
-  const pesi=pesoZero();
+  const pesi=pesoZero(cats);
   for(const l of lines){for(const k in T)T[k]+=l[k]; if(typeof l.riga==='number')righe[l.riga].tot+=tot(l);
     if(l.cat in pesi){pesi[l.cat]+=l.peso; if(typeof l.riga==='number')righe[l.riga].pesi[l.cat]+=l.peso;}}
   const steel=lines.filter(l=>l.cat==='STRUTTURA').reduce((s,l)=>s+l.peso,0);
@@ -83,7 +96,7 @@ export function compute(data,prev){
   const fOwn=c=>hasOwnMarg(prev,c)?(margFactor(prev,c)??bad(c)):null, fL0=fOwn(LAV_CAT), fZ0=fOwn(ZINC_CAT);
   for(const l of lines){const f=margFactor(prev,l.cat)??bad(l.cat), fl=fL0??f, fz=fZ0??f;
     l.pLav=l.lav*fl; l.pZinc=l.zinc*fz; l.prezzo=(tot(l)-l.lav-l.zinc)*f+l.pLav+l.pZinc; prezzo+=l.prezzo; if(typeof l.riga==='number')righe[l.riga].prezzo+=l.prezzo;}
-  return {lines,righe,T,total:tot(T),prezzo,kwp,wp,nTracker,nModuli,steel,pesi,totTracker,warn:[...warn]};
+  return {lines,righe,T,total:tot(T),prezzo,...o,steel,pesi,totTracker,warn:[...warn]};
 }
 
 /* ======================= ALBERO DI ESPLOSIONE ======================= */

@@ -8,6 +8,7 @@ import { CATS, num } from '../domain/model';
 import { gruppiDistinte, inUso, isPil, sostituisci } from '../domain/referenze';
 import { S, commit, save } from '../store/state';
 import { pickFile, resetData } from '../store/actions';
+import { ListinoFisso } from './Fisso';
 
 const TIPI = { barra: 'Profili a barra — prezzati al metro', pezzo: 'Carpenteria e pezzi speciali — prezzati a pezzo', comm: 'Componenti — prezzati a pezzo' };
 const done = () => { save(); commit(); };
@@ -234,6 +235,7 @@ export function Listino() {
           </Fold>
         );
       })}
+      <ListinoFisso />
     </>
   );
 }

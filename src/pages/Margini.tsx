@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { Fold, Inp, Seg, TabTools } from '../components/ui';
 import { eur, fN, fP } from '../domain/format';
 import { margineSpot, perCategoria } from '../domain/margini';
-import { LAV_CAT, MCATS, ZINC_CAT, normPrev, num } from '../domain/model';
+import { LAV_CAT, ZINC_CAT, mcatsDi, normPrev, num } from '../domain/model';
+import { ridRiga } from './Costi';
 import { R, S, commit, save } from '../store/state';
 
 export function Margini() {
-  const P = normPrev(S.prev), M = P.marg, C = R.total, V = R.prezzo, mg = V - C, ric = M.modo === 'ricarico';
+  const P = normPrev(S.prev), MCATS = mcatsDi(P), un = R.unita, fisso = R.settore === 'fisso', M = P.marg, C = R.total, V = R.prezzo, mg = V - C, ric = M.modo === 'ricarico';
   // Prezzo spot: si scrive il totale voluto, si vede di quanti punti cambiano i margini e si applica.
   const [spot, setSpot] = useState(''), sv = num(spot.replace(/\./g, '').replace(',', '.'));
   const prova = spot.trim() ? margineSpot(S.data, P, sv) : null;
@@ -63,11 +64,11 @@ export function Margini() {
           <div>Margine sul prezzo<b>{V ? fP((mg / V) * 100) : '–'}</b></div><div>Ricarico sul costo<b>{C ? fP((mg / C) * 100) : '–'}</b></div>
           <div>€/Wp costo → vendita<b>{wpS(C)} → {wpS(V)}</b></div></div>
         <div className="wrap"><table><tbody>
-          <tr><th>Riga</th><th>Configurazione</th><th className="n">N.</th><th className="n">Costo / tracker</th><th className="n">Prezzo / tracker</th><th className="n">Prezzo totale €</th><th className="n">€/Wp vendita</th></tr>
-          {P.righe.map((r, i) => { const rr = R.righe[i], kw = (rr.moduli * R.wp) / 1000; return (
-            <tr key={i}><td><span className="rid">R{i + 1}</span></td><td>{r.taglia} moduli · {r.tipo}</td><td className="n">{fN(rr.n, 0)}</td>
+          <tr><th>Riga</th><th>Configurazione</th><th className="n">N.</th><th className="n">Costo / {un}</th><th className="n">Prezzo / {un}</th><th className="n">Prezzo totale €</th><th className="n">€/Wp vendita</th></tr>
+          {R.righe.map((rr, i) => { const kw = (rr.moduli * R.wp) / 1000; return (
+            <tr key={i}><td><span className="rid">{ridRiga(rr, i)}</span></td><td>{rr.conf ? rr.conf.split(' · ')[0] : `${P.righe[i].taglia} moduli · ${P.righe[i].tipo}`}</td><td className="n">{fN(rr.n, 0)}</td>
               <td className="n">{rr.n ? fN(rr.tot / rr.n) : '–'}</td><td className="n"><b>{rr.n ? fN(rr.prezzo / rr.n) : '–'}</b></td><td className="n">{fN(rr.prezzo)}</td><td className="n">{kw ? fN(rr.prezzo / (kw * 1000), 4) : '–'}</td></tr>); })}
-          <tr><td></td><td>Componenti di impianto</td><td colSpan={3}></td><td className="n">{fN(pImp)}</td><td></td></tr>
+          {!fisso && <tr><td></td><td>Componenti di impianto</td><td colSpan={3}></td><td className="n">{fN(pImp)}</td><td></td></tr>}
           {pEx ? <tr><td></td><td>Voci extra</td><td colSpan={3}></td><td className="n">{fN(pEx)}</td><td></td></tr> : null}
           <tr className="tot"><td colSpan={2}>TOTALE</td><td className="n">{fN(R.nTracker, 0)}</td><td></td><td></td><td className="n">{fN(V)}</td><td className="n">{wpS(V)}</td></tr>
         </tbody></table></div>

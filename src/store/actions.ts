@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { compute } from '../domain/compute';
 import { MIN_CUSC, clone, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../domain/model';
 import { download, fileName } from '../domain/format';
+import { listinoFisso } from '../domain/fissoCosti';
 import { AUTO } from '../domain/plan';
 import { infoSettore, settoreDi, type Settore } from '../domain/settori';
 /** Apre nel menu il settore (e la sua macro area). */
@@ -29,7 +30,7 @@ export const snap = (o: unknown) => JSON.stringify(o, (k, v) => (k === '_imp' ? 
 })();
 export function curEntry() { return S.prev._id ? S.arch.find(a => a.id === S.prev._id) : null; }
 // Un preventivo nuovo ancora vuoto (salvo la data) non conta come modifica non salvata.
-export function isBlank(p) { return !p._id && snap({ ...p, data: '', settore: '' }) === snap({ ...newPrev(), data: '', settore: '' }); }
+export function isBlank(p) { return !p._id && snap({ ...p, data: '', settore: '' }) === snap({ ...newPrev(settoreDi(p)), data: '', settore: '' }); }
 export function isDirty() { const e = curEntry(); return e ? snap(e.prev) !== snap(S.prev) : !isBlank(S.prev); }
 export function prevName(p) { return p._nome || [p.cliente, p.rif].filter(Boolean).join(' · ') || 'Preventivo senza nome'; }
 export const nextNum = (p, arch = S.arch) => numSucc(p, arch);
@@ -64,9 +65,11 @@ export function archOpen(id: string) {
   if (S.prev._id !== id && isDirty() && !confirm('Il preventivo aperto ha modifiche non salvate che andranno perse. Continuare?')) return;
   normPrev(e.prev); S.prev = clone(e.prev); S.prev._id = e.id; S.prev._nome = e.nome;
   // Parametri del Gantt, listino montaggio e codici articolo non contano come "listino cambiato".
-  const dSnap = d => snap({ ...d, mont: undefined, params: { ...d.params, gantt: undefined }, listino: d.listino?.map(({ art, ...x }) => x) });
+  // Ogni settore guarda solo il suo listino: un impianto fisso solo data.fisso (mancante = prezzi DE VITA), un tracker tutto il resto.
+  const fisso = settoreDi(e.prev) === 'fisso';
+  const dSnap = d => (fisso ? snap(listinoFisso(d)) : snap({ ...d, fisso: undefined, mont: undefined, params: { ...d.params, gantt: undefined }, listino: d.listino?.map(({ art, ...x }) => x) }));
   if (e.dati && dSnap(e.dati) !== dSnap(S.data) && !confirm(`Il listino è cambiato dopo il salvataggio di "${e.nome}".\n\nOK → ricalcola con il listino ATTUALE (prezzi aggiornati)\nAnnulla → ripristina il listino salvato con il preventivo`))
-    S.data = { ...clone(e.dati), mont: S.data.mont, params: { ...e.dati.params, gantt: S.data.params.gantt } };
+    S.data = fisso ? { ...S.data, fisso: clone(listinoFisso(e.dati)) } : { ...clone(e.dati), fisso: S.data.fisso, mont: S.data.mont, params: { ...e.dati.params, gantt: S.data.params.gantt } };
   apriSettore(settoreDi(S.prev)); save(); S.ui.tab = 'config'; toast(`Aperto "${e.nome}"`);
 }
 export function archDup(id: string) {
@@ -161,9 +164,13 @@ function archImport(j) {
   else throw new Error('il file non contiene preventivi');
   saveArch(added); toast(`${n} preventiv${n === 1 ? 'o importato' : 'i importati'} nell'archivio`);
 }
-export function newPreventivo() {
+export function newPreventivo(set: Settore = 'tracker') {
   if (isDirty() && !confirm('Il preventivo attuale ha modifiche non salvate. Iniziare comunque un nuovo preventivo?')) return;
-  S.prev = newPrev(); apriSettore('tracker'); S.ui.tab = 'config'; save();
+  S.prev = newPrev(set); apriSettore(set); S.ui.tab = 'config'; save();
+}
+/** Scheda di un settore con aperto un preventivo vuoto di un altro settore: il preventivo diventa del settore della scheda. */
+export function allineaSettore() {
+  if (settoreDi(S.prev) !== S.ui.set && isBlank(S.prev)) { S.prev = { ...newPrev(S.ui.set), data: S.prev.data }; save(); }
 }
 export function draftOpen() {
   const dr = load(KEY_DRAFT); if (!dr) return;
@@ -196,7 +203,8 @@ export async function onFilePicked(f: File) {
 }
 export function resetData() {
   if (!confirm("Ripristinare listino e distinte ai valori dell'Excel? Le modifiche al listino andranno perse.")) return;
-  S.data = defaultData(); save(); commit();
+  // L'Excel e' quello dei tracker: i prezzi degli impianti fissi restano.
+  S.data = { ...defaultData(), fisso: S.data.fisso }; save(); commit();
 }
 
 /* ---------- Campi ---------- */
@@ -219,6 +227,9 @@ export function stepFor(path: string) {
   if (/^data\.params\.gantt\.kg/.test(path)) return 500;
   if (/\.(n|mot|cusc|omega)$|^prev\.imp\.|\.sd\.\d+\.q$/.test(path)) return 1;
   if (path === 'prev.modulo.wp') return 5;
+  const f = path.match(/^prev\.fisso\.\w+\.(?:\d+\.)?(\w+)$/);
+  if (f) return ({ potenza_modulo: 0.005, peso_modulo: 0.1, altezza_min_terra: 10, infissione_ant: 50, infissione_post: 50, lat: 0.0001, lng: 0.0001,
+    altitudine: 10, tr: 10, cp_giu: 0.05, cp_su: 0.05, cd: 0.05 } as Record<string, number>)[f[1]] ?? 1;
   if (/\.(acq|zn|lav|kg)$/.test(path)) return 0.01;
   if (/\.(costo|p)$/.test(path)) return 1;
   if (/\.L$/.test(path)) return 0.05;

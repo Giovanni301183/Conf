@@ -44,7 +44,8 @@ export function corrosivita(kmMare: number) {
   return kmMare <= 0.3 ? 'C5' : kmMare <= 1 ? 'C4' : kmMare <= 10 ? 'C3' : 'C2';
 }
 
-const UA = { 'user-agent': 'Terranova-Preventivatore/1.0 (preventivi tracker)' };
+// Nel browser (scheda Configura degli impianti fissi) l'intestazione non si puo' cambiare: si manda solo dal server.
+const UA: Record<string, string> = typeof window === 'undefined' ? { 'user-agent': 'Terranova-Preventivatore/1.0 (preventivi tracker)' } : {};
 async function json(url: string, init?: RequestInit) {
   const r = await fetch(url, { ...init, headers: { ...UA, ...(init?.headers || {}) } });
   if (!r.ok) throw new Error(`servizio non disponibile (${r.status})`);
@@ -77,7 +78,7 @@ export async function propostaSito(localita: string, lat0?: number | null, lng0?
   const quota = Math.round(Number(el.elevation?.[0] ?? 0)), zona = zonaVento(regione, provincia, lat!, lng!);
   const cat = zona ? categoria(zona, 'D', km, quota) : '', corr = corrosivita(km);
   const dist = km < 1 ? `a circa ${Math.round(km * 10) * 100} m dal mare` : `a circa ${Math.round(km)} km dal mare`;
-  return { ok: true, lat, lng, luogo: nome, altitudine_m: String(quota), categoria_terreno: cat, classe_corrosivita: corr,
+  return { ok: true, lat, lng, luogo: nome, altitudine_m: String(quota), categoria_terreno: cat, classe_corrosivita: corr, zona_vento: zona, km_mare: km,
     motivo: `${zona ? `Zona vento ${zona}` : 'Zona vento non riconosciuta'} (${regione || 'regione ?'}), ${dist}, ${quota} m s.l.m., campagna aperta (rugosità D). `
       + 'Corrosività per zona agricola: se vicino ci sono città, industrie o allevamenti, alzala di una classe. Proposta da far verificare al progettista.' };
 }
