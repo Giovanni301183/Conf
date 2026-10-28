@@ -1,58 +1,37 @@
 // Consulente tecnico dell'assistente (app e, in seguito, Telegram): competenze di un ingegnere strutturista e di un geologo
 // esperto di pull-out e terreni, archivio tecnico come memoria e dati tecnici del preventivo aperto.
-// Gli strumenti dell'archivio li esegue il server (api/_esperto.ts): leggono solo i documenti che l'utente può vedere.
+// L'archivio tecnico sono i Documenti con un'etichetta tecnica (TECNICHE in documenti.ts). Gli strumenti li esegue il server
+// (api/_esperto.ts): leggono solo i documenti che l'utente può vedere.
 import { calcolaFisso, comuniDi, sitoDi } from './fisso.js';
 import { fN } from './format.js';
 import { pressioni, vento } from './vento.js';
+import { TECNICHE, etichetteDi, nomeEtichetta, nomiEtichette, type Documento } from './documenti.js';
 
-export const CATEGORIE_ARCHIVIO = [
-  ['geologia', 'Relazione geologica / geotecnica'], ['pullout', 'Prove di pull-out e di carico'], ['calcolo', 'Calcolo strutturale'],
-  ['normativa', 'Normativa'], ['scheda', 'Scheda tecnica'], ['risposta', "Risposta dell'esperto"], ['altro', 'Altro'],
-] as const;
-export type CategoriaArchivio = (typeof CATEGORIE_ARCHIVIO)[number][0];
-export const nomeCategoria = (k: string) => CATEGORIE_ARCHIVIO.find(c => c[0] === k)?.[1] || 'Altro';
-export const CHIAVI_CATEGORIE = CATEGORIE_ARCHIVIO.map(c => c[0]) as string[];
-
-/** Categoria proposta dal nome del file. */
-export function categoriaPer(nome: string): CategoriaArchivio {
-  const n = nome.toLowerCase();
-  if (/pull|estraz|prova.*caric|prove.*caric/.test(n)) return 'pullout';
-  if (/geolog|geotec|sondagg|penetrom|spt|cpt|masw|indagin/.test(n)) return 'geologia';
-  if (/calcol|relazione.*strutt|verific/.test(n)) return 'calcolo';
-  if (/ntc|norma|eurocod|uni[\s_-]?en|circolare|cnr/.test(n)) return 'normativa';
-  if (/scheda|datasheet|catalog/.test(n)) return 'scheda';
-  return 'altro';
-}
-
-export interface DocArchivio {
-  id: string; preventivo_id: string | null; categoria: string; privato: boolean; titolo: string; testo: string | null; scheda: string | null;
-  letto: string | null; percorso: string | null; mime: string | null; dimensione: number | null; creato_da: string; creato: string;
-}
-export const percorsoArchivio = (uid: string, nome: string) => `${uid}/${nome.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_').replace(/_+/g, '_') || 'file'}`;
 /** Tipi di file che l'AI sa leggere: PDF, immagini e testo. Word ed Excel vanno salvati in PDF. */
-export const leggibile = (mime: string | null, nome = '') => !!mime && (mime === 'application/pdf' || /^image\/(jpeg|png|gif|webp)$/.test(mime) || mime.startsWith('text/'))
+export const leggibile = (mime: string | null | undefined, nome = '') => !!mime && (mime === 'application/pdf' || /^image\/(jpeg|png|gif|webp)$/.test(mime) || mime.startsWith('text/'))
   || /\.(pdf|txt|csv|md)$/i.test(nome);
 
-/** Cerca nell'archivio: tutte le parole in titolo, scheda, testo o categoria. Prima i documenti della commessa, poi i più recenti. */
-export function cercaArchivio(dd: DocArchivio[], testo: string, preventivo: string | null, categoria?: string | null) {
+/** Cerca nell'archivio: tutte le parole in titolo, etichette, scheda o testo. Prima i documenti della commessa, poi i più recenti. */
+export function cercaArchivio(dd: Documento[], testo: string, preventivo: string | null, etichetta?: string | null) {
   const norm = (x: string) => x.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const parole = norm(testo).split(/\s+/).filter(p => p.length > 1);
-  return dd.filter(d => (!categoria || d.categoria === categoria) && parole.every(p => norm(`${d.titolo} ${nomeCategoria(d.categoria)} ${d.scheda || ''} ${d.testo || ''}`).includes(p)))
+  return dd.filter(d => (!etichetta || etichetteDi(d).includes(etichetta)) && parole.every(p => norm(`${d.titolo} ${nomiEtichette(d.etichette)} ${d.scheda || ''} ${d.testo || ''}`).includes(p)))
     .sort((a, b) => +(b.preventivo_id === preventivo && !!preventivo) - +(a.preventivo_id === preventivo && !!preventivo) || b.creato.localeCompare(a.creato));
 }
 
 const s = (description: string) => ({ type: 'string', description });
 const ns = (description: string) => ({ type: ['string', 'null'], description });
 const obj = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+const TEMI = TECNICHE.map(k => `${k} = ${nomeEtichetta(k)}`).join(', ');
 
 export const TOOLS_ESPERTO = [
-  { name: 'cerca_archivio', description: "Cerca nell'archivio tecnico (relazioni geologiche, prove di pull-out, calcoli, normative, schede tecniche, risposte salvate). Ritorna id, titolo, categoria, commessa e la scheda di ogni documento (riassunto con valori e pagine). Testo vuoto = gli ultimi documenti. Prima i documenti della commessa aperta.",
-    input_schema: obj({ testo: s('parole da cercare, es. "pull-out Foggia", "SPT", "NTC tabella 6.4"; vuoto per gli ultimi'), categoria: { type: ['string', 'null'], enum: [...CHIAVI_CATEGORIE, null], description: 'solo questa categoria, o null' } }) },
+  { name: 'cerca_archivio', description: `Cerca nell'archivio tecnico: i documenti e le note con un'etichetta tecnica (${TEMI}) e i file allegati a quelle note, arrivati dall'app, da Telegram o dalle email. Ritorna id, titolo, etichette, commessa e la scheda di ogni documento (riassunto con valori e pagine). Testo vuoto = gli ultimi documenti. Prima i documenti della commessa aperta.`,
+    input_schema: obj({ testo: s('parole da cercare, es. "pull-out Foggia", "SPT", "NTC tabella 6.4"; vuoto per gli ultimi'), etichetta: { type: ['string', 'null'], enum: [...TECNICHE, null], description: 'solo questa etichetta, o null' } }) },
   { name: 'leggi_documento', description: "Apre il file originale di un documento dell'archivio (PDF, immagine o testo, id da cerca_archivio) per leggerne tabelle, diagrammi e valori esatti. Usalo quando la scheda non basta o per citare un valore con la pagina.",
     input_schema: obj({ id: s("id del documento dell'archivio") }) },
-  { name: 'proponi_memoria', description: "Prepara il salvataggio nell'archivio tecnico di una risposta o di una conclusione tecnica (memoria per le domande future). Non salva: l'utente sceglie condiviso o privato e conferma nell'app.",
+  { name: 'proponi_memoria', description: "Prepara il salvataggio nell'archivio tecnico di una risposta o di una conclusione tecnica (memoria per le domande future): diventa una nota con etichetta tecnica. Non salva: l'utente sceglie condivisa o privata e conferma nell'app.",
     input_schema: obj({ titolo: s('titolo breve, es. "Verifica pull-out pali IPE Foggia"'), testo: s('testo da conservare: dati, ipotesi, calcolo, conclusione e documenti usati'),
-      categoria: { type: 'string', enum: CHIAVI_CATEGORIE, description: 'categoria; di solito risposta' }, preventivo: ns('numero o nome del preventivo a cui legarla, o null') }) },
+      etichette: { type: 'array', items: { type: 'string', enum: TECNICHE }, description: `1-2 etichette tecniche: ${TEMI}` }, preventivo: ns('numero o nome del preventivo a cui legarla, o null') }) },
 ];
 
 /** Competenze del consulente: si aggiungono alle istruzioni dell'assistente. */

@@ -3,9 +3,9 @@ import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { linkType, supabase } from '../lib/supabase';
 import { perMe, type Scadenza } from '../domain/calendario';
 import { normListinoFisso } from '../domain/fissoCosti';
-import { LIMITE_MB, percorsoPer, type Documento } from '../domain/documenti';
+import { LIMITE_MB, percorsoPer, tecnico, type Documento } from '../domain/documenti';
 import { normVista, type Vista } from '../domain/vista';
-import { percorsoArchivio, type DocArchivio } from '../domain/esperto';
+import { leggibile } from '../domain/esperto';
 import { KEY_ARCH, KEY_DRAFT, KEY_SCAD, S, commit, load, setSaveHook, store, unstore } from './state';
 
 type Fase = 'locale' | 'avvio' | 'login' | 'password' | 'carico' | 'pronto' | 'negato' | 'errore';
@@ -27,8 +27,6 @@ export const cloud = {
   colleghi: [] as Utente[],
   // Errore nel leggere i documenti (es. migrazione 20261022000000_documenti.sql non ancora eseguita).
   docErr: '',
-  // Errore nel leggere l'archivio tecnico (es. migrazione 20261027000000_archivio_tecnico.sql non ancora eseguita).
-  tecErr: '',
 };
 export const online = () => !!supabase;
 let toastFn = (_: string) => {};
@@ -257,36 +255,60 @@ function leaveScadenze() { if (scadCh) supabase!.removeChannel(scadCh); scadCh =
 // I file vanno nello Storage (cartella privata "documenti"), i dati nella tabella documenti.
 // Prima si carica il file, poi la riga; se la riga non si salva, il file si toglie. Eliminando: prima il file, poi la riga.
 const BUCKET = 'documenti';
-export const puoGestireDoc = (d: Documento) => isAdmin() || d.creato_da === mioEmail();
+// Un documento privato lo gestisce solo chi l'ha caricato; gli altri anche l'amministratore.
+export const puoGestireDoc = (d: Documento) => d.creato_da === mioEmail() || (isAdmin() && !d.privato);
 async function loadDocumenti() {
   const { data, error } = await supabase!.from('documenti').select('*').order('creato', { ascending: false });
   if (error) { cloud.docErr = error.message; S.docs = []; return; }
   cloud.docErr = ''; S.docs = data;
 }
-const dbErr = (m: string) => (/documenti_legato/.test(m) ? "il documento deve restare legato a un preventivo o a una voce d'agenda (per le note libere serve la migrazione 20261025030000_note_libere.sql)"
+const dbErr = (m: string) => (/documenti_legato/.test(m) ? "il file deve restare legato a un preventivo, a una voce d'agenda o a una nota (per i file liberi serve la migrazione 20261028020000_archivio_unico.sql)"
+  : /privato|scheda/.test(m) ? 'manca la migrazione 20261028020000_archivio_unico.sql (va eseguita nel SQL Editor di Supabase)'
   : /etichette/.test(m) ? 'manca la migrazione 20261025020000_etichette_note.sql (va eseguita nel SQL Editor di Supabase)' : m);
-export async function caricaFile(f: File, dove: { preventivo_id?: string | null; scadenza_id?: string | null; nota_id?: string | null }, cartella: string): Promise<string> {
+type Dove = { preventivo_id?: string | null; scadenza_id?: string | null; nota_id?: string | null };
+/** Carica un file. Con etichette e privato (archivio tecnico); un allegato è privato se lo è la sua nota. Un file tecnico lo legge subito l'AI. */
+export async function caricaFile(f: File, dove: Dove, cartella: string, extra: { etichette?: string[]; privato?: boolean } = {}): Promise<string> {
   if (!supabase) return 'I documenti si salvano solo con il server.';
   if (f.size > LIMITE_MB * 1024 * 1024) return `"${f.name}" supera ${LIMITE_MB} MB.`;
-  const percorso = percorsoPer(dove.nota_id ? 'note' : dove.preventivo_id || null, crypto.randomUUID(), f.name);
+  const percorso = percorsoPer(dove.nota_id ? 'note' : dove.preventivo_id || (dove.scadenza_id ? null : 'liberi'), crypto.randomUUID(), f.name);
   const up = await supabase.storage.from(BUCKET).upload(percorso, f, { contentType: f.type || undefined, upsert: false });
   if (up.error) return `"${f.name}" non caricato: ${up.error.message}`;
-  const { error } = await supabase.from('documenti').insert({ preventivo_id: dove.preventivo_id || null, scadenza_id: dove.scadenza_id || null, nota_id: dove.nota_id || null, cartella, tipo: 'file',
-    titolo: f.name.slice(0, 200), percorso, mime: f.type || null, dimensione: f.size });
+  const nota = dove.nota_id ? S.docs.find(d => d.id === dove.nota_id) : null, privato = !!(extra.privato || nota?.privato);
+  const { data, error } = await supabase.from('documenti').insert({ preventivo_id: dove.preventivo_id || null, scadenza_id: dove.scadenza_id || null, nota_id: dove.nota_id || null, cartella, tipo: 'file',
+    titolo: f.name.slice(0, 200), percorso, mime: f.type || null, dimensione: f.size, ...(extra.etichette?.length ? { etichette: extra.etichette } : {}), ...(privato ? { privato } : {}) }).select().single();
   if (error) { await supabase.storage.from(BUCKET).remove([percorso]); return `"${f.name}" non salvato: ${/nota_id/.test(error.message) ? 'manca la migrazione 20261025040000_allegati_note.sql' : dbErr(error.message)}`; }
+  forseScheda([data as Documento], nota ? [nota, data] : [data]);
   return '';
 }
-export async function salvaNota(n: { id?: string; titolo: string; testo: string; cartella: string; etichette: string[]; preventivo_id?: string | null; scadenza_id?: string | null }): Promise<{ errore: string; id?: string }> {
+
+/* Scheda dell'AI per i file tecnici: si scrive in sottofondo appena un file entra nell'archivio tecnico (caricato, etichettato o allegato
+   a una nota tecnica). leggendo = file in lettura, per il «Leggo…» nell'elenco. */
+export const leggendo = new Set<string>();
+function forseScheda(dd: Documento[], tutti: Documento[] = S.docs) {
+  for (const d of dd) if (d.tipo === 'file' && !d.scheda && !leggendo.has(d.id) && leggibile(d.mime, d.titolo) && tecnico(d, tutti)) leggiScheda(d.id).then(e => { if (e) toastFn(`Scheda di «${d.titolo}» non scritta: ${e}`); });
+}
+/** Chiede all'AI di leggere il file e scriverne la scheda (riassunto con valori e pagine). Ritorna l'errore o ''. */
+export async function leggiScheda(id: string): Promise<string> {
+  leggendo.add(id); commit();
+  try {
+    const r = await fetch('/api/archivio', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify({ id }) });
+    const j = await r.json().catch(() => ({ error: `Risposta non valida dal server (${r.status})` }));
+    return r.ok ? '' : j.error || `Errore ${r.status}`;
+  } catch (e) { return (e as Error).message; }
+  finally { leggendo.delete(id); await loadDocumenti(); commit(); }
+}
+export async function salvaNota(n: { id?: string; titolo: string; testo: string; cartella: string; etichette: string[]; preventivo_id?: string | null; scadenza_id?: string | null; privato?: boolean }): Promise<{ errore: string; id?: string }> {
   if (!supabase) return { errore: 'Le note si salvano solo con il server.' };
   const v: Record<string, unknown> = { titolo: n.titolo.trim().slice(0, 200), testo: n.testo.trim() || null, cartella: n.cartella, etichette: n.etichette };
+  if (n.privato !== undefined) v.privato = n.privato;
   // Il collegamento al preventivo si cambia solo se il modulo lo mostra (dalla Home); altrove resta quello di prima.
   if (n.id && n.preventivo_id !== undefined) v.preventivo_id = n.preventivo_id || null;
   if (!v.titolo) return { errore: 'Serve un titolo.' };
   const { data, error } = n.id ? await supabase.from('documenti').update(v).eq('id', n.id).select('id').single()
     : await supabase.from('documenti').insert({ ...v, tipo: 'nota', preventivo_id: n.preventivo_id || null, scadenza_id: n.scadenza_id || null }).select('id').single();
   if (error) return { errore: dbErr(error.message) };
-  if (n.id) await cartellaAllegati(n.id, n.cartella);
-  await loadDocumenti(); return { errore: '', id: data.id };
+  if (n.id) await allegatiCome(n.id, { cartella: n.cartella, ...(n.privato !== undefined ? { privato: n.privato } : {}) });
+  await loadDocumenti(); forseScheda(S.docs.filter(d => d.nota_id === data.id)); return { errore: '', id: data.id };
 }
 /** Nota assegnata a un collega: diventa una voce «Da fare» per il collega (annunciata su Telegram come le altre voci assegnate),
  *  con il testo della nota; la nota, se non è già di un'altra voce e la si può modificare, resta allegata alla voce. */
@@ -301,15 +323,20 @@ export async function assegnaNota(d: Documento, a: string, giorno: string): Prom
   }
   await Promise.all([loadScadenze(), loadDocumenti()]); return '';
 }
-/** Gli allegati seguono la cartella della nota. Le regole del database lasciano spostare solo i propri (o tutti, all'amministratore). */
-async function cartellaAllegati(notaId: string, cartella: string) {
-  if (S.docs.some(d => d.nota_id === notaId && d.cartella !== cartella)) await supabase!.from('documenti').update({ cartella }).eq('nota_id', notaId);
+/** Gli allegati seguono la cartella e il privato della nota. Le regole del database lasciano cambiare solo i propri (o tutti i condivisi, all'amministratore). */
+async function allegatiCome(notaId: string, v: { cartella?: string; privato?: boolean }) {
+  const diversi = S.docs.some(d => d.nota_id === notaId && ((v.cartella && d.cartella !== v.cartella) || (v.privato !== undefined && !!d.privato !== v.privato)));
+  if (diversi) await supabase!.from('documenti').update(v).eq('nota_id', notaId);
 }
-export async function aggiornaDoc(id: string, patch: Partial<Pick<Documento, 'titolo' | 'cartella' | 'testo' | 'etichette'>>): Promise<string> {
+export type PatchDoc = Partial<Pick<Documento, 'titolo' | 'cartella' | 'testo' | 'etichette' | 'preventivo_id' | 'scadenza_id' | 'nota_id' | 'privato'>>;
+/** Cambia un documento: anche collegamenti (preventivo, voce, nota), etichette e privato, quando si vuole. */
+export async function aggiornaDoc(id: string, patch: PatchDoc): Promise<string> {
   const { error } = await supabase!.from('documenti').update(patch).eq('id', id);
   if (error) return dbErr(error.message);
-  if (patch.cartella) await cartellaAllegati(id, patch.cartella);
-  await loadDocumenti(); return '';
+  if (patch.cartella || patch.privato !== undefined) await allegatiCome(id, { cartella: patch.cartella, ...(patch.privato !== undefined ? { privato: patch.privato } : {}) });
+  await loadDocumenti();
+  forseScheda(S.docs.filter(d => d.id === id || d.nota_id === id));
+  return '';
 }
 export async function eliminaDoc(d: Documento): Promise<string> {
   // Nota con allegati: prima i file dallo Storage (le righe se ne vanno con la nota).
@@ -337,66 +364,9 @@ export async function linkAnteprime(dd: Documento[]): Promise<Record<string, str
 let docCh: RealtimeChannel | null = null;
 function joinDocumenti() {
   if (docCh) return;
-  docCh = supabase!.channel('documenti').on('postgres_changes', { event: '*', schema: 'public', table: 'documenti' }, async () => { await loadDocumenti(); commit(); })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'archivio_tecnico' }, async () => { await loadTecnico(); commit(); }).subscribe();
+  docCh = supabase!.channel('documenti').on('postgres_changes', { event: '*', schema: 'public', table: 'documenti' }, async () => { await loadDocumenti(); commit(); }).subscribe();
 }
 function leaveDocumenti() { if (docCh) supabase!.removeChannel(docCh); docCh = null; }
-
-/* ---------- Archivio tecnico ---------- */
-// Memoria del consulente tecnico: file nella cartella privata "archivio" dello Storage, righe in archivio_tecnico.
-// Le regole del database fanno vedere i documenti condivisi e i propri privati.
-const BUCKET_TEC = 'archivio';
-export const puoGestireTec = (d: DocArchivio) => d.creato_da === mioEmail() || (isAdmin() && !d.privato);
-async function loadTecnico() {
-  const { data, error } = await supabase!.from('archivio_tecnico').select('*').order('creato', { ascending: false });
-  if (error) { cloud.tecErr = /archivio_tecnico/.test(error.message) ? 'Manca la migrazione 20261027000000_archivio_tecnico.sql (va eseguita nel SQL Editor di Supabase).' : error.message; S.tecn = []; return; }
-  cloud.tecErr = ''; S.tecn = data;
-}
-export async function ricaricaTecnico() { if (supabase) await loadTecnico(); }
-type DatiTec = { categoria: string; privato: boolean; preventivo_id: string | null };
-/** Carica un file nell'archivio tecnico: ritorna l'id della riga (per chiederne la scheda) o l'errore. */
-export async function caricaTecnico(f: File, v: DatiTec): Promise<{ errore: string; id?: string }> {
-  if (!supabase) return { errore: "L'archivio tecnico funziona solo con il server." };
-  if (f.size > LIMITE_MB * 1024 * 1024) return { errore: `"${f.name}" supera ${LIMITE_MB} MB.` };
-  const percorso = percorsoArchivio(crypto.randomUUID(), f.name);
-  const up = await supabase.storage.from(BUCKET_TEC).upload(percorso, f, { contentType: f.type || undefined, upsert: false });
-  if (up.error) return { errore: `"${f.name}" non caricato: ${/bucket/i.test(up.error.message) ? 'manca la migrazione 20261027000000_archivio_tecnico.sql' : up.error.message}` };
-  const { data, error } = await supabase.from('archivio_tecnico').insert({ ...v, titolo: f.name.slice(0, 200), percorso, mime: f.type || null, dimensione: f.size }).select('id').single();
-  if (error) { await supabase.storage.from(BUCKET_TEC).remove([percorso]); return { errore: `"${f.name}" non salvato: ${error.message}` }; }
-  await loadTecnico(); return { errore: '', id: data.id };
-}
-/** Nota scritta nell'archivio (anche una risposta dell'esperto salvata dalla chat). */
-export async function salvaTecnico(n: DatiTec & { titolo: string; testo: string }): Promise<string> {
-  if (!supabase) return "L'archivio tecnico funziona solo con il server.";
-  const titolo = n.titolo.trim().slice(0, 200), testo = n.testo.trim();
-  if (!titolo || !testo) return 'Servono titolo e testo.';
-  const { error } = await supabase.from('archivio_tecnico').insert({ ...n, titolo, testo });
-  if (error) return /archivio_tecnico/.test(error.message) ? 'manca la migrazione 20261027000000_archivio_tecnico.sql' : error.message;
-  await loadTecnico(); return '';
-}
-export async function aggiornaTecnico(id: string, patch: Partial<Pick<DocArchivio, 'titolo' | 'categoria' | 'privato' | 'preventivo_id' | 'testo' | 'scheda'>>): Promise<string> {
-  const { error } = await supabase!.from('archivio_tecnico').update(patch).eq('id', id);
-  if (error) return error.message;
-  await loadTecnico(); return '';
-}
-export async function eliminaTecnico(d: DocArchivio): Promise<string> {
-  if (d.percorso) { const { error } = await supabase!.storage.from(BUCKET_TEC).remove([d.percorso]); if (error) return error.message; }
-  const { error } = await supabase!.from('archivio_tecnico').delete().eq('id', d.id);
-  if (error) return error.message;
-  await loadTecnico(); return '';
-}
-export async function linkTecnico(d: DocArchivio, scarica = false): Promise<string> {
-  const { data, error } = await supabase!.storage.from(BUCKET_TEC).createSignedUrl(d.percorso!, 3600, scarica ? { download: d.titolo } : undefined);
-  if (error) throw error;
-  return data.signedUrl;
-}
-/** Chiede all'AI di leggere il file e scriverne la scheda (riassunto con valori e pagine). */
-export async function leggiTecnico(id: string): Promise<string> {
-  const r = await fetch('/api/archivio', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify({ id }) });
-  const j = await r.json().catch(() => ({ error: `Risposta non valida dal server (${r.status})` }));
-  await loadTecnico();
-  return r.ok ? '' : j.error || `Errore ${r.status}`;
-}
 
 /* ---------- Telegram ---------- */
 // Codice di 6 cifre (valido 10 minuti) da scrivere al bot come "/collega 123456"; lo abbina /api/agenda.
@@ -416,7 +386,7 @@ async function loadAll() {
   cloud.fase = 'carico'; cloud.err = ''; commit();
   try {
     if (!(await loadMe())) { cloud.fase = 'negato'; commit(); return; }
-    await Promise.all([loadArch(), loadListino(true), loadScadenze(), loadDocumenti(), loadTecnico()]);
+    await Promise.all([loadArch(), loadListino(true), loadScadenze(), loadDocumenti()]);
     if (S.prev._id && !S.arch.some(e => e.id === S.prev._id)) delete S.prev._id;
     cloud.fase = 'pronto';
     joinPresenza(); joinScadenze(); joinDocumenti();
@@ -426,7 +396,7 @@ async function loadAll() {
 // Al ritorno sulla finestra si rileggono archivio e listino, per vedere il lavoro dei colleghi.
 async function refresh() {
   if (cloud.fase !== 'pronto') return;
-  try { await Promise.all([loadArch(), loadListino(false), loadScadenze(), loadDocumenti(), loadTecnico()]); commit(); } catch { /* si riprova al prossimo ritorno */ }
+  try { await Promise.all([loadArch(), loadListino(false), loadScadenze(), loadDocumenti()]); commit(); } catch { /* si riprova al prossimo ritorno */ }
 }
 
 export function initCloud() {
@@ -461,5 +431,5 @@ export async function logout() {
   if (cloud.sync === 'salvo' || (cloud.fase === 'pronto' && JSON.stringify(S.data) !== synced)) await pushListino();
   leavePresenza(); leaveScadenze(); leaveDocumenti();
   await supabase!.auth.signOut();
-  S.arch = []; S.scad = []; S.docs = []; S.tecn = []; synced = ''; listinoTs = ''; cloud.me = null;
+  S.arch = []; S.scad = []; S.docs = []; synced = ''; listinoTs = ''; cloud.me = null;
 }

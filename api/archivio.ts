@@ -1,4 +1,4 @@
-// Funzione Vercel: lettura di un documento dell'archivio tecnico. Claude legge il file (PDF, immagine o testo) e ne scrive la scheda
+// Funzione Vercel: lettura di un documento dell'archivio tecnico (un file dei Documenti con etichetta tecnica). Claude legge il file (PDF, immagine o testo) e ne scrive la scheda
 // (riassunto con valori e pagine) che l'assistente usa per ritrovarlo. Solo per utenti attivi e solo sui documenti che vedono.
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';

@@ -37,7 +37,7 @@ export type Proposta =
   | { id: string; tipo: 'varianti'; base: string; nome: string; varianti: { prof: string | null; asse: number | null; omega: number | null }[] }
   | { id: string; tipo: 'nota'; titolo: string; testo: string; etichette: string[]; preventivo_id: string | null; commessa: string }
   | { id: string; tipo: 'etichette'; note: { id: string; titolo: string; prima: string[]; dopo: string[] }[] }
-  | { id: string; tipo: 'memoria'; titolo: string; testo: string; categoria: string; preventivo_id: string | null; commessa: string };
+  | { id: string; tipo: 'memoria'; titolo: string; testo: string; etichette: string[]; preventivo_id: string | null; commessa: string };
 const CHIAVI_ETICHETTE = ETICHETTE.map(([k]) => k);
 const DESCR_ETICHETTE = ETICHETTE.map(([k, l]) => `${k} = ${l}`).join(', ');
 

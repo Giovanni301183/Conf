@@ -1,24 +1,27 @@
 // Archivio tecnico lato server, per il consulente dell'assistente (app e Telegram): ricerca, lettura dei file e scheda dell'AI.
+// L'archivio sono i Documenti con un'etichetta tecnica (e i file allegati alle note che ne hanno una).
 // Con la chiave di servizio le regole del database non valgono: qui si applicano a mano (un documento privato è solo di chi l'ha caricato).
 import Anthropic from '@anthropic-ai/sdk';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { CHIAVI_CATEGORIE, cercaArchivio, leggibile, nomeCategoria, type DocArchivio } from '../src/domain/esperto.js';
+import { cercaArchivio, leggibile } from '../src/domain/esperto.js';
+import { TECNICHE, nomiEtichette, pulisciEtichette, tecnico, type Documento } from '../src/domain/documenti.js';
 import type { DatiAssistente, Proposta } from '../src/domain/assistente.js';
 
 const MODELLO = 'claude-opus-5-5';
-const BUCKET = 'archivio';
+const BUCKET = 'documenti';
 const MAX_PDF = 25 * 1024 * 1024, MAX_IMG = 5 * 1024 * 1024, MAX_TESTO = 200_000;
 type Blocco = Anthropic.Beta.BetaTextBlockParam | Anthropic.Beta.BetaImageBlockParam | Anthropic.Beta.BetaRequestDocumentBlock;
 
 /** Documenti dell'archivio che l'utente può vedere: i condivisi e i suoi privati. */
-export async function archivioDi(admin: SupabaseClient, email: string): Promise<DocArchivio[]> {
-  const { data, error } = await admin.from('archivio_tecnico').select('*').or(`privato.eq.false,creato_da.eq."${email.replace(/"/g, '')}"`).order('creato', { ascending: false });
-  if (error) throw new Error(/archivio_tecnico/.test(error.message) ? "manca la migrazione 20261027000000_archivio_tecnico.sql" : error.message);
-  return data as DocArchivio[];
+export async function archivioDi(admin: SupabaseClient, email: string): Promise<Documento[]> {
+  const { data, error } = await admin.from('documenti').select('*').or(`privato.eq.false,creato_da.eq."${email.replace(/"/g, '')}"`).order('creato', { ascending: false });
+  if (error) throw new Error(/privato/.test(error.message) ? 'manca la migrazione 20261028020000_archivio_unico.sql' : error.message);
+  const tutti = data as Documento[];
+  return tutti.filter(d => tecnico(d, tutti));
 }
 
 /** Il file come blocco per Claude: PDF (document), immagine o testo. Errore in parole semplici se non si può leggere. */
-export async function bloccoFile(admin: SupabaseClient, d: DocArchivio): Promise<Blocco> {
+export async function bloccoFile(admin: SupabaseClient, d: Documento): Promise<Blocco> {
   if (!d.percorso) return { type: 'text', text: d.testo || '' };
   if (!leggibile(d.mime, d.titolo)) throw new Error(`«${d.titolo}» non si può leggere (${d.mime || 'tipo sconosciuto'}): salvalo in PDF e ricaricalo.`);
   const { data, error } = await admin.storage.from(BUCKET).download(d.percorso);
@@ -45,25 +48,25 @@ Parole chiave: 5-15 parole per ritrovarlo (luogo, cliente, prova, profilo, norma
 Non aggiungere valori che il documento non contiene; se una parte è illeggibile dillo.`;
 
 /** Scheda dell'AI per un documento dell'archivio: la scrive e la salva sulla riga. */
-export async function scriviScheda(admin: SupabaseClient, client: Anthropic, d: DocArchivio): Promise<string> {
+export async function scriviScheda(admin: SupabaseClient, client: Anthropic, d: Documento): Promise<string> {
   const b = await bloccoFile(admin, d);
   const r = await client.beta.messages.create({
     model: MODELLO, max_tokens: 4000, system: SCHEDA, output_config: { effort: 'medium' },
-    messages: [{ role: 'user', content: [b, { type: 'text', text: `Titolo nell'archivio: ${d.titolo}. Categoria: ${nomeCategoria(d.categoria)}. Scrivi la scheda.` }] }],
+    messages: [{ role: 'user', content: [b, { type: 'text', text: `Titolo nell'archivio: ${d.titolo}. Etichette: ${nomiEtichette(d.etichette) || 'allegato di una nota tecnica'}. Scrivi la scheda.` }] }],
     betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
   });
   const scheda = r.content.flatMap(c => (c.type === 'text' ? [c.text] : [])).join('\n').trim();
   if (!scheda) throw new Error('il documento non è stato letto: riprova');
-  const { error } = await admin.from('archivio_tecnico').update({ scheda, letto: new Date().toISOString() }).eq('id', d.id);
+  const { error } = await admin.from('documenti').update({ scheda, letto: new Date().toISOString() }).eq('id', d.id);
   if (error) throw new Error(error.message);
   return scheda;
 }
 
-export interface CtxEsperto { admin: SupabaseClient; email: string; D: DatiAssistente; docs?: DocArchivio[] }
+export interface CtxEsperto { admin: SupabaseClient; email: string; D: DatiAssistente; docs?: Documento[] }
 const norm = (x: string) => x.toUpperCase().replace(/\s+/g, ' ').trim();
-const intesta = (d: DocArchivio, D: DatiAssistente) => {
+const intesta = (d: Documento, D: DatiAssistente) => {
   const p = d.preventivo_id ? D.preventivi?.find(x => x.id === d.preventivo_id) : null;
-  return `[id ${d.id} · ${nomeCategoria(d.categoria)} · ${String(d.creato).slice(0, 10)}${p ? ` · N° ${p.num} ${p.nome}` : ''}${d.privato ? ' · privato' : ''}${d.percorso ? '' : ' · nota scritta'}] ${d.titolo}`;
+  return `[id ${d.id} · ${nomiEtichette(d.etichette) || 'allegato'} · ${String(d.creato).slice(0, 10)}${p ? ` · N° ${p.num} ${p.nome}` : ''}${d.privato ? ' · privato' : ''}${d.percorso ? '' : ' · nota scritta'}${d.nota_id ? ` · allegato alla nota ${d.nota_id}` : ''}] ${d.titolo}`;
 };
 
 /** Esegue uno strumento del consulente. Il contenuto può contenere il file (PDF o immagine) da leggere. */
@@ -76,14 +79,14 @@ export async function eseguiEsperto(nome: string, input: any, ctx: CtxEsperto, i
       const pp = ctx.D.preventivi || [], q = norm(String(input.preventivo || ''));
       const e = q ? pp.find(x => norm(x.num) === q) || pp.find(x => norm(x.nome) === q) || pp.find(x => norm(`${x.nome} ${x.cliente}`).includes(q)) : null;
       if (q && !e) return { contenuto: `Preventivo "${input.preventivo}" non trovato: chiedi il numero o salva senza preventivo (null).`, errore: true };
-      const categoria = CHIAVI_CATEGORIE.includes(input.categoria) ? input.categoria : 'risposta';
+      const etichette = pulisciEtichette(input.etichette).filter(k => TECNICHE.includes(k));
       return { contenuto: "Proposta pronta: l'utente sceglie condiviso o privato e conferma nell'app. Non dire che è già salvata.",
-        proposta: { id, tipo: 'memoria', titolo, testo, categoria, preventivo_id: e?.id || null, commessa: e ? `N° ${e.num} · ${e.nome}` : '' } };
+        proposta: { id, tipo: 'memoria', titolo, testo, etichette: etichette.length ? etichette : ['tecnico'], preventivo_id: e?.id || null, commessa: e ? `N° ${e.num} · ${e.nome}` : '' } };
     }
     ctx.docs ??= await archivioDi(ctx.admin, ctx.email);
     if (nome === 'cerca_archivio') {
-      const tutti = ctx.docs, trovati = cercaArchivio(tutti, String(input.testo || ''), ctx.D.aperto || null, input.categoria || null).slice(0, 12);
-      if (!trovati.length) return { contenuto: tutti.length ? "Nessun documento trovato: prova con altre parole (o meno parole)." : "L'archivio tecnico è vuoto: i documenti si caricano da Dati comuni → Archivio tecnico." };
+      const tutti = ctx.docs, trovati = cercaArchivio(tutti, String(input.testo || ''), ctx.D.aperto || null, input.etichetta || null).slice(0, 12);
+      if (!trovati.length) return { contenuto: tutti.length ? "Nessun documento trovato: prova con altre parole (o meno parole)." : "L'archivio tecnico è vuoto: è fatto dai documenti e dalle note con un'etichetta tecnica (si caricano anche da Dati comuni → Archivio tecnico)." };
       return { contenuto: trovati.map(d => `${intesta(d, ctx.D)}\n${(d.scheda || d.testo || (d.percorso ? 'Scheda non ancora scritta: apri il file con leggi_documento.' : '')).slice(0, 4000)}`).join('\n\n') };
     }
     const d = ctx.docs.find(x => x.id === String(input.id));

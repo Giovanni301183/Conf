@@ -2,18 +2,26 @@ import { describe, expect, it } from 'vitest';
 import { newPrev } from './model';
 import { calcolaFisso, comuniDi, sitoDi } from './fisso';
 import { pressioni, vento } from './vento';
-import { categoriaPer, cercaArchivio, datiTecnici, leggibile, type DocArchivio } from './esperto';
+import { cercaArchivio, datiTecnici, leggibile } from './esperto';
+import { libero, suggerisciEtichette, tecnico, type Documento } from './documenti';
 import { eseguiEsperto, senzaFile } from '../../api/_esperto';
 
-const doc = (o: Partial<DocArchivio>): DocArchivio => ({ id: 'x', preventivo_id: null, categoria: 'altro', privato: false, titolo: '', testo: null, scheda: null, letto: null,
-  percorso: 'a/b.pdf', mime: 'application/pdf', dimensione: 1, creato_da: 'a@t.it', creato: '2026-10-01T00:00:00Z', ...o });
+const doc = (o: Partial<Documento>): Documento => ({ id: 'x', preventivo_id: null, scadenza_id: null, nota_id: null, cartella: 'altro', tipo: 'file', etichette: ['tecnico'], privato: false,
+  titolo: '', testo: null, scheda: null, letto: null, percorso: 'a/b.pdf', mime: 'application/pdf', dimensione: 1, creato_da: 'a@t.it', creato: '2026-10-01T00:00:00Z', modificato: null, ...o });
 
 describe('archivio tecnico', () => {
-  it('categoria proposta dal nome del file', () => {
-    expect(categoriaPer('Report prove PULL-OUT Foggia.pdf')).toBe('pullout');
-    expect(categoriaPer('Relazione geologica Cerignola.pdf')).toBe('geologia');
-    expect(categoriaPer('NTC2018_cap6.pdf')).toBe('normativa');
-    expect(categoriaPer('foto cantiere.jpg')).toBe('altro');
+  it('etichetta tecnica proposta dal nome del file', () => {
+    expect(suggerisciEtichette('Report prove PULL-OUT Foggia.pdf')[0]).toBe('pullout');
+    expect(suggerisciEtichette('Relazione geologica Cerignola.pdf')[0]).toBe('geologia');
+    expect(suggerisciEtichette('NTC 2018 cap6.pdf')[0]).toBe('normativa');
+    expect(suggerisciEtichette('foto.jpg')).toEqual([]);
+  });
+  it("fa parte dell'archivio chi ha un'etichetta tecnica, o è allegato a una nota che ne ha una", () => {
+    const n = doc({ id: 'n', tipo: 'nota', percorso: null, etichette: ['geologia'] }), a = doc({ id: 'a', etichette: [], nota_id: 'n' });
+    const v = doc({ id: 'v', etichette: ['acquisti'] }), dd = [n, a, v];
+    expect(dd.filter(d => tecnico(d, dd)).map(d => d.id)).toEqual(['n', 'a']);
+    expect(libero(v)).toBe(true);
+    expect(libero(a)).toBe(false);
   });
   it("l'AI legge PDF, immagini e testo, non Word ed Excel", () => {
     expect(leggibile('application/pdf')).toBe(true);
@@ -57,17 +65,19 @@ describe('dati tecnici per il consulente', () => {
 });
 
 describe('strumenti del consulente sul server', () => {
-  // Supabase finto: la query dell'archivio ritorna le righe già filtrate per l'utente.
-  const righe = [doc({ id: 'd1', titolo: 'Pull-out Foggia', scheda: 'p. 3: 18,2 kN' }), doc({ id: 'd2', titolo: 'Nota', percorso: null, mime: null, testo: 'Infissione minima 1,5 m' })];
+  // Supabase finto: la query dei documenti ritorna le righe già filtrate per l'utente; quelle non tecniche le scarta il server.
+  const righe = [doc({ id: 'd1', titolo: 'Pull-out Foggia', scheda: 'p. 3: 18,2 kN' }), doc({ id: 'd2', tipo: 'nota', titolo: 'Nota', percorso: null, mime: null, testo: 'Infissione minima 1,5 m' }),
+    doc({ id: 'd3', titolo: 'Ordine acciaio Foggia', etichette: ['acquisti'] })];
   let filtro = '';
   const admin: any = { from: () => ({ select: () => ({ or: (f: string) => { filtro = f; return { order: async () => ({ data: righe, error: null }) }; } }) }) };
   const ctx = () => ({ admin, email: 'mario@t.it', D: { listino: [], template: [], sizes: {}, preventivi: [{ id: 'P1', num: '2026/045', nome: 'DE VITA', cliente: '' }] } as any });
 
   it('cerca solo tra i condivisi e i privati di chi chiede', async () => {
-    const x = await eseguiEsperto('cerca_archivio', { testo: 'foggia', categoria: null }, ctx(), 't1');
+    const x = await eseguiEsperto('cerca_archivio', { testo: 'foggia', etichetta: null }, ctx(), 't1');
     expect(filtro).toBe('privato.eq.false,creato_da.eq."mario@t.it"');
     expect(x!.contenuto).toContain('[id d1');
     expect(x!.contenuto).toContain('18,2 kN');
+    expect(x!.contenuto).not.toContain('acciaio');
   });
   it('una nota scritta si legge come testo, un documento sconosciuto è un errore', async () => {
     const x = await eseguiEsperto('leggi_documento', { id: 'd2' }, ctx(), 't2');
@@ -75,8 +85,8 @@ describe('strumenti del consulente sul server', () => {
     expect((await eseguiEsperto('leggi_documento', { id: 'zz' }, ctx(), 't3'))!.errore).toBe(true);
   });
   it('proponi_memoria prepara la proposta legata al preventivo', async () => {
-    const x = await eseguiEsperto('proponi_memoria', { titolo: 'Verifica', testo: 'ok', categoria: 'risposta', preventivo: '2026/045' }, ctx(), 't4');
-    expect(x!.proposta).toMatchObject({ tipo: 'memoria', preventivo_id: 'P1', commessa: 'N° 2026/045 · DE VITA' });
+    const x = await eseguiEsperto('proponi_memoria', { titolo: 'Verifica', testo: 'ok', etichette: ['pullout', 'acquisti'], preventivo: '2026/045' }, ctx(), 't4');
+    expect(x!.proposta).toMatchObject({ tipo: 'memoria', etichette: ['pullout'], preventivo_id: 'P1', commessa: 'N° 2026/045 · DE VITA' });
     expect(await eseguiEsperto('cerca_articoli', {}, ctx(), 't5')).toBeNull();
   });
   it('i file letti non tornano al browser', () => {

@@ -1,4 +1,5 @@
-// Documenti e note (DMS leggero): file e note scritte, legati a un preventivo/commessa, a una voce dell'agenda o a entrambi.
+// Documenti e note (DMS leggero): file e note scritte, liberi o legati a un preventivo/commessa, a una voce dell'agenda, a una nota.
+// I documenti con un'etichetta tecnica formano anche l'Archivio tecnico, la memoria dell'esperto dell'assistente.
 // I file stanno nello Storage di Supabase; qui ci sono solo i dati per elencarli e cercarli.
 
 export type Cartella = 'cliente' | 'disegni' | 'fornitori' | 'produzione' | 'spedizione' | 'montaggio' | 'foto' | 'altro';
@@ -7,6 +8,9 @@ export interface Documento {
   titolo: string; testo: string | null; percorso: string | null; mime: string | null; dimensione: number | null;
   creato_da: string; creato: string; modificato: string | null; etichette?: string[] | null;
   nota_id?: string | null;   // file allegato a una nota
+  privato?: boolean;         // lo vede solo chi l'ha caricato
+  scheda?: string | null;    // riassunto tecnico scritto dall'AI (file dell'archivio tecnico)
+  letto?: string | null;
 }
 // Cartelle di ogni commessa, nell'ordine in cui si mostrano: [chiave, etichetta].
 export const CARTELLE: [Cartella, string][] = [
@@ -17,11 +21,14 @@ export const nomeCartella = (k: string) => CARTELLE.find(c => c[0] === k)?.[1] |
 // Etichette (temi) delle note, piu' di una per nota: [chiave, etichetta, colore]. Per aggiungerne una basta una riga qui.
 export const ETICHETTE: [string, string, string][] = [
   ['acquisti', 'Acquisti', '#5f9473'], ['vendita', 'Vendita', '#2f6fb0'], ['opportunita', 'Opportunità', '#c58a42'],
-  ['sviluppo', 'Sviluppo prodotto', '#8b72a3'], ['tecnico', 'Tecnico e progetto', '#3e6b8a'], ['produzione', 'Produzione', '#a0673a'],
+  ['sviluppo', 'Sviluppo prodotto', '#8b72a3'], ['tecnico', 'Tecnico e progetto', '#3e6b8a'], ['geologia', 'Geologia e terreni', '#8a6d3b'],
+  ['pullout', 'Prove di pull-out', '#4a5f8f'], ['normativa', 'Normativa e schede tecniche', '#56708a'], ['produzione', 'Produzione', '#a0673a'],
   ['cantiere', 'Cantiere e montaggio', '#6f7d3a'], ['logistica', 'Logistica', '#4f8a8b'], ['qualita', 'Qualità e reclami', '#b8483e'],
   ['amministrazione', 'Amministrazione', '#7a6a55'], ['marketing', 'Marketing e fiere', '#c0577f'], ['personale', 'Personale', '#5b6b9a'],
   ['riunione', 'Riunione', '#2f8a6a'], ['idea', 'Idea', '#b39a2a'],
 ];
+// Etichette dell'archivio tecnico: un documento con una di queste (o allegato a una nota che ne ha una) lo legge l'esperto.
+export const TECNICHE = ['tecnico', 'geologia', 'pullout', 'normativa'];
 export const nomeEtichetta = (k: string) => ETICHETTE.find(e => e[0] === k)?.[1] || k;
 export const coloreEtichetta = (k: string) => ETICHETTE.find(e => e[0] === k)?.[2] || '#8a9196';
 export const etichetteDi = (d: Pick<Documento, 'etichette'>) => d.etichette || [];
@@ -42,6 +49,9 @@ const INDIZI: Record<string, string[]> = {
   vendita: ['vendit', 'offert', 'preventiv', 'trattativ', 'contratt', 'sconto', 'cliente', 'firmat', 'ordine cliente'],
   opportunita: ['opportunit', 'lead', 'gara', 'bando', 'nuovo cliente', 'potenzial', 'contatto', 'richiesta di offerta', 'interessat'],
   sviluppo: ['svilupp', 'prototip', 'nuovo prodotto', 'brevett', 'miglior', 'innovaz', 'versione', 'r&d', 'ricerca'],
+  geologia: ['geolog', 'geotec', 'sondagg', 'penetrom', 'spt', 'cpt', 'masw', 'terren', 'stratigraf', 'falda', 'indagin'],
+  pullout: ['pull', 'estrazion', 'prova di carico', 'prove di carico', 'infission'],
+  normativa: ['ntc', 'normativ', 'eurocod', 'circolare', 'datasheet', 'scheda tecnica', 'schede tecniche', 'uni en', 'certificaz'],
   tecnico: ['disegn', 'calcol', 'progett', 'verific', 'carich', 'vento', 'dwg', 'dxf', 'layout', 'struttural', 'relazione tecnica'],
   produzione: ['produzion', 'lavoraz', 'taglio', 'saldat', 'zincat', 'officin', 'piegat', 'foratur'],
   cantiere: ['cantier', 'montagg', 'posa', 'sopralluog', 'installaz', 'battipal', 'squadra'],
@@ -66,6 +76,15 @@ export function suggerisciPreventivi<T extends { id: string; nome?: string; clie
   return arch.filter(e => [e.nome, e.cliente, e.rif].some(x => { const p = piano(x || '').trim(); return p.length >= 4 && t.includes(' ' + p + ' '); }))
     .sort((a, b) => peso(a) - peso(b)).slice(0, 3);
 }
+/** Documento dell'archivio tecnico: ha un'etichetta tecnica, o è un file allegato a una nota che ne ha una. */
+export function tecnico(d: Documento, docs: Documento[]): boolean {
+  const ha = (x: Documento) => etichetteDi(x).some(e => TECNICHE.includes(e));
+  if (ha(d)) return true;
+  const n = d.nota_id ? docs.find(x => x.id === d.nota_id) : null;
+  return !!n && ha(n);
+}
+/** File libero: senza preventivo, voce d'agenda o nota (si ritrova in Home e, se tecnico, nell'archivio tecnico). */
+export const libero = (d: Documento) => !d.preventivo_id && !d.scadenza_id && !d.nota_id;
 /** Documenti con almeno una delle etichette scelte (nessuna scelta = tutti). */
 export const conEtichette = (docs: Documento[], sel: string[]) => sel.length ? docs.filter(d => etichetteDi(d).some(e => sel.includes(e))) : docs;
 /** Quante note per etichetta, nell'ordine dell'elenco. */
@@ -112,7 +131,7 @@ export function documentiDi(docs: Documento[], { preventivo, scadenza }: { preve
 export function cerca(docs: Documento[], q: string) {
   const parole = q.toLowerCase().split(/\s+/).filter(Boolean);
   if (!parole.length) return docs;
-  return docs.filter(d => { const t = `${d.titolo} ${d.testo || ''} ${nomeCartella(d.cartella)} ${etichetteDi(d).map(nomeEtichetta).join(' ')}`.toLowerCase(); return parole.every(p => t.includes(p)); });
+  return docs.filter(d => { const t = `${d.titolo} ${d.testo || ''} ${d.scheda || ''} ${nomeCartella(d.cartella)} ${etichetteDi(d).map(nomeEtichetta).join(' ')}`.toLowerCase(); return parole.every(p => t.includes(p)); });
 }
 export function perCartella(docs: Documento[]) {
   const n = Object.fromEntries(CARTELLE.map(([k]) => [k, 0])) as Record<Cartella, number>;

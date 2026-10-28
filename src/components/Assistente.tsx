@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { datiPerAssistente, type Appunto, type Proposta } from '../domain/assistente';
 import { nomiEtichette } from '../domain/documenti';
-import { datiTecnici, nomeCategoria } from '../domain/esperto';
+import { datiTecnici } from '../domain/esperto';
 import { sostituisci } from '../domain/referenze';
 import { clone } from '../domain/model';
 import { S, commit, save } from '../store/state';
-import { aggiornaDoc, chiediAssistente, online, salvaNota, salvaScadenza, salvaTecnico } from '../store/remote';
+import { aggiornaDoc, chiediAssistente, online, salvaNota, salvaScadenza } from '../store/remote';
 import { apriGmail } from './Email';
 import { TabellaVarianti, scaricaOfferte } from './Varianti';
 import { archVarianti } from '../store/actions';
@@ -49,14 +49,14 @@ function CardMemoria({ p, stato, onFatto }: { p: Extract<Proposta, { tipo: 'memo
   const [titolo, setTitolo] = useState(p.titolo), [testo, setTesto] = useState(p.testo), [privato, setPrivato] = useState(false), [busy, setBusy] = useState(false);
   const salva = async () => {
     setBusy(true);
-    const e = await salvaTecnico({ titolo, testo, categoria: p.categoria, privato, preventivo_id: p.preventivo_id });
+    const { errore: e } = await salvaNota({ titolo, testo, cartella: 'altro', etichette: p.etichette, privato, preventivo_id: p.preventivo_id });
     setBusy(false);
     if (e) onFatto('Non riuscito: ' + e, `Proposta ${p.id} non salvata: ${e}.`);
     else { commit(); onFatto(`✓ Salvata nell'archivio tecnico (${privato ? 'privata' : 'condivisa'})`, `Proposta ${p.id} confermata: salvata nell'archivio tecnico${privato ? ' come privata' : ''}.`); }
   };
   return (
     <div className="aicard">
-      <b>Salva nell'archivio tecnico · {nomeCategoria(p.categoria)}{p.commessa ? ' · ' + p.commessa : ''}</b>
+      <b>Salva nell'archivio tecnico · {nomiEtichette(p.etichette)}{p.commessa ? ' · ' + p.commessa : ''}</b>
       {stato ? <><div>{titolo}</div><div className="aiesito">{stato}</div></> : <>
         <input className="aiin" value={titolo} onChange={e => setTitolo(e.target.value)} />
         <textarea className="aiin" rows={8} value={testo} onChange={e => setTesto(e.target.value)} />
