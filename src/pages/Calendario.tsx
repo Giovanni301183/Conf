@@ -2,7 +2,7 @@
 // inserite a mano, dettaglio del giorno scelto. Si nasconde e si rimette con un pulsante (scelta ricordata in questo browser);
 // nascosto restano gli allarmi in breve.
 import { useState } from 'react';
-import { CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, inAttesa, mia, oraBreve, perGiorno, voci, type Genere, type Scadenza, type Voce } from '../domain/calendario';
+import { CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, fatte, inAttesa, mia, oraBreve, perGiorno, voci, type Genere, type Scadenza, type Voce } from '../domain/calendario';
 import { Fold } from '../components/ui';
 import { StatoSel } from './Cruscotto';
 import { eStato } from '../domain/kpi';
@@ -27,7 +27,10 @@ const quando = (g: number, oggi: number, man: boolean) => {
 const nomeDi = (email: string) => cloud.colleghi.find(u => u.email === email)?.nome || email.split('@')[0];
 const apri = (id: string) => { archOpen(id); commit(); };
 const mostra = (v: boolean) => { S.ui.cal = v; commit(); };
-const segna = async (s: Scadenza) => { const e = await spuntaScadenza(s); if (e) toast('Voce non aggiornata: ' + e); commit(); };
+const segna = async (s: Scadenza) => {
+  const e = await spuntaScadenza(s);
+  toast(e ? 'Voce non aggiornata: ' + e : s.fatto ? 'Rimessa in agenda' : 'Fatta: la ritrovi in Archivio attività'); commit();
+};
 const togli = async (s: Scadenza) => {
   if (!confirm(`Eliminare "${s.titolo}"?`)) return;
   const e = await eliminaScadenza(s.id); if (e) toast('Voce non eliminata: ' + e); commit();
@@ -39,8 +42,9 @@ async function risposta(s: Scadenza) {
   const nota = [s.nota, n.trim() && `Risposta del ${dFmt(dToday())}: ${n.trim()}`].filter(Boolean).join('\n');
   const e = await salvaScadenza({ ...s, nota, fatto: true }); if (e) toast('Voce non aggiornata: ' + e); commit();
 }
-// Voci visibili: con "Le mie" solo quelle create da me o assegnate a me.
-const vociVisibili = () => { const vv = voci(S.arch, S.scad), me = mioEmail(); return S.ui.calMie && me ? vv.filter(v => mia(v, me)) : vv; };
+// Voci visibili: con "Le mie" solo quelle create da me o assegnate a me. Le fatte stanno nell'Archivio attività.
+const soloMie = (vv: Voce[]) => { const me = mioEmail(); return S.ui.calMie && me ? vv.filter(v => mia(v, me)) : vv; };
+const vociVisibili = (conFatte = false) => soloMie(voci(S.arch, S.scad, conFatte));
 /** Voci scadute e non fatte, per il numerino sulla voce Home del menu. */
 export const nScadute = () => { const a = allarmi(vociVisibili(), dToday()); return a.urgenze.length + a.scadute.length; };
 
@@ -211,7 +215,7 @@ export function Calendario({ sotto }: { sotto?: React.ReactNode }) {
   const nuova = (g = sel) => setBozza({ genere: 'attivita', categoria: '', giorno: isoDay(g), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '' });
   const modifica = (s: Scadenza) => { setSel(Date.UTC(+s.giorno.slice(0, 4), +s.giorno.slice(5, 7) - 1, +s.giorno.slice(8, 10)) / DAY); setBozza(bozzaDa(s)); };
   const vista = (k: 'mese' | 'agenda') => { S.ui.calV = k; commit(); };
-  const delGiorno = byDay.get(sel) || [];
+  const delGiorno = perGiorno(vociVisibili(true)).get(sel) || [];   // nel dettaglio del giorno anche le fatte, per poterle riaprire
   return (
     <>
       {cloud.scadErr && <div className="warn">L'agenda non si legge dal server ({cloud.scadErr}). Probabilmente manca una migrazione del database
@@ -282,7 +286,7 @@ export function AgendaPreventivo() {
   const id = S.prev._id, oggi = dToday();
   if (!id) return <Fold id="cf-agenda" title="Agenda" sum="Salva il preventivo per collegarci promemoria e cose da fare">{() =>
     <p className="hint" style={{ margin: 0 }}>Le voci in agenda si legano a un preventivo salvato nell'archivio.</p>}</Fold>;
-  const vv = voci(S.arch, S.scad).filter(v => v.prevId === id), aperte = vv.filter(v => daFare(v) && !v.s?.fatto && v.giorno >= oggi - 365);
+  const vv = voci(S.arch, S.scad, true).filter(v => v.prevId === id), aperte = vv.filter(v => daFare(v) && !v.s?.fatto && v.giorno >= oggi - 365);
   const tardi = aperte.filter(v => v.giorno < oggi).length;
   const nuova = () => setBozza({ genere: 'promemoria', categoria: '', giorno: isoDay(oggi), ora: '', titolo: '', nota: '', preventivo_id: id, assegnata_a: '' });
   return (
@@ -292,5 +296,36 @@ export function AgendaPreventivo() {
       {vv.length ? vv.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={s => setBozza(bozzaDa(s))} />)
         : !bozza && <p className="hint" style={{ margin: 0 }}>Niente in agenda per questo preventivo.</p>}
     </>}</Fold>
+  );
+}
+
+/** Archivio delle attività: le voci fatte, che non affollano più il calendario. Togliendo la spunta tornano in agenda. */
+export function ArchivioAttivita() {
+  const oggi = dToday(), [q, setQ] = useState(''), [anno, setAnno] = useState(''), [gen, setGen] = useState(''), [n, setN] = useState(100);
+  const tutte = soloMie(fatte(S.scad, S.arch)), anni = [...new Set(tutte.map(v => dDate(v.giorno).getUTCFullYear()))];
+  const t = q.trim().toLowerCase();
+  const vv = tutte.filter(v => (!anno || dDate(v.giorno).getUTCFullYear() === +anno) && (!gen || v.s!.genere === gen)
+    && (!t || [v.titolo, v.sotto, v.s!.nota, v.s!.assegnata_a && nomeDi(v.s!.assegnata_a), nomeDi(v.s!.creato_da)].some(x => x && x.toLowerCase().includes(t))));
+  const vis = vv.slice(0, n);
+  // Raggruppate per mese, dal più recente.
+  const mesi = new Map<string, Voce[]>();
+  for (const v of vis) { const d = dDate(v.giorno), k = meseNome(d.getUTCFullYear(), d.getUTCMonth()), a = mesi.get(k); if (a) a.push(v); else mesi.set(k, [v]); }
+  return (
+    <div className="card">
+      <h2>Archivio attività<span className="tag">{tutte.length} fatt{tutte.length === 1 ? 'a' : 'e'}</span>{S.ui.calMie && <span className="tag">solo le mie</span>}</h2>
+      <p className="hint">Le voci spuntate come fatte escono dal calendario e restano qui. Togli la spunta per rimetterne una in agenda.</p>
+      <div className="toolbar afilt">
+        <input type="search" value={q} placeholder="Cerca titolo, nota, commessa, persona…" onChange={e => { setQ(e.target.value); setN(100); }} />
+        <select value={anno} onChange={e => setAnno(e.target.value)}><option value="">Tutti gli anni</option>{anni.map(a => <option key={a} value={a}>{a}</option>)}</select>
+        <select value={gen} onChange={e => setGen(e.target.value)}><option value="">Tutti i tipi</option>
+          {(Object.entries(GENERI) as [Genere, [string, string]][]).map(([k, [l]]) => <option key={k} value={k}>{l}</option>)}</select>
+        {cloud.session && <span className="seg"><button className={S.ui.calMie ? '' : 'on'} onClick={() => { S.ui.calMie = false; commit(); }}>Tutte</button>
+          <button className={S.ui.calMie ? 'on' : ''} onClick={() => { S.ui.calMie = true; commit(); }}>Le mie</button></span>}
+        {(q || anno || gen) && <span className="muted">{vv.length} trovat{vv.length === 1 ? 'a' : 'e'}</span>}
+      </div>
+      {vv.length ? [...mesi].map(([m, vs]) => <div key={m} className="agiorno"><h3>{m}</h3>{vs.map(v => <Riga key={v.key} v={v} oggi={oggi} />)}</div>)
+        : <p className="hint" style={{ margin: '12px 0 0' }}>{tutte.length ? 'Nessuna attività fatta con questi filtri.' : 'Ancora nessuna attività fatta.'}</p>}
+      {vv.length > n && <button className="btn s" style={{ marginTop: 8 }} onClick={() => setN(n + 100)}>Mostra altre ({vv.length - n})</button>}
+    </div>
   );
 }

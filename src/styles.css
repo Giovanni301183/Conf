@@ -371,6 +371,31 @@ table.arch td input{width:100%;max-width:260px}
 .pres .pp{font-size:12.5px;color:#c3cfd4;padding:3px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dot.on{background:#3fb37f}
 
+/* ---------- Barra laterale stretta (solo icone) ---------- */
+.brand{display:flex;align-items:center;gap:6px}
+.brand img{min-width:0}
+.sidetog{margin-left:auto;flex:none;border:0;background:none;color:#8a949a;padding:5px;border-radius:6px;cursor:pointer;display:grid;place-items:center}
+.sidetog:hover{background:rgba(255,255,255,.08);color:#fff}
+.app.mini{grid-template-columns:60px minmax(0,1fr)}
+.side.mini{padding:12px 6px}
+.side.mini .brand{justify-content:center;padding:0 0 10px}
+.side.mini .sidetog{margin:0}
+.side.mini nav button{justify-content:center;padding:8px 0;position:relative}
+.side.mini nav button>span,.side.mini .ngt,.side.mini .nsoon,.side.mini .pres,.side.mini .tgbox,.side.mini .user .em{display:none}
+.side.mini nav .nbadge{position:absolute;top:1px;right:3px;font-size:9.5px;padding:0 4px;min-width:0}
+.side.mini .ng+.ng{border-top:1px solid rgba(255,255,255,.08);padding-top:8px}
+.side nav .nsig{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--yel)}
+.side.mini .user{flex-direction:column;padding:10px 0 2px;gap:6px}
+.side.mini .user .btn{padding:3px 6px}
+
+/* Campi nelle tabelle: sotto una larghezza minima la tabella scorre di lato invece di schiacciare il valore */
+td input{min-width:72px}
+td input.n,td .stp{min-width:86px}
+td select{min-width:96px}
+.afilt{margin:0 0 12px}
+.afilt input[type=search]{width:auto;flex:1 1 240px}
+.card>.agiorno+.agiorno{margin-top:10px}
+
 /* ---------- Responsive: laptop, tablet, telefono ---------- */
 @media (max-width:1280px){
   .app{grid-template-columns:188px minmax(0,1fr)}
@@ -391,6 +416,7 @@ table.arch td input{width:100%;max-width:260px}
   .scrim{display:block;position:fixed;inset:0;background:rgba(20,28,33,.45);z-index:39;animation:fade .2s ease}
   @keyframes fade{from{opacity:0}}
   .btn.menu{display:grid;place-items:center;padding:7px 9px;flex:none}
+  .sidetog{display:none}
   .mainc>header.home{display:block}
   .top{display:grid;grid-template-columns:auto minmax(0,1fr) auto;row-gap:8px}
   .top .cur{min-width:0}

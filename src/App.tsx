@@ -19,7 +19,7 @@ import { Utenti } from './pages/Utenti';
 import { Presenza } from './components/Presenza';
 import { Assistente } from './components/Assistente';
 import { Telegram } from './components/Telegram';
-import { nScadute } from './pages/Calendario';
+import { ArchivioAttivita, nScadute } from './pages/Calendario';
 import { AltroSettore, InSviluppo } from './pages/InSviluppo';
 import { ConfiguraFisso, DistintaFisso } from './pages/Fisso';
 import { AREE, PASSI as PASSI0, SETTORI, infoSettore, schedaPronta, settoreDi, type Settore } from './domain/settori';
@@ -27,7 +27,7 @@ import { cloud, isAdmin, logout, setCloudToast } from './store/remote';
 import { AvvisiRiunioni } from './components/AvvisiRiunioni';
 
 const VIEWS: Record<Tab, () => React.ReactNode> = {
-  archivio: Home, prev: Preventivi, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
+  archivio: Home, prev: Preventivi, fatte: ArchivioAttivita, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
   extra: Extra, margini: Margini, invia: Invia, docs: Documenti, lavor: Lavorazione, mont: Montaggio, utenti: Utenti,
 };
 // Schede proprie degli impianti fissi; le altre sono comuni a tutti i settori.
@@ -48,6 +48,7 @@ const apriSet = (k: Settore) => { S.ui.sopen = !(S.ui.set === k && S.ui.sopen); 
 const ICON: Record<Tab, string> = {
   archivio: 'M3 11l9-7 9 7M5 9.5V20h5v-6h4v6h5V9.5',
   prev: 'M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9zM14 3v6h6M8 13h8M8 17h5',
+  fatte: 'M3 4h18v4H3zM5 8v12h14V8M9 14l2 2 4-4',
   config: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4',
   costi: 'M4 20V10M10 20V4M16 20v-8M22 20H2',
   extra: 'M12 5v14M5 12h14',
@@ -60,6 +61,9 @@ const ICON: Record<Tab, string> = {
   distinte: 'M4 4h16v16H4zM4 10h16M10 10v10',
   utenti: 'M16 20v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 10a4 4 0 100-8 4 4 0 000 8zM22 20v-2a4 4 0 00-3-3.9M16 2.1a4 4 0 010 7.8',
 };
+// Barra stretta (solo icone), ricordata in questo browser. Del gruppo dei settori resta il settore in uso con le sue schede.
+const miniTog = () => { S.ui.mini = !S.ui.mini; commit(); };
+const cambiaSettore = () => { S.ui.mini = false; S.ui.area = infoSettore(S.ui.set).gruppo; commit(); };
 const Ico = ({ d }: { d: string }) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>;
 const LABEL = Object.fromEntries(TABS) as Record<Tab, string>;
 
@@ -88,18 +92,24 @@ export default function App() {
   const View = passo && !pronta ? InSviluppo : altro ? AltroSettore : (set.k === 'fisso' && VIEWS_FISSO[S.ui.tab]) || VIEWS[S.ui.tab];
   // In Home, nell'archivio e nei settori in sviluppo la barra in alto non mostra preventivo e valori: resta solo il pulsante del menu sugli schermi stretti.
   const home = S.ui.tab === 'archivio' || S.ui.tab === 'prev' || (passo && !pronta);
+  const mini = S.ui.mini && !menu;   // sul telefono il menu a scomparsa è sempre intero
   const dirty = isDirty(), nSc = cloud.fase === 'pronto' || cloud.fase === 'locale' ? nScadute() : 0;
   return (
-    <div className="app">
+    <div className={`app${mini ? ' mini' : ''}`}>
       {menu && <div className="scrim" onClick={() => setMenu(false)} />}
-      <aside className={`side ${menu ? 'open' : ''}`}>
-        <div className="brand"><img src="/logo-terranova.png" alt="Terranova" /></div>
+      <aside className={`side ${menu ? 'open' : ''}${mini ? ' mini' : ''}`}>
+        <div className="brand">{!mini && <img src="/logo-terranova.png" alt="Terranova" />}
+          <button className="sidetog noprint" onClick={miniTog} title={mini ? 'Allarga il menu' : 'Stringi il menu (solo icone), per avere più spazio'} aria-label={mini ? 'Allarga il menu' : 'Stringi il menu'}>
+            <Ico d={mini ? 'M13 6l6 6-6 6M5 6l6 6-6 6' : 'M11 6l-6 6 6 6M19 6l-6 6 6 6'} /></button></div>
         <nav>
           <div className="ng">
-            {(['archivio', 'prev'] as Tab[]).map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span>
+            {(['archivio', 'prev', 'fatte'] as Tab[]).map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} title={LABEL[k]} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span>
               {k === 'archivio' && nSc > 0 && <em className="nbadge" title={`${nSc} voci in agenda scadute`}>{nSc}</em>}</button>)}
           </div>
-          <div className="ng">
+          {mini ? <div className="ng">
+            <button className="nsig" onClick={cambiaSettore} title={`${set.nome}: clic per cambiare settore`}>{set.nome.slice(0, 2).toUpperCase()}</button>
+            {PASSI.map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} title={`${set.nome} · ${LABEL[k]}`} onClick={() => goTab(k, set.k)}><Ico d={ICON[k]} /><span>{LABEL[k]}</span></button>)}
+          </div> : <div className="ng">
             <div className="ngt">Settori</div>
             {AREE.map(g => {
               const ss = SETTORI.filter(s => s.gruppo === g), aperta = S.ui.area === g, solo = ss.length === 1;
@@ -122,10 +132,10 @@ export default function App() {
                 </div>
               );
             })}
-          </div>
+          </div>}
           <div className="ng">
             <div className="ngt">Dati comuni</div>
-            {(['listino', ...(isAdmin() ? ['utenti'] : [])] as Tab[]).map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span></button>)}
+            {(['listino', ...(isAdmin() ? ['utenti'] : [])] as Tab[]).map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} title={LABEL[k]} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span></button>)}
           </div>
         </nav>
         <Presenza />

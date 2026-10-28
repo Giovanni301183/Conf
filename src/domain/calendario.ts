@@ -39,7 +39,6 @@ export const oraBreve = (s?: Scadenza) => (s?.ora ? s.ora.slice(0, 5) : '');
 export const mia = (v: Voce, me: string) => !v.s || v.s.creato_da === me || v.s.assegnata_a === me;
 export const PREAVVISO = 3;   // giorni: "in scadenza" da oggi a oggi + 3
 export const RICHIAMO = 10;   // giorni dall'invio dell'offerta senza risposta
-export const TIENI_FATTE = 30;   // giorni: le voci fatte piu' vecchie spariscono dal calendario (restano nel database)
 /** Voci che "scadono" se non fatte: quelle a mano e i richiami. Le date delle commesse passano e basta. */
 export const daFare = (v: Voce) => v.tipo === 'man' || v.tipo === 'richiamo';
 
@@ -88,9 +87,9 @@ export function vociScadenze(sc: Scadenza[], arch: any[]): Voce[] {
   });
 }
 
-export function voci(arch: any[], sc: Scadenza[], oggi = dToday()): Voce[] {
-  const recenti = sc.filter(s => !(s.fatto && (dNum(s.giorno) ?? 0) < oggi - TIENI_FATTE));
-  return [...arch.flatMap(dateCommessa), ...arch.flatMap(richiamo), ...vociScadenze(recenti, arch)]
+/** Voci del calendario. Le voci fatte passano nell'archivio delle attivita': qui solo con conFatte (dettaglio del giorno, agenda del preventivo). */
+export function voci(arch: any[], sc: Scadenza[], conFatte = false): Voce[] {
+  return [...arch.flatMap(dateCommessa), ...arch.flatMap(richiamo), ...vociScadenze(conFatte ? sc : sc.filter(s => !s.fatto), arch)]
     .sort((a, b) => a.giorno - b.giorno || a.tipo.localeCompare(b.tipo) || (oraBreve(a.s) || '99').localeCompare(oraBreve(b.s) || '99') || a.titolo.localeCompare(b.titolo));
 }
 
@@ -110,6 +109,10 @@ export function agenda(vv: Voce[], oggi: number, giorni = 30) {
   const al = allarmi(vv, oggi);
   return { arretrate: [...al.urgenze, ...al.scadute], avanti: vv.filter(v => v.giorno >= oggi && v.giorno <= oggi + giorni) };
 }
+
+/** Archivio delle attivita': le voci a mano fatte, dalla piu' recente. */
+export const fatte = (sc: Scadenza[], arch: any[]) =>
+  vociScadenze(sc.filter(s => s.fatto), arch).sort((a, b) => b.giorno - a.giorno || (oraBreve(b.s) || '').localeCompare(oraBreve(a.s) || '') || a.titolo.localeCompare(b.titolo));
 
 export const perGiorno = (vv: Voce[]) => {
   const m = new Map<number, Voce[]>();

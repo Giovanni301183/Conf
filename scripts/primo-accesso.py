@@ -51,7 +51,7 @@ def main():
     link = r and (r.get('action_link') or (r.get('properties') or {}).get('action_link'))
     if not link: sys.exit(f'Link non generato ({st}): {r}')
     print('\nApri questo link nel browser (vale una volta sola, scade presto) e scegli la password:\n')
-    print(link)
+    print(link.replace('&amp;', '&'))  # Supabase lo restituisce con le & in formato HTML
 
 
 main()

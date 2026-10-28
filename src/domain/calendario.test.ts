@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { ATTESA, RICHIAMO, agenda, inAttesa, traGiorniLavorativi, allarmi, dateCommessa, daPianificare, mia, voci, type Scadenza } from './calendario';
+import { ATTESA, RICHIAMO, agenda, inAttesa, traGiorniLavorativi, allarmi, dateCommessa, daPianificare, fatte, mia, voci, type Scadenza } from './calendario';
 import { newPrev } from './model';
 import { dNum } from './plan';
 import { R, S } from '../store/state';
@@ -47,18 +47,20 @@ describe('calendario', () => {
     expect(avanti.map(v => v.s!.id)).toEqual(['b', 'a', 'c', 'e', 'f']);
     expect(vv.filter(v => mia(v, 'a@terranovasrl.net')).map(v => v.s!.id)).not.toContain('f');
   });
-  it('richiamo dei preventivi inviati senza risposta; le voci fatte vecchie spariscono', () => {
+  it('richiamo dei preventivi inviati senza risposta; le voci fatte vanno in archivio', () => {
     const oggi = dNum('2026-10-20')!;
     const inv: any = commessa('r', 'inviato', ''); inv.prev.offerta.inviata = '2026-10-05';
-    const [v] = voci([inv, commessa('s', 'vinto', '')], [], oggi);
+    const [v] = voci([inv, commessa('s', 'vinto', '')], []);
     expect(v).toMatchObject({ tipo: 'richiamo', prevId: 'r', giorno: dNum('2026-10-05')! + RICHIAMO });
     expect(allarmi([v], oggi).scadute).toHaveLength(1);   // 15/10: gia' passato
-    const vv = voci([], [sc('x', '2026-08-01', { fatto: true }), sc('y', '2026-08-01'), sc('z', '2026-10-01', { fatto: true })], oggi);
-    expect(vv.map(x => x.s!.id)).toEqual(['y', 'z']);
+    const sc3 = [sc('x', '2026-08-01', { fatto: true }), sc('y', '2026-08-01'), sc('z', '2026-10-01', { fatto: true })];
+    expect(voci([], sc3).map(x => x.s!.id)).toEqual(['y']);
+    expect(voci([], sc3, true).map(x => x.s!.id)).toEqual(['x', 'y', 'z']);
+    expect(fatte(sc3, []).map(x => x.s!.id)).toEqual(['z', 'x']);
   });
   it("urgenze: in cima finche' non sono risolte, qualunque data", () => {
     const oggi = dNum('2026-10-20')!;
-    const vv = voci([], [sc('u1', '2026-10-10', { genere: 'urgenza' }), sc('u2', '2026-10-25', { genere: 'urgenza' }), sc('u3', '2026-10-19', { genere: 'urgenza', fatto: true }), sc('n', '2026-10-21')], oggi);
+    const vv = voci([], [sc('u1', '2026-10-10', { genere: 'urgenza' }), sc('u2', '2026-10-25', { genere: 'urgenza' }), sc('u3', '2026-10-19', { genere: 'urgenza', fatto: true }), sc('n', '2026-10-21')]);
     const a = allarmi(vv, oggi);
     expect(a.urgenze.map(v => v.s!.id)).toEqual(['u1', 'u2']);
     expect(a.scadute).toEqual([]); expect(a.prossime.map(v => v.s!.id)).toEqual(['n']);
