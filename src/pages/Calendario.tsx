@@ -2,7 +2,7 @@
 // inserite a mano, dettaglio del giorno scelto. Si nasconde e si rimette con un pulsante (scelta ricordata in questo browser);
 // nascosto restano gli allarmi in breve.
 import { useState } from 'react';
-import { CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, fatte, inAttesa, mia, oraBreve, perGiorno, voci, type Genere, type Scadenza, type Voce } from '../domain/calendario';
+import { CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, fatte, inAttesa, mia, oraBreve, perGiorno, persone, voci, type Genere, type Scadenza, type Voce } from '../domain/calendario';
 import { Fold } from '../components/ui';
 import { StatoSel } from './Cruscotto';
 import { eStato } from '../domain/kpi';
@@ -13,7 +13,7 @@ import { DocPanel, NoteHome, docNonDisponibili } from './Documenti';
 import { ModuloEmail, contestoEmail } from '../components/Email';
 import { PermessoAvvisi } from '../components/AvvisiRiunioni';
 import { linkRiunione } from '../domain/riunione';
-import { cloud, eliminaScadenza, miaVista, mioEmail, online, puoModificare, puoSpuntare, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
+import { cloud, coinvoltiDisponibili, eliminaScadenza, miaVista, mioEmail, online, puoModificare, puoSpuntare, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
 import { VISTA_TUTTO, filtraVista, normVista, vedeTutto, type Quanto, type Vista } from '../domain/vista';
 
 const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
@@ -50,21 +50,38 @@ const vociVisibili = () => soloMie(voci(S.arch, S.scad));
 /** Voci scadute e non fatte, per il numerino sulla voce Home del menu. */
 export const nScadute = () => { const a = allarmi(vociVisibili(), dToday()); return a.urgenze.length + a.scadute.length; };
 
-// Assegnazione rapida di una voce a un collega (o a nessuno), senza aprire Modifica.
+const stesse = (a: string[], b: string[]) => a.length === b.length && a.every(x => b.includes(x));
+/** Colleghi coinvolti in una voce: la vedono come fosse loro, la possono segnare fatta e aggiungerle note. */
+function Coinvolti({ val, set, escludi }: { val: string[]; set: (v: string[]) => void; escludi: string }) {
+  if (!coinvoltiDisponibili()) return null;
+  const altri = cloud.colleghi.filter(u => u.email !== escludi);
+  if (!altri.length) return null;
+  return (
+    <div className="f wide"><span>Coinvolti (facoltativo): vedono la voce, la possono segnare fatta e aggiungere note</span>
+      <div className="cpers">{altri.map(u => <label key={u.email} className={val.includes(u.email) ? 'on' : ''}>
+        <input type="checkbox" checked={val.includes(u.email)} onChange={e => set(e.target.checked ? [...val, u.email] : val.filter(x => x !== u.email))} />
+        {u.nome || u.email}{u.email === mioEmail() ? ' (io)' : ''}</label>)}</div>
+    </div>
+  );
+}
+
+// Assegnazione rapida di una voce a un collega (o a nessuno) e ai coinvolti, senza aprire Modifica.
 function Assegna({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
-  const [a, setA] = useState(s.assegnata_a || ''), [busy, setBusy] = useState(false);
+  const [a, setA] = useState(s.assegnata_a || ''), [co, setCo] = useState<string[]>(s.coinvolti || []), [busy, setBusy] = useState(false);
   const fai = async () => {
-    setBusy(true); const e = await salvaScadenza({ ...s, assegnata_a: a || null }); setBusy(false);
+    setBusy(true); const e = await salvaScadenza({ ...s, assegnata_a: a || null, coinvolti: co }); setBusy(false);
     if (e) { toast('Voce non assegnata: ' + e); return; }
-    toast(a ? `Assegnata a ${nomeDi(a)}: la trova in «Le mie»` : 'Assegnazione tolta'); chiudi(); commit();
+    const chi = persone({ ...s, assegnata_a: a || null, coinvolti: co }).map(nomeDi).join(', ');
+    toast(chi ? `Voce per ${chi}: la trovano in «Le mie»` : 'Assegnazione tolta'); chiudi(); commit();
   };
   return (
     <div className="cform">
       <label className="f">Assegna a<select value={a} autoFocus onChange={e => setA(e.target.value)}>
         <option value="">— chiunque —</option>
         {cloud.colleghi.map(u => <option key={u.email} value={u.email}>{u.nome || u.email}{u.email === mioEmail() ? ' (io)' : ''}</option>)}</select></label>
+      <Coinvolti val={co.filter(x => x !== a)} set={setCo} escludi={a} />
       <div className="f" style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
-        <button className="btn p" disabled={busy || a === (s.assegnata_a || '')} onClick={fai}>{busy ? 'Salvo…' : 'Assegna'}</button>
+        <button className="btn p" disabled={busy || (a === (s.assegnata_a || '') && stesse(co, s.coinvolti || []))} onClick={fai}>{busy ? 'Salvo…' : 'Assegna'}</button>
         <button className="btn" onClick={chiudi}>Annulla</button>
       </div>
     </div>
@@ -74,23 +91,23 @@ function Assegna({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
 function Riga({ v, oggi, onEdit, data = true, allarme = '' }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean; allarme?: '' | 'late' | 'soon' }) {
   const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s), link = s && !s.fatto ? linkRiunione(s.nota) : '';
   // Allegati della voce (file e note): la graffetta mostra quanti sono e apre l'elenco sotto la voce.
-  const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [all, setAll] = useState(false), [ass, setAss] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
+  const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [vedi, setVedi] = useState(false), [ass, setAss] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
   return (<>
     <div className={`cvoce ${s?.fatto ? 'fatto' : ''} ${allarme ? 'blink ' + allarme : ''}`} style={{ '--vc': c } as React.CSSProperties}>
       {s ? <input type="checkbox" checked={s.fatto} disabled={!spunta} onChange={() => segna(s)} title={spunta ? 'Fatto' : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
       <div className="vt">
         <b>{ora && <span className="vora">{ora}</span>}{v.titolo}</b>
         <small>{l}{s?.categoria ? ' · ' + s.categoria.toLowerCase() : ''}{data ? <> · {dFmt(v.giorno)} ({quando(v.giorno, oggi, daFare(v) && !s?.fatto)})</> : null}{v.sotto ? ' · ' + v.sotto : ''}
-          {s?.assegnata_a ? ' · per ' + nomeDi(s.assegnata_a) : ''}{s?.creato_da ? ' · da ' + nomeDi(s.creato_da) : ''}{s?.origine === 'telegram' ? ' (Telegram)' : ''}</small>
-        {s?.nota ? <span className="muted small">{s.nota}</span> : null}
+          {s?.assegnata_a ? ' · per ' + nomeDi(s.assegnata_a) : ''}{s?.coinvolti?.length ? ' · con ' + s.coinvolti.map(nomeDi).join(', ') : ''}{s?.creato_da ? ' · da ' + nomeDi(s.creato_da) : ''}{s?.origine === 'telegram' ? ' (Telegram)' : ''}</small>
+        {s?.nota && !vedi ? <span className="muted small vnota">{s.nota}</span> : null}
         {v.tipo === 'richiamo' ? <span className="muted small">Offerta inviata da {RICHIAMO}+ giorni senza risposta: quando il cliente risponde, cambia lo stato.</span> : null}
       </div>
       {v.tipo === 'richiamo' && v.prevId && <StatoSel id={v.prevId} k="inviato" />}
       {link && <a className="btn s p" href={link} target="_blank" rel="noopener noreferrer" title={link}>🎥 Entra</a>}
-      {v.prevId && <button className="btn s" onClick={() => apri(v.prevId!)}>Apri</button>}
+      {v.prevId && <button className="btn s" onClick={() => apri(v.prevId!)} title={'Apre il preventivo nel configuratore: ' + (S.arch.find(e => e.id === v.prevId)?.nome || '')}>Apri preventivo</button>}
       {attesa && spunta && <button className="btn s p" onClick={() => risposta(s!)} title="Segna la voce come fatta, con una nota su cosa hanno risposto">Risposta arrivata</button>}
       {s && online() && !email && <button className="btn s" onClick={() => setEmail(attesa ? 'sollecito' : 'email')} title={attesa ? 'Scrivi un sollecito cortese' : "Scrivi un'email di aggiornamento da questa voce"}>{attesa ? '✉ Sollecita' : '✉ Email'}</button>}
-      {docOk && <button className={`btn s${all ? ' on' : ''}`} onClick={() => setAll(!all)} title="File e note allegati alla voce">📎{nAll ? ' ' + nAll : ''}</button>}
+      {s && <button className={`btn s${vedi ? ' on' : ''}`} onClick={() => setVedi(!vedi)} title="Vedi la voce per intero, con le note e i file allegati">👁 Vedi{nAll ? ' · 📎 ' + nAll : ''}</button>}
       {mio && !s.fatto && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la voce a un collega">👤 {s.assegnata_a ? 'Riassegna' : 'Assegna'}</button>}
       {mio && onEdit && <><button className="btn s" onClick={() => onEdit(s)}>Modifica</button><button className="btn x" onClick={() => togli(s)} title="Elimina">✕</button></>}
     </div>
@@ -98,12 +115,32 @@ function Riga({ v, oggi, onEdit, data = true, allarme = '' }: { v: Voce; oggi: n
     {email && s && <div className="callegati"><ModuloEmail titolo={s.titolo} testo={s.nota || ''} contesto={contestoEmail(s.preventivo_id, s.id)}
       chiave={s.preventivo_id || s.id} preventivo={s.preventivo_id} chiudi={() => setEmail('')}
       richiesta0={email === 'sollecito' ? 'Sollecito cortese: non abbiamo ancora ricevuto risposta alla nostra email.' : ''} /></div>}
-    {all && s && <div className="callegati"><DocPanel scadenza={s.id} preventivo={s.preventivo_id} compatto /></div>}
+    {vedi && s && <div className="callegati"><Scheda s={s} />{docOk && <DocPanel scadenza={s.id} preventivo={s.preventivo_id} compatto />}</div>}
   </>);
 }
 
+/** La voce per intero, in sola lettura: per chi non la può modificare e per non dover entrare in Modifica. */
+function Scheda({ s }: { s: Scadenza }) {
+  const prev = s.preventivo_id ? S.arch.find(e => e.id === s.preventivo_id)?.nome : '';
+  const righe: [string, React.ReactNode][] = [
+    ['Tipo', (inAttesa(s) ? 'In attesa di risposta' : GENERI[s.genere]?.[0] || '') + (s.categoria ? ' · ' + s.categoria.toLowerCase() : '')],
+    ['Quando', dFmt(Date.UTC(+s.giorno.slice(0, 4), +s.giorno.slice(5, 7) - 1, +s.giorno.slice(8, 10)) / DAY) + (oraBreve(s) ? ' alle ' + oraBreve(s) : '')],
+    ['Riferita a', prev || ''], ['Per', s.assegnata_a ? nomeDi(s.assegnata_a) : ''], ['Coinvolti', (s.coinvolti || []).map(nomeDi).join(', ')],
+    ['Creata da', nomeDi(s.creato_da) + (s.origine === 'telegram' ? ' (Telegram)' : '') + (s.creato ? ' il ' + new Date(s.creato).toLocaleDateString('it-IT') : '')],
+    ['Stato', s.fatto ? '✓ fatta' : 'da fare'],
+  ];
+  return (
+    <div className="cscheda">
+      <b>{s.titolo}</b>
+      <dl>{righe.filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+      {s.nota ? <p className="cnota">{s.nota}</p> : <p className="muted small" style={{ margin: 0 }}>Nessuna nota sulla voce.</p>}
+      {!puoModificare(s) && <p className="hint" style={{ margin: 0 }}>La voce la modificano solo chi l'ha creata e l'amministratore{puoSpuntare(s) ? ': tu puoi segnarla fatta e aggiungere note qui sotto' : ''}.</p>}
+    </div>
+  );
+}
+
 /** Riquadro degli allarmi: voci superate, in arrivo nei prossimi giorni, commesse senza data di avvio. */
-export function Allarmi({ compatto = false }: { compatto?: boolean }) {
+export function Allarmi({ compatto = false, onEdit }: { compatto?: boolean; onEdit?: (s: Scadenza) => void }) {
   const oggi = dToday(), { urgenze, scadute, prossime } = allarmi(vociVisibili(), oggi), np = daPianificare(S.arch);
   const tutte = [...urgenze, ...scadute, ...prossime], vis = compatto ? tutte.slice(0, 4) : tutte;
   return (
@@ -116,7 +153,7 @@ export function Allarmi({ compatto = false }: { compatto?: boolean }) {
         <span className="sp" />
         {compatto && <button className="btn s" onClick={() => mostra(true)}>Mostra calendario</button>}
       </h2>
-      {tutte.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} allarme={prossime.includes(v) ? 'soon' : 'late'} />) : <p className="hint" style={{ margin: 0 }}>Niente di scaduto o in arrivo.</p>}
+      {tutte.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} allarme={prossime.includes(v) ? 'soon' : 'late'} />) : <p className="hint" style={{ margin: 0 }}>Niente di scaduto o in arrivo.</p>}
       {vis.length < tutte.length && <p className="hint" style={{ margin: '6px 0 0' }}>… e altre {tutte.length - vis.length} nel calendario.</p>}
       {!compatto && np.length > 0 && <p className="hint" style={{ margin: '10px 0 0' }}>
         Commesse vinte senza data di avvio della produzione (non compaiono nel calendario): {np.map((e, i) => <span key={e.id}>{i ? ', ' : ''}<a href="#" onClick={ev => { ev.preventDefault(); apri(e.id); }}>{e.nome}</a></span>)}.
@@ -125,8 +162,8 @@ export function Allarmi({ compatto = false }: { compatto?: boolean }) {
   );
 }
 
-type Bozza = { id?: string; genere: Genere; categoria: string; giorno: string; ora: string; titolo: string; nota: string; preventivo_id: string; assegnata_a: string };
-const bozzaDa = (s: Scadenza): Bozza => ({ id: s.id, genere: s.genere || 'attivita', categoria: s.categoria || '', giorno: s.giorno, ora: oraBreve(s), titolo: s.titolo, nota: s.nota || '', preventivo_id: s.preventivo_id || '', assegnata_a: s.assegnata_a || '' });
+type Bozza = { id?: string; genere: Genere; categoria: string; giorno: string; ora: string; titolo: string; nota: string; preventivo_id: string; assegnata_a: string; coinvolti: string[] };
+const bozzaDa = (s: Scadenza): Bozza => ({ id: s.id, genere: s.genere || 'attivita', categoria: s.categoria || '', giorno: s.giorno, ora: oraBreve(s), titolo: s.titolo, nota: s.nota || '', preventivo_id: s.preventivo_id || '', assegnata_a: s.assegnata_a || '', coinvolti: s.coinvolti || [] });
 const ESEMPI: Record<Genere, string> = {
   attivita: 'es. Rifare il computo bulloneria', promemoria: 'es. Richiamare il cliente per il preventivo',
   scadenza: 'es. Consegna documentazione collaudo', appuntamento: 'es. Sopralluogo in cantiere',
@@ -160,7 +197,8 @@ function Modulo({ b, set, chiudi }: { b: Bozza; set: (b: Bozza) => void; chiudi:
         <option value="">— chiunque —</option>
         {cloud.colleghi.map(u => <option key={u.email} value={u.email}>{u.nome || u.email}{u.email === mioEmail() ? ' (io)' : ''}</option>)}
       </select></label> : null}
-      <label className="f wide">Nota (facoltativa)<input value={b.nota} onChange={e => set({ ...b, nota: e.target.value })} /></label>
+      <Coinvolti val={b.coinvolti.filter(x => x !== b.assegnata_a)} set={c => set({ ...b, coinvolti: c })} escludi={b.assegnata_a} />
+      <label className="f wide">Nota (facoltativa)<textarea rows={3} value={b.nota} onChange={e => set({ ...b, nota: e.target.value })} /></label>
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
         <button className="btn p" disabled={busy || !b.titolo.trim() || !b.giorno} onClick={salva}>{b.id ? 'Salva modifiche' : 'Aggiungi'}</button>
         <button className="btn" onClick={chiudi}>Annulla</button>
@@ -207,15 +245,17 @@ function Agenda({ vv, oggi, sel, setSel, onEdit }: { vv: Voce[]; oggi: number; s
   );
 }
 
-export function Calendario({ sotto }: { sotto?: React.ReactNode }) {
+export function Calendario({ sotto }: { sotto?: (onEdit: (s: Scadenza) => void) => React.ReactNode }) {
   const oggi = dToday(), t = dDate(oggi);
   const [ym, setYm] = useState({ y: t.getUTCFullYear(), m: t.getUTCMonth() });
   const [sel, setSel] = useState(oggi);
   const [bozza, setBozza] = useState<Bozza | null>(null), [cosa, setCosa] = useState(false);
   const vv = vociVisibili(), byDay = perGiorno(vv), mese = S.ui.calV === 'mese';
   const sposta = (d: number) => { const x = new Date(Date.UTC(ym.y, ym.m + d, 1)); setYm({ y: x.getUTCFullYear(), m: x.getUTCMonth() }); };
-  const nuova = (g = sel) => setBozza({ genere: 'attivita', categoria: '', giorno: isoDay(g), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '' });
-  const modifica = (s: Scadenza) => { setSel(Date.UTC(+s.giorno.slice(0, 4), +s.giorno.slice(5, 7) - 1, +s.giorno.slice(8, 10)) / DAY); setBozza(bozzaDa(s)); };
+  const nuova = (g = sel) => setBozza({ genere: 'attivita', categoria: '', giorno: isoDay(g), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '', coinvolti: [] });
+  // Il modulo si apre nella colonna del giorno: se si arriva dagli allarmi o dagli appuntamenti, più sotto, la pagina ci torna.
+  const modifica = (s: Scadenza) => { setSel(Date.UTC(+s.giorno.slice(0, 4), +s.giorno.slice(5, 7) - 1, +s.giorno.slice(8, 10)) / DAY); setBozza(bozzaDa(s));
+    requestAnimationFrame(() => document.querySelector('.calday')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); };
   const vista = (k: 'mese' | 'agenda') => { S.ui.calV = k; commit(); };
   const delGiorno = byDay.get(sel) || [];   // le fatte sono nell'Archivio attività, da dove si riaprono
   return (
@@ -256,14 +296,14 @@ export function Calendario({ sotto }: { sotto?: React.ReactNode }) {
           {delGiorno.length ? delGiorno.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={modifica} data={false} />)
             : !bozza && <p className="hint" style={{ margin: 0 }}>Niente in programma.</p>}
         </section>
-        {sotto && <div className="calsotto">{sotto}</div>}
+        {sotto && <div className="calsotto">{sotto(modifica)}</div>}
       </div>
     </>
   );
 }
 
 /** Prossimi appuntamenti (da oggi in poi, non ancora fatti), in ordine di data e ora. */
-function Appuntamenti() {
+function Appuntamenti({ onEdit }: { onEdit?: (s: Scadenza) => void }) {
   const oggi = dToday(), [tutti, setTutti] = useState(false);
   const vv = vociVisibili().filter(v => v.s?.genere === 'appuntamento' && !v.s.fatto && v.giorno >= oggi)
     .sort((a, b) => a.giorno - b.giorno || oraBreve(a.s).localeCompare(oraBreve(b.s)));
@@ -271,7 +311,7 @@ function Appuntamenti() {
   return (
     <div className="card">
       <h2>Appuntamenti<span className="tag">{vv.length} in programma</span></h2>
-      {vv.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} />) : <p className="hint" style={{ margin: 0 }}>Nessun appuntamento in programma.</p>}
+      {vv.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} />) : <p className="hint" style={{ margin: 0 }}>Nessun appuntamento in programma.</p>}
       {vv.length > 8 && <button className="btn s" style={{ marginTop: 8 }} onClick={() => setTutti(!tutti)}>{tutti ? 'Mostra solo i prossimi 8' : `Mostra tutti (${vv.length})`}</button>}
     </div>
   );
@@ -280,8 +320,8 @@ function Appuntamenti() {
 /** Home: a sinistra il calendario e sotto, larghi, allarmi, appuntamenti e note; a destra la colonna con tutto il giorno scelto.
  *  Se l'utente ha nascosto il calendario: allarmi in breve, poi appuntamenti e note a tutta pagina. */
 export const CalendarioHome = () => {
-  const sotto = <><Appuntamenti />{!docNonDisponibili() && <NoteHome />}</>;
-  return S.ui.cal ? <Calendario sotto={<><Allarmi />{sotto}</>} /> : <><Allarmi compatto /><div className="calsep" />{sotto}</>;
+  const sotto = (onEdit?: (s: Scadenza) => void) => <><Appuntamenti onEdit={onEdit} />{!docNonDisponibili() && <NoteHome />}</>;
+  return S.ui.cal ? <Calendario sotto={m => <><Allarmi onEdit={m} />{sotto(m)}</>} /> : <><Allarmi compatto /><div className="calsep" />{sotto()}</>;
 };
 
 /** Nel preventivo aperto: le sue voci in agenda (date della commessa, richiamo, voci a mano) e l'aggiunta di un promemoria. */
@@ -292,7 +332,7 @@ export function AgendaPreventivo() {
     <p className="hint" style={{ margin: 0 }}>Le voci in agenda si legano a un preventivo salvato nell'archivio.</p>}</Fold>;
   const vv = voci(S.arch, S.scad, true).filter(v => v.prevId === id), aperte = vv.filter(v => daFare(v) && !v.s?.fatto && v.giorno >= oggi - 365);
   const tardi = aperte.filter(v => v.giorno < oggi).length;
-  const nuova = () => setBozza({ genere: 'promemoria', categoria: '', giorno: isoDay(oggi), ora: '', titolo: '', nota: '', preventivo_id: id, assegnata_a: '' });
+  const nuova = () => setBozza({ genere: 'promemoria', categoria: '', giorno: isoDay(oggi), ora: '', titolo: '', nota: '', preventivo_id: id, assegnata_a: '', coinvolti: [] });
   return (
     <Fold id="cf-agenda" title="Agenda" sum={vv.length ? `${aperte.length} da fare${tardi ? ` · ${tardi} scadut${tardi === 1 ? 'a' : 'e'}` : ''} · ${vv.length} voc${vv.length === 1 ? 'e' : 'i'} in tutto` : 'Nessuna voce: aggiungi un promemoria'}
       act={!bozza && <button className="btn s p" onClick={nuova}>+ Promemoria</button>}>{() => <>
@@ -309,7 +349,7 @@ export function ArchivioAttivita() {
   const tutte = soloMie(fatte(S.scad, S.arch)), anni = [...new Set(tutte.map(v => dDate(v.giorno).getUTCFullYear()))];
   const t = q.trim().toLowerCase();
   const vv = tutte.filter(v => (!anno || dDate(v.giorno).getUTCFullYear() === +anno) && (!gen || v.s!.genere === gen)
-    && (!t || [v.titolo, v.sotto, v.s!.nota, v.s!.assegnata_a && nomeDi(v.s!.assegnata_a), nomeDi(v.s!.creato_da)].some(x => x && x.toLowerCase().includes(t))));
+    && (!t || [v.titolo, v.sotto, v.s!.nota, ...persone(v.s).map(nomeDi), nomeDi(v.s!.creato_da)].some(x => x && x.toLowerCase().includes(t))));
   const vis = vv.slice(0, n);
   // Raggruppate per mese, dal più recente.
   const mesi = new Map<string, Voce[]>();

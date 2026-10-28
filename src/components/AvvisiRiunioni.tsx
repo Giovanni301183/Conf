@@ -6,6 +6,7 @@ import { ANTICIPO, chiaveAvviso, daAvvisare, linkRiunione, minutiA } from '../do
 import { S } from '../store/state';
 import { toast } from '../store/actions';
 import { mioEmail } from '../store/remote';
+import { perMe } from '../domain/calendario';
 
 const due = (n: number) => String(n).padStart(2, '0');
 const giaAvvisata = (k: string) => { try { return !!localStorage.getItem('avviso:' + k); } catch { return false; } };
@@ -16,7 +17,7 @@ function controlla() {
   const me = mioEmail();
   if (!me) return;
   const d = new Date(), oggi = `${d.getFullYear()}-${due(d.getMonth() + 1)}-${due(d.getDate())}`, adesso = `${due(d.getHours())}:${due(d.getMinutes())}`;
-  for (const s of daAvvisare(S.scad.filter(s => s.creato_da === me || s.assegnata_a === me), oggi, adesso)) {
+  for (const s of daAvvisare(S.scad.filter(s => perMe(s, me)), oggi, adesso)) {
     const k = s.id + ' ' + chiaveAvviso(s);
     if (giaAvvisata(k)) continue;
     segnaAvvisata(k);

@@ -10,7 +10,7 @@ import { AUTO, buildGantt, buildLavor, buildMontGantt, dNum, dToday, isWork, mon
 export type Genere = 'attivita' | 'promemoria' | 'scadenza' | 'appuntamento' | 'urgenza';
 export interface Scadenza {
   id: string; giorno: string; ora: string | null; genere: Genere; categoria?: string | null; titolo: string; nota: string | null; preventivo_id: string | null;
-  assegnata_a: string | null; fatto: boolean; origine: 'app' | 'telegram'; creato_da: string; creato: string;
+  assegnata_a: string | null; coinvolti?: string[] | null; fatto: boolean; origine: 'app' | 'telegram'; creato_da: string; creato: string;
 }
 export type Tipo = 'prod' | 'prodFine' | 'mont' | 'richiamo' | 'man';
 export interface Voce { key: string; giorno: number; tipo: Tipo; titolo: string; sotto: string; prevId?: string; s?: Scadenza }
@@ -35,8 +35,12 @@ export const urgente = (v: Voce) => v.s?.genere === 'urgenza' && !v.s.fatto;
 /** Etichetta e colore di una voce: per le voci a mano conta il genere. */
 export const aspetto = (v: Voce): [string, string] => (inAttesa(v.s) ? ['In attesa di risposta', GENERI.promemoria[1]] : v.s ? GENERI[v.s.genere] || GENERI.attivita : TIPI[v.tipo]);
 export const oraBreve = (s?: Scadenza) => (s?.ora ? s.ora.slice(0, 5) : '');
-/** "Le mie": voci a mano create da me o assegnate a me (le date delle commesse restano per tutti). */
-export const mia = (v: Voce, me: string) => !v.s || v.s.creato_da === me || v.s.assegnata_a === me;
+/** Chi ha la voce assegnata e i colleghi coinvolti. */
+export const persone = (s?: Scadenza | null) => (s ? [...new Set([s.assegnata_a, ...(s.coinvolti || [])].filter((x): x is string => !!x))] : []);
+/** La voce riguarda me: l'ho creata, è assegnata a me o sono tra i coinvolti. */
+export const perMe = (s: Pick<Scadenza, 'creato_da' | 'assegnata_a' | 'coinvolti'>, me: string) => s.creato_da === me || s.assegnata_a === me || !!s.coinvolti?.includes(me);
+/** "Le mie": voci a mano create da me, assegnate a me o in cui sono coinvolto (le date delle commesse restano per tutti). */
+export const mia = (v: Voce, me: string) => !v.s || perMe(v.s, me);
 export const PREAVVISO = 3;   // giorni: "in scadenza" da oggi a oggi + 3
 export const RICHIAMO = 10;   // giorni dall'invio dell'offerta senza risposta
 /** Voci che "scadono" se non fatte: quelle a mano e i richiami. Le date delle commesse passano e basta. */

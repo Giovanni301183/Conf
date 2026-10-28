@@ -27,14 +27,14 @@ export const vedeTutto = (v: Vista) => v.altri === 'tutte' && v.commesse === 'tu
 // Quanto basta di una voce del calendario (app) o di una scadenza (server) per decidere se mostrarla.
 export interface VoceVista {
   tipo: string; prevId?: string | null;
-  s?: { creato_da?: string | null; assegnata_a?: string | null; genere?: string; fatto?: boolean } | null;
+  s?: { creato_da?: string | null; assegnata_a?: string | null; coinvolti?: string[] | null; genere?: string; fatto?: boolean } | null;
 }
 const passa = (q: Quanto, v: VoceVista, seguo: string[]) => q === 'tutte' || (q === 'seguite' && !!v.prevId && seguo.includes(v.prevId));
 
 export function vedo(v: VoceVista, vista: Vista, me: string): boolean {
   const s = v.s;
   if (s) {
-    if (me && (s.creato_da === me || s.assegnata_a === me)) return true;
+    if (me && (s.creato_da === me || s.assegnata_a === me || s.coinvolti?.includes(me))) return true;
     if (vista.urgenze && s.genere === 'urgenza' && !s.fatto) return true;
     return passa(vista.altri, v, vista.seguo);
   }

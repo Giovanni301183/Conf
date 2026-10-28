@@ -612,6 +612,17 @@ button.etq{cursor:pointer}button.etq:hover{border-color:var(--ec)}
 .callegati{margin:0 0 8px 26px;padding:10px 12px;background:var(--soft);border-radius:10px}
 .callegati .ditem:first-of-type{border-top:0}
 .callegati .ditem .dact{width:100%;justify-content:flex-start}
+/* Voce d'agenda per intero (👁 Vedi) e scelta dei colleghi coinvolti */
+.cvoce .vnota{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
+.cscheda{display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
+.cscheda dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:4px 14px;margin:0}
+.cscheda dt{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.cscheda dd{margin:0;font-size:13px}
+.cscheda .cnota{margin:0;white-space:pre-wrap;font-size:13.5px;padding:8px 10px;background:var(--card, #fff);border-radius:8px;border:1px solid var(--line)}
+.cpers{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.cpers label{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;cursor:pointer}
+.cpers label.on{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 10%,transparent)}
+.cpers input{margin:0}
 @media (max-width:760px){.dgrid{grid-template-columns:1fr}.dcart{position:static;flex-direction:row;flex-wrap:wrap}.ditem .dact{width:100%;justify-content:flex-start}}
 .aiin{display:block;width:100%;box-sizing:border-box;margin:4px 0;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;resize:vertical}
 

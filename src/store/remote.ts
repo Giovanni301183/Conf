@@ -1,7 +1,7 @@
 // Archivio e listino condivisi su Supabase. Senza Supabase configurato tutto resta nel browser come prima.
 import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { linkType, supabase } from '../lib/supabase';
-import type { Scadenza } from '../domain/calendario';
+import { perMe, type Scadenza } from '../domain/calendario';
 import { normListinoFisso } from '../domain/fissoCosti';
 import { LIMITE_MB, percorsoPer, type Documento } from '../domain/documenti';
 import { normVista, type Vista } from '../domain/vista';
@@ -188,6 +188,9 @@ export async function ultimiAccessi(): Promise<Record<string, string> | null> {
 /* ---------- Scadenze del calendario ---------- */
 // Senza server le scadenze restano nel browser; con il server si rileggono a ogni modifica, anche dei colleghi.
 const SCAD_COLS = 'id, giorno, ora, genere, categoria, titolo, nota, preventivo_id, assegnata_a, fatto, origine, creato_da, creato';
+// I coinvolti arrivano con la migrazione 20261028010000_coinvolti.sql: finché manca, l'agenda funziona senza.
+let conCoinvolti = true;
+export const coinvoltiDisponibili = () => !supabase || conCoinvolti;
 export const mioEmail = () => cloud.session?.user.email?.toLowerCase() ?? '';
 /** Cosa vedo nel calendario (scelta personale). Senza server resta in questo browser. */
 const KEY_VISTA = 'tracker_prev_vista_v1';
@@ -202,18 +205,22 @@ export async function salvaVista(v: Vista, email = mioEmail()): Promise<string> 
   return '';
 }
 export const puoModificare = (s: Scadenza) => isAdmin() || s.creato_da === mioEmail();
-// Chi ha la voce assegnata puo' solo segnarla come fatta (lo garantisce anche il database).
-export const puoSpuntare = (s: Scadenza) => puoModificare(s) || s.assegnata_a === mioEmail();
+// Chi ha la voce assegnata e i coinvolti possono solo segnarla come fatta (lo garantisce anche il database).
+export const puoSpuntare = (s: Scadenza) => puoModificare(s) || perMe(s, mioEmail());
 async function loadScadenze() {
   listUtenti().then(u => { cloud.colleghi = u.filter(x => x.attivo); }, () => {});
-  const { data, error } = await supabase!.from('scadenze').select(SCAD_COLS).order('giorno');
+  const leggi = () => supabase!.from('scadenze').select(conCoinvolti ? SCAD_COLS + ', coinvolti' : SCAD_COLS).order('giorno');
+  let { data, error } = await leggi();
+  if (error && conCoinvolti && /coinvolti/.test(error.message)) { conCoinvolti = false; ({ data, error } = await leggi()); }
   if (error) { cloud.scadErr = error.message; S.scad = []; return; }
-  cloud.scadErr = ''; S.scad = data;
+  cloud.scadErr = ''; S.scad = data as unknown as Scadenza[];
 }
 export async function salvaScadenza(s: Partial<Scadenza>): Promise<string> {
   const v = { giorno: s.giorno, ora: s.ora || null, genere: s.genere || 'attivita', categoria: s.categoria || null, titolo: (s.titolo || '').trim(), nota: s.nota?.trim() || null,
-    preventivo_id: s.preventivo_id || null, assegnata_a: s.assegnata_a || null, fatto: !!s.fatto };
+    preventivo_id: s.preventivo_id || null, assegnata_a: s.assegnata_a || null, fatto: !!s.fatto,
+    ...(coinvoltiDisponibili() ? { coinvolti: (s.coinvolti || []).filter(e => e && e !== s.assegnata_a) } : {}) };
   if (!v.titolo || !v.giorno) return 'Servono titolo e data.';
+  if (!coinvoltiDisponibili() && s.coinvolti?.length) return 'per coinvolgere più persone manca la migrazione 20261028010000_coinvolti.sql nel database';
   if (!supabase) {
     const i = S.scad.findIndex(x => x.id === s.id);
     if (i >= 0) S.scad[i] = { ...S.scad[i], ...v };

@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState, type CSSProperties } from 'react';
 import { CARTELLE, ETICHETTE, LIMITE_MB, allegatiDi, cartellaPer, cerca, coloreEtichetta, conEtichette, documentiDi, estensione, etichetteDi, fByte, immagine, nomeCartella, nomeEtichetta, perCartella, perEtichetta, suggerisciEtichette, suggerisciPreventivi, type Cartella, type Documento } from '../domain/documenti';
 import { S, commit } from '../store/state';
 import { toast } from '../store/actions';
+import { persone } from '../domain/calendario';
 import { ModuloEmail, contestoEmail } from '../components/Email';
 import { aggiornaDoc, assegnaNota, caricaFile, ricaricaDocumenti, cloud, eliminaDoc, linkAnteprime, linkDoc, mioEmail, online, puoGestireDoc, salvaNota } from '../store/remote';
 
@@ -140,9 +141,9 @@ function Voce({ d, thumb, onEdit, conVoce }: { d: Documento; thumb?: string; onE
   const [email, setEmail] = useState(false), [ass, setAss] = useState(false), [carico, setCarico] = useState(0);
   const mio = puoGestireDoc(d), voce = conVoce && d.scadenza_id ? S.scad.find(s => s.id === d.scadenza_id) : null;
   // Voci assegnate nate da questa nota: quella a cui è allegata, o con lo stesso titolo e la stessa commessa.
-  const per = d.tipo !== 'nota' ? [] : S.scad.filter(s => s.assegnata_a && (s.id === d.scadenza_id || (s.titolo === d.titolo.trim() && (s.preventivo_id || null) === (d.preventivo_id || null))));
+  const per = d.tipo !== 'nota' ? [] : S.scad.filter(s => persone(s).length && (s.id === d.scadenza_id || (s.titolo === d.titolo.trim() && (s.preventivo_id || null) === (d.preventivo_id || null))));
   const meta = [nomeCartella(d.cartella), d.tipo === 'file' ? fByte(d.dimensione) : '', 'da ' + nomeDi(d.creato_da), quandoDoc(d.creato), d.modificato ? 'modificata' : '',
-    voce ? 'voce d\'agenda: ' + voce.titolo : '', ...per.map(s => `assegnata a ${nomeDi(s.assegnata_a!)}${s.fatto ? ' ✓ fatto' : ''}`)].filter(Boolean).join(' · ');
+    voce ? 'voce d\'agenda: ' + voce.titolo : '', ...per.map(s => `assegnata a ${persone(s).map(nomeDi).join(', ')}${s.fatto ? ' ✓ fatto' : ''}`)].filter(Boolean).join(' · ');
   return (<>
     <div className="ditem">
       {d.tipo === 'nota' ? <span className="dico nota" aria-hidden>✎</span>
