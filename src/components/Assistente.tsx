@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { datiPerAssistente, type Appunto, type Proposta } from '../domain/assistente';
 import { nomiEtichette } from '../domain/documenti';
+import { datiTecnici, nomeCategoria } from '../domain/esperto';
 import { sostituisci } from '../domain/referenze';
 import { clone } from '../domain/model';
 import { S, commit, save } from '../store/state';
-import { aggiornaDoc, chiediAssistente, online, salvaNota, salvaScadenza } from '../store/remote';
+import { aggiornaDoc, chiediAssistente, online, salvaNota, salvaScadenza, salvaTecnico } from '../store/remote';
 import { apriGmail } from './Email';
 import { TabellaVarianti, scaricaOfferte } from './Varianti';
 import { archVarianti } from '../store/actions';
@@ -43,6 +44,32 @@ function CardEmail({ p, stato, onFatto }: { p: Extract<Proposta, { tipo: 'email'
   );
 }
 
+/** Risposta dell'esperto da salvare nell'archivio tecnico: si sceglie condivisa o privata e si può correggere il testo. */
+function CardMemoria({ p, stato, onFatto }: { p: Extract<Proposta, { tipo: 'memoria' }>; stato?: string; onFatto: (esito: string, nota: string) => void }) {
+  const [titolo, setTitolo] = useState(p.titolo), [testo, setTesto] = useState(p.testo), [privato, setPrivato] = useState(false), [busy, setBusy] = useState(false);
+  const salva = async () => {
+    setBusy(true);
+    const e = await salvaTecnico({ titolo, testo, categoria: p.categoria, privato, preventivo_id: p.preventivo_id });
+    setBusy(false);
+    if (e) onFatto('Non riuscito: ' + e, `Proposta ${p.id} non salvata: ${e}.`);
+    else { commit(); onFatto(`✓ Salvata nell'archivio tecnico (${privato ? 'privata' : 'condivisa'})`, `Proposta ${p.id} confermata: salvata nell'archivio tecnico${privato ? ' come privata' : ''}.`); }
+  };
+  return (
+    <div className="aicard">
+      <b>Salva nell'archivio tecnico · {nomeCategoria(p.categoria)}{p.commessa ? ' · ' + p.commessa : ''}</b>
+      {stato ? <><div>{titolo}</div><div className="aiesito">{stato}</div></> : <>
+        <input className="aiin" value={titolo} onChange={e => setTitolo(e.target.value)} />
+        <textarea className="aiin" rows={8} value={testo} onChange={e => setTesto(e.target.value)} />
+        <label className="small"><input type="checkbox" checked={privato} onChange={e => setPrivato(e.target.checked)} /> Privata (la vedi solo tu)</label>
+        <div className="aibtn">
+          <button className="btn p s" disabled={busy || !titolo.trim() || !testo.trim()} onClick={salva}>{busy ? 'Salvo…' : 'Salva'}</button>
+          <button className="btn s" disabled={busy} onClick={() => onFatto('Annullata', `Proposta ${p.id} annullata dall'utente.`)}>Annulla</button>
+        </div>
+      </>}
+    </div>
+  );
+}
+
 /** Applica una sostituzione confermata: crea i codici nuovi copiando i vecchi, poi cambia le righe delle distinte. */
 function applicaSostituzione(p: Extract<Proposta, { tipo: 'sostituzione' }>): string {
   const D = S.data;
@@ -65,6 +92,7 @@ function applicaSostituzione(p: Extract<Proposta, { tipo: 'sostituzione' }>): st
 function Card({ p, stato, onFatto }: { p: Proposta; stato?: string; onFatto: (esito: string, nota: string) => void }) {
   const [busy, setBusy] = useState(false);
   if (p.tipo === 'email') return <CardEmail p={p} stato={stato} onFatto={onFatto} />;
+  if (p.tipo === 'memoria') return <CardMemoria p={p} stato={stato} onFatto={onFatto} />;
   const conferma = async () => {
     setBusy(true);
     try {
@@ -160,7 +188,7 @@ export function Assistente() {
     try {
       const nota = note.current.length ? `[Dall'app] ${note.current.join(' ')}` : '';
       const r = await chiediAssistente({ messages: conv.current, testo: t, nota, dati: datiPerAssistente(S.data, appunti(),
-        S.arch.map(e => ({ id: e.id, num: e.prev?.num || '', nome: e.nome, cliente: e.cliente || '' })), S.prev._id || null) });
+        S.arch.map(e => ({ id: e.id, num: e.prev?.num || '', nome: e.nome, cliente: e.cliente || '' })), S.prev._id || null, datiTecnici(S.prev)) });
       conv.current = r.messages; note.current = [];
       setVoci(v => [...v, { ruolo: 'ai', testo: r.testo, proposte: r.proposte }]);
     } catch (err) { setVoci(v => [...v, { ruolo: 'err', testo: (err as Error).message }]); }
@@ -178,7 +206,10 @@ export function Assistente() {
         {!voci.length && <div className="muted aihint">Chiedimi di cambiare articoli nelle distinte o di aggiungere un evento. Per esempio:
           <ul><li>«Nel pilastro motore sostituisci bullone, dado e rondella M16 con M20»</li><li>«Aggiungi un evento domani alle 17: riunione con Rossi»</li>
             <li>«Scrivi un'email di aggiornamento al cliente con gli appunti della commessa Rossi»</li>
-            <li>«Dal preventivo aperto fammene uno IPEA con asse 2,5 e uno IPE con asse 3»</li></ul>
+            <li>«Dal preventivo aperto fammene uno IPEA con asse 2,5 e uno IPE con asse 3»</li>
+            <li>«Con le prove di pull-out di Foggia l'infissione da 1,2 m basta per il vento di questo impianto?»</li>
+            <li>«Quante prove di pull-out servono e come le facciamo in un terreno argilloso con falda a 2 m?»</li></ul>
+          Da consulente tecnico (strutture, pali, terreni) uso i documenti dell'Archivio tecnico in Dati comuni.
           Prima di cambiare qualcosa ti mostro la proposta: decidi tu se confermarla.</div>}
         {voci.map((v, i) => <div key={i} className={'aimsg ' + v.ruolo}>
           {v.testo && <div className="aitxt">{v.testo}</div>}

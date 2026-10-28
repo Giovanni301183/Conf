@@ -20,7 +20,7 @@ export function unstore(k: string) {
 }
 
 export const TABS = [['archivio', 'Home'], ['prev', 'Preventivi'], ['fatte', 'Archivio attività'], ['listino', 'Listino'], ['distinte', 'Distinte base'], ['config', 'Configura'], ['costi', 'Costi'],
-  ['extra', 'Voci extra'], ['margini', 'Margini'], ['invia', 'Invia preventivo'], ['docs', 'Documenti'], ['lavor', 'Distinta lavorazione'], ['mont', 'Montaggio'], ['utenti', 'Utenti']] as const;
+  ['extra', 'Voci extra'], ['margini', 'Margini'], ['invia', 'Invia preventivo'], ['docs', 'Documenti'], ['lavor', 'Distinta lavorazione'], ['mont', 'Montaggio'], ['tecnico', 'Archivio tecnico'], ['utenti', 'Utenti']] as const;
 export type Tab = (typeof TABS)[number][0];
 
 export interface Ui {
@@ -28,14 +28,14 @@ export interface Ui {
   set: Settore; sopen: boolean; area: string; aset: Settore | '';   // menu: settore scelto (e se è aperto), macro area aperta ('' = tutte chiuse); filtro per settore dell'archivio
 }
 // scad = scadenze del calendario inserite a mano (dal server, o dal browser senza Supabase).
-// docs = documenti e note (solo con il server: i file stanno nello Storage di Supabase).
-export interface State { data: any; prev: any; ui: Ui; arch: any[]; scad: any[]; docs: any[] }
+// docs = documenti e note (solo con il server: i file stanno nello Storage di Supabase); tecn = archivio tecnico (memoria dell'esperto).
+export interface State { data: any; prev: any; ui: Ui; arch: any[]; scad: any[]; docs: any[]; tecn: any[] }
 
 const UI0 = load(KEY_UI) || {};
 const hashTab = TABS.find(t => t[0] === location.hash.slice(1))?.[0];
 // All'avvio si parte sempre da un preventivo nuovo, sulla schermata Preventivi (elenco dell'archivio).
 export const S: State = {
-  data: load(KEY_DATA) || defaultData(), prev: newPrev(), arch: load(KEY_ARCH) || [], scad: load(KEY_SCAD) || [], docs: [],
+  data: load(KEY_DATA) || defaultData(), prev: newPrev(), arch: load(KEY_ARCH) || [], scad: load(KEY_SCAD) || [], docs: [], tecn: [],
   ui: { tab: hashTab || 'archivio', view: UI0.view || 'cat', av: ['elenco', 'kpi', 'mappa', 'cerca'].includes(UI0.av) ? UI0.av : 'elenco', cal: UI0.cal ?? true, mini: !!UI0.mini, calV: UI0.calV === 'agenda' ? 'agenda' : 'mese', calMie: !!UI0.calMie, kf: { anno: '', mese: '', stato: '', cliente: '' }, cerca: { q: '', stato: '', anno: '' }, folds: UI0.folds || {}, open: new Set(), sizeSel: '12', openSd: new Set(), filter: '', aq: '', docCart: '', set: infoSettore(UI0.set).k, sopen: true, area: (PASSI as readonly string[]).includes(hashTab || '') ? infoSettore(UI0.set).gruppo : '', aset: '' },
 };
 

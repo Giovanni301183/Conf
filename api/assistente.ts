@@ -4,6 +4,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import { TOOLS, esegui, sistema, type DatiAssistente, type Proposta } from '../src/domain/assistente.js';
+import { ESPERTO, TOOLS_ESPERTO } from '../src/domain/esperto.js';
+import { eseguiEsperto, senzaFile, type CtxEsperto } from './_esperto.js';
 
 const MODELLO = 'claude-opus-5-5';
 const MAX_GIRI = 8;
@@ -29,30 +31,37 @@ export async function POST(req: Request) {
   const messages: Anthropic.Beta.BetaMessageParam[] = [...prima, { role: 'user', content: b.nota ? `${b.nota}\n\n${testo}` : testo }];
 
   const client = new Anthropic();
-  const proposte: Proposta[] = [];
+  const proposte: Proposta[] = [], ctx: CtxEsperto = { admin, email: me, D };
+  const system = sistema(new Date()) + '\n' + ESPERTO + (D.tecnico ? `\n\nDati tecnici del preventivo aperto (calcolati dall'app):\n${String(D.tecnico).slice(0, 8000)}` : '');
+  // I file letti dall'archivio non tornano al browser (peserebbero troppo): restano una riga di testo.
+  const fine = (body: { messages: Anthropic.Beta.BetaMessageParam[]; proposte: Proposta[]; testo: string }) => json(200, { ...body, messages: senzaFile(body.messages) });
   try {
     for (let giro = 0; giro < MAX_GIRI; giro++) {
       const r = await client.beta.messages.create({
-        model: MODELLO, max_tokens: 16000, system: sistema(new Date()), tools: TOOLS as Anthropic.Beta.BetaTool[], messages,
-        output_config: { effort: 'medium' },
+        model: MODELLO, max_tokens: 16000, system, tools: [...TOOLS, ...TOOLS_ESPERTO] as Anthropic.Beta.BetaTool[], messages,
+        // Le domande tecniche (calcoli, prove, terreni) vogliono un ragionamento accurato.
+        output_config: { effort: 'high' },
         // Se il modello declina, la richiesta riparte da sola sul modello di riserva consigliato da Anthropic.
         betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
       });
       messages.push({ role: 'assistant', content: r.content });
-      if (r.stop_reason === 'refusal') return json(200, { messages, proposte, testo: 'Non posso aiutarti con questa richiesta.' });
+      if (r.stop_reason === 'refusal') return fine({ messages, proposte, testo: 'Non posso aiutarti con questa richiesta.' });
       if (r.stop_reason !== 'tool_use') {
         const out = r.content.flatMap(c => (c.type === 'text' ? [c.text] : [])).join('\n').trim();
-        return json(200, { messages, proposte, testo: out || (r.stop_reason === 'max_tokens' ? 'Risposta troppo lunga: riprova con una domanda più precisa.' : '') });
+        return fine({ messages, proposte, testo: out || (r.stop_reason === 'max_tokens' ? 'Risposta troppo lunga: riprova con una domanda più precisa.' : '') });
       }
-      const risultati: Anthropic.Beta.BetaToolResultBlockParam[] = r.content.flatMap(c => {
-        if (c.type !== 'tool_use') return [];
-        const x = esegui(c.name, c.input, D, c.id);
+      const risultati: Anthropic.Beta.BetaToolResultBlockParam[] = [];
+      for (const c of r.content) {
+        if (c.type !== 'tool_use') continue;
+        // Gli strumenti dell'archivio tecnico girano qui (leggono Supabase), gli altri sui dati mandati dal browser.
+        const e = await eseguiEsperto(c.name, c.input, ctx, c.id);
+        const x = e || (({ testo, ...y }) => ({ contenuto: testo, ...y }))(esegui(c.name, c.input, D, c.id));
         if (x.proposta) proposte.push(x.proposta);
-        return [{ type: 'tool_result' as const, tool_use_id: c.id, content: x.testo, is_error: !!x.errore }];
-      });
+        risultati.push({ type: 'tool_result', tool_use_id: c.id, content: x.contenuto, is_error: !!x.errore });
+      }
       messages.push({ role: 'user', content: risultati });
     }
-    return json(200, { messages, proposte, testo: 'Ci ho messo troppi passaggi: prova a dividere la richiesta.' });
+    return fine({ messages, proposte, testo: 'Ci ho messo troppi passaggi: prova a dividere la richiesta.' });
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) return json(500, { error: 'Chiave ANTHROPIC_API_KEY non valida.' });
     if (e instanceof Anthropic.RateLimitError) return json(429, { error: 'Troppe richieste o credito esaurito su Anthropic: riprova tra poco.' });

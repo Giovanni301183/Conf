@@ -16,6 +16,7 @@ import { Montaggio } from './pages/Montaggio';
 import { Documenti } from './pages/Documenti';
 import { Accesso } from './pages/Accesso';
 import { Utenti } from './pages/Utenti';
+import { ArchivioTecnico } from './pages/ArchivioTecnico';
 import { Presenza } from './components/Presenza';
 import { Assistente } from './components/Assistente';
 import { Telegram } from './components/Telegram';
@@ -28,7 +29,7 @@ import { AvvisiRiunioni } from './components/AvvisiRiunioni';
 
 const VIEWS: Record<Tab, () => React.ReactNode> = {
   archivio: Home, prev: Preventivi, fatte: ArchivioAttivita, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
-  extra: Extra, margini: Margini, invia: Invia, docs: Documenti, lavor: Lavorazione, mont: Montaggio, utenti: Utenti,
+  extra: Extra, margini: Margini, invia: Invia, docs: Documenti, lavor: Lavorazione, mont: Montaggio, tecnico: ArchivioTecnico, utenti: Utenti,
 };
 // Schede proprie degli impianti fissi; le altre sono comuni a tutti i settori.
 const VIEWS_FISSO: Partial<Record<Tab, () => React.ReactNode>> = { config: ConfiguraFisso, distinte: DistintaFisso };
@@ -61,6 +62,7 @@ const ICON: Record<Tab, string> = {
   mont: 'M3 20h18M5 20V10l7-6 7 6v10M9 20v-6h6v6',
   listino: 'M8 6h12M8 12h12M8 18h12M4 6h0M4 12h0M4 18h0',
   distinte: 'M4 4h16v16H4zM4 10h16M10 10v10',
+  tecnico: 'M4 4h6l2 2h8v14H4zM9 13h6M12 10v6',
   utenti: 'M16 20v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 10a4 4 0 100-8 4 4 0 000 8zM22 20v-2a4 4 0 00-3-3.9M16 2.1a4 4 0 010 7.8',
 };
 // Barra stretta (solo icone), ricordata in questo browser. Del gruppo dei settori resta il settore in uso con le sue schede.
@@ -137,7 +139,7 @@ export default function App() {
           </div>}
           <div className="ng">
             <div className="ngt">Dati comuni</div>
-            {(['listino', ...(isAdmin() ? ['utenti'] : [])] as Tab[]).map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} title={LABEL[k]} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span></button>)}
+            {(['listino', ...(cloud.session ? ['tecnico'] : []), ...(isAdmin() ? ['utenti'] : [])] as Tab[]).map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} title={LABEL[k]} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span></button>)}
           </div>
         </nav>
         <Presenza />

@@ -5,6 +5,7 @@ import { perMe, type Scadenza } from '../domain/calendario';
 import { normListinoFisso } from '../domain/fissoCosti';
 import { LIMITE_MB, percorsoPer, type Documento } from '../domain/documenti';
 import { normVista, type Vista } from '../domain/vista';
+import { percorsoArchivio, type DocArchivio } from '../domain/esperto';
 import { KEY_ARCH, KEY_DRAFT, KEY_SCAD, S, commit, load, setSaveHook, store, unstore } from './state';
 
 type Fase = 'locale' | 'avvio' | 'login' | 'password' | 'carico' | 'pronto' | 'negato' | 'errore';
@@ -26,6 +27,8 @@ export const cloud = {
   colleghi: [] as Utente[],
   // Errore nel leggere i documenti (es. migrazione 20261022000000_documenti.sql non ancora eseguita).
   docErr: '',
+  // Errore nel leggere l'archivio tecnico (es. migrazione 20261027000000_archivio_tecnico.sql non ancora eseguita).
+  tecErr: '',
 };
 export const online = () => !!supabase;
 let toastFn = (_: string) => {};
@@ -334,9 +337,66 @@ export async function linkAnteprime(dd: Documento[]): Promise<Record<string, str
 let docCh: RealtimeChannel | null = null;
 function joinDocumenti() {
   if (docCh) return;
-  docCh = supabase!.channel('documenti').on('postgres_changes', { event: '*', schema: 'public', table: 'documenti' }, async () => { await loadDocumenti(); commit(); }).subscribe();
+  docCh = supabase!.channel('documenti').on('postgres_changes', { event: '*', schema: 'public', table: 'documenti' }, async () => { await loadDocumenti(); commit(); })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'archivio_tecnico' }, async () => { await loadTecnico(); commit(); }).subscribe();
 }
 function leaveDocumenti() { if (docCh) supabase!.removeChannel(docCh); docCh = null; }
+
+/* ---------- Archivio tecnico ---------- */
+// Memoria del consulente tecnico: file nella cartella privata "archivio" dello Storage, righe in archivio_tecnico.
+// Le regole del database fanno vedere i documenti condivisi e i propri privati.
+const BUCKET_TEC = 'archivio';
+export const puoGestireTec = (d: DocArchivio) => d.creato_da === mioEmail() || (isAdmin() && !d.privato);
+async function loadTecnico() {
+  const { data, error } = await supabase!.from('archivio_tecnico').select('*').order('creato', { ascending: false });
+  if (error) { cloud.tecErr = /archivio_tecnico/.test(error.message) ? 'Manca la migrazione 20261027000000_archivio_tecnico.sql (va eseguita nel SQL Editor di Supabase).' : error.message; S.tecn = []; return; }
+  cloud.tecErr = ''; S.tecn = data;
+}
+export async function ricaricaTecnico() { if (supabase) await loadTecnico(); }
+type DatiTec = { categoria: string; privato: boolean; preventivo_id: string | null };
+/** Carica un file nell'archivio tecnico: ritorna l'id della riga (per chiederne la scheda) o l'errore. */
+export async function caricaTecnico(f: File, v: DatiTec): Promise<{ errore: string; id?: string }> {
+  if (!supabase) return { errore: "L'archivio tecnico funziona solo con il server." };
+  if (f.size > LIMITE_MB * 1024 * 1024) return { errore: `"${f.name}" supera ${LIMITE_MB} MB.` };
+  const percorso = percorsoArchivio(crypto.randomUUID(), f.name);
+  const up = await supabase.storage.from(BUCKET_TEC).upload(percorso, f, { contentType: f.type || undefined, upsert: false });
+  if (up.error) return { errore: `"${f.name}" non caricato: ${/bucket/i.test(up.error.message) ? 'manca la migrazione 20261027000000_archivio_tecnico.sql' : up.error.message}` };
+  const { data, error } = await supabase.from('archivio_tecnico').insert({ ...v, titolo: f.name.slice(0, 200), percorso, mime: f.type || null, dimensione: f.size }).select('id').single();
+  if (error) { await supabase.storage.from(BUCKET_TEC).remove([percorso]); return { errore: `"${f.name}" non salvato: ${error.message}` }; }
+  await loadTecnico(); return { errore: '', id: data.id };
+}
+/** Nota scritta nell'archivio (anche una risposta dell'esperto salvata dalla chat). */
+export async function salvaTecnico(n: DatiTec & { titolo: string; testo: string }): Promise<string> {
+  if (!supabase) return "L'archivio tecnico funziona solo con il server.";
+  const titolo = n.titolo.trim().slice(0, 200), testo = n.testo.trim();
+  if (!titolo || !testo) return 'Servono titolo e testo.';
+  const { error } = await supabase.from('archivio_tecnico').insert({ ...n, titolo, testo });
+  if (error) return /archivio_tecnico/.test(error.message) ? 'manca la migrazione 20261027000000_archivio_tecnico.sql' : error.message;
+  await loadTecnico(); return '';
+}
+export async function aggiornaTecnico(id: string, patch: Partial<Pick<DocArchivio, 'titolo' | 'categoria' | 'privato' | 'preventivo_id' | 'testo' | 'scheda'>>): Promise<string> {
+  const { error } = await supabase!.from('archivio_tecnico').update(patch).eq('id', id);
+  if (error) return error.message;
+  await loadTecnico(); return '';
+}
+export async function eliminaTecnico(d: DocArchivio): Promise<string> {
+  if (d.percorso) { const { error } = await supabase!.storage.from(BUCKET_TEC).remove([d.percorso]); if (error) return error.message; }
+  const { error } = await supabase!.from('archivio_tecnico').delete().eq('id', d.id);
+  if (error) return error.message;
+  await loadTecnico(); return '';
+}
+export async function linkTecnico(d: DocArchivio, scarica = false): Promise<string> {
+  const { data, error } = await supabase!.storage.from(BUCKET_TEC).createSignedUrl(d.percorso!, 3600, scarica ? { download: d.titolo } : undefined);
+  if (error) throw error;
+  return data.signedUrl;
+}
+/** Chiede all'AI di leggere il file e scriverne la scheda (riassunto con valori e pagine). */
+export async function leggiTecnico(id: string): Promise<string> {
+  const r = await fetch('/api/archivio', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify({ id }) });
+  const j = await r.json().catch(() => ({ error: `Risposta non valida dal server (${r.status})` }));
+  await loadTecnico();
+  return r.ok ? '' : j.error || `Errore ${r.status}`;
+}
 
 /* ---------- Telegram ---------- */
 // Codice di 6 cifre (valido 10 minuti) da scrivere al bot come "/collega 123456"; lo abbina /api/agenda.
@@ -356,7 +416,7 @@ async function loadAll() {
   cloud.fase = 'carico'; cloud.err = ''; commit();
   try {
     if (!(await loadMe())) { cloud.fase = 'negato'; commit(); return; }
-    await Promise.all([loadArch(), loadListino(true), loadScadenze(), loadDocumenti()]);
+    await Promise.all([loadArch(), loadListino(true), loadScadenze(), loadDocumenti(), loadTecnico()]);
     if (S.prev._id && !S.arch.some(e => e.id === S.prev._id)) delete S.prev._id;
     cloud.fase = 'pronto';
     joinPresenza(); joinScadenze(); joinDocumenti();
@@ -366,7 +426,7 @@ async function loadAll() {
 // Al ritorno sulla finestra si rileggono archivio e listino, per vedere il lavoro dei colleghi.
 async function refresh() {
   if (cloud.fase !== 'pronto') return;
-  try { await Promise.all([loadArch(), loadListino(false), loadScadenze(), loadDocumenti()]); commit(); } catch { /* si riprova al prossimo ritorno */ }
+  try { await Promise.all([loadArch(), loadListino(false), loadScadenze(), loadDocumenti(), loadTecnico()]); commit(); } catch { /* si riprova al prossimo ritorno */ }
 }
 
 export function initCloud() {
@@ -401,5 +461,5 @@ export async function logout() {
   if (cloud.sync === 'salvo' || (cloud.fase === 'pronto' && JSON.stringify(S.data) !== synced)) await pushListino();
   leavePresenza(); leaveScadenze(); leaveDocumenti();
   await supabase!.auth.signOut();
-  S.arch = []; S.scad = []; S.docs = []; synced = ''; listinoTs = ''; cloud.me = null;
+  S.arch = []; S.scad = []; S.docs = []; S.tecn = []; synced = ''; listinoTs = ''; cloud.me = null;
 }

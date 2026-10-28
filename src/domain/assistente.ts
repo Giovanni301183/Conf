@@ -17,11 +17,13 @@ export interface DatiAssistente {
   // Preventivi dell'archivio (per le varianti di materiale) e id di quello aperto, se salvato.
   preventivi?: { id: string; num: string; nome: string; cliente: string }[];
   aperto?: string | null;
+  // Dati tecnici del preventivo aperto per il consulente (geometria, vento, forze per palo): vedi datiTecnici in esperto.ts.
+  tecnico?: string;
 }
 // id ed etichette solo per le note dei documenti (le note degli eventi non hanno etichette).
 export interface Appunto { quando: string; commessa: string; titolo: string; testo: string; id?: string; etichette?: string[] }
-export const datiPerAssistente = (data: any, appunti: Appunto[] = [], preventivi: DatiAssistente['preventivi'] = [], aperto: string | null = null): DatiAssistente => ({
-  appunti, preventivi, aperto,
+export const datiPerAssistente = (data: any, appunti: Appunto[] = [], preventivi: DatiAssistente['preventivi'] = [], aperto: string | null = null, tecnico = ''): DatiAssistente => ({
+  appunti, preventivi, aperto, tecnico,
   listino: data.listino.map((x: any) => ({ c: x.c, d: x.d, cat: x.cat, sub: x.sub, t: x.t })),
   template: data.template.map((r: any) => ({ g: r.g, c: r.c, d: r.d, L: r.L, qa: r.qa, qb: r.qb })),
   sizes: Object.fromEntries(Object.entries<any>(data.sizes).map(([k, s]) => [k, { assi: s.assi.map((a: any) => ({ c: a.c, d: a.d, L: a.L, q: a.q })) }])),
@@ -34,7 +36,8 @@ export type Proposta =
   | { id: string; tipo: 'email'; a: string; oggetto: string; testo: string }
   | { id: string; tipo: 'varianti'; base: string; nome: string; varianti: { prof: string | null; asse: number | null; omega: number | null }[] }
   | { id: string; tipo: 'nota'; titolo: string; testo: string; etichette: string[]; preventivo_id: string | null; commessa: string }
-  | { id: string; tipo: 'etichette'; note: { id: string; titolo: string; prima: string[]; dopo: string[] }[] };
+  | { id: string; tipo: 'etichette'; note: { id: string; titolo: string; prima: string[]; dopo: string[] }[] }
+  | { id: string; tipo: 'memoria'; titolo: string; testo: string; categoria: string; preventivo_id: string | null; commessa: string };
 const CHIAVI_ETICHETTE = ETICHETTE.map(([k]) => k);
 const DESCR_ETICHETTE = ETICHETTE.map(([k, l]) => `${k} = ${l}`).join(', ');
 
@@ -164,7 +167,7 @@ export function esegui(nome: string, input: any, D: DatiAssistente, id: string):
 export function sistema(oggi: Date): string {
   const f = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(oggi);
   const iso = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome' }).format(oggi);
-  return `Sei l'assistente dell'app di preventivi dei tracker solari di Terranova. Rispondi in italiano, in modo breve e concreto.
+  return `Sei l'assistente dell'app di preventivi di Terranova (tracker solari, impianti fissi). Rispondi in italiano, in modo breve e concreto.
 Oggi è ${f} (${iso}), ora italiana.
 
 Puoi aiutare a:
@@ -172,7 +175,8 @@ Puoi aiutare a:
 - aggiungere eventi al calendario della Home;
 - scrivere email di aggiornamento a partire dagli appunti (note dei documenti e degli eventi);
 - preparare più preventivi uguali per lo stesso cliente che cambiano solo il materiale (es. IPEA con asse 2,5, IPE con asse 3);
-- scrivere note (appunti) con le etichette del tema, libere o legate a un preventivo, e cambiare le etichette di quelle già salvate.
+- scrivere note (appunti) con le etichette del tema, libere o legate a un preventivo, e cambiare le etichette di quelle già salvate;
+- rispondere da consulente tecnico su strutture, vento, pali, terreni e prove di pull-out, con l'archivio tecnico come memoria (vedi sotto).
 
 Come lavori:
 - Prima di proporre una sostituzione guarda le righe del gruppo con righe_distinta e cerca i codici con cerca_articoli: usa solo codici che esistono davvero. Per "bullone, dado e rondella" trova tutti e tre i codici usati nel gruppo.
@@ -180,7 +184,7 @@ Come lavori:
 - Se nel gruppo c'è un codice simile ma diverso da quello detto (es. l'utente dice M16x25 ma il gruppo usa M16x60), fallo notare e chiedi, invece di indovinare.
 - Varianti di materiale: le combinazioni le dice l'utente, una per preventivo; non aggiungerne e non indovinarne. Il base è il preventivo aperto, se non ne indica un altro (numero o nome). Profilo, asse e omega non detti restano quelli del base.
 - Note: "segnati che…", "prendi nota…", "metti negli appunti…" → proponi_nota. Scegli tu da 0 a 3 etichette che descrivono davvero il tema (es. ordine di acciaio al fornitore = acquisti; nuovo cliente interessato = opportunita e vendita). Legala a un preventivo solo se l'utente lo nomina o è chiaro; altrimenti nota libera. Per cambiare le etichette di note esistenti ("metti acquisti alle note sull'acciaio") trova le note con cerca_appunti e usa proponi_etichette con i loro id.
-- Le modifiche le fai solo con proponi_sostituzione, proponi_evento, proponi_email, proponi_varianti, proponi_nota e proponi_etichette: preparano una proposta che l'utente conferma con un pulsante. Non dire mai che una modifica è fatta finché l'app non lo conferma.
+- Le modifiche le fai solo con proponi_sostituzione, proponi_evento, proponi_email, proponi_varianti, proponi_nota, proponi_etichette e proponi_memoria: preparano una proposta che l'utente conferma con un pulsante. Non dire mai che una modifica è fatta finché l'app non lo conferma.
 - Per un evento servono titolo, data e, se detta, l'ora. Se manca il titolo chiedilo. Un'ora da 1 a 7 senza "di mattina" intendila del pomeriggio (es. "alle 5" = 17:00) e dillo.
 - Per un'email trova prima gli appunti giusti con cerca_appunti, poi proponila con proponi_email. Usa solo quello che c'è negli appunti: non inventare date, quantità, prezzi o impegni. Tono cordiale e professionale, testo semplice senza markdown. L'email parte dal Gmail dell'utente, che preme Invia.
 - Se una richiesta non riguarda queste cose, dillo in una frase.`;
