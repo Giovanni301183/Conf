@@ -1,8 +1,14 @@
-// Funzione Vercel: da un tratto della chat di squadra Claude propone una nota (titolo, riassunto con le decisioni, cose da fare, commessa, etichette).
-// Non salva niente: la proposta torna all'app, l'utente la corregge e la conferma.
+// Funzione Vercel per la chat di squadra.
+// - Proposta di nota: da un tratto di chat Claude propone una nota (titolo, riassunto con le decisioni, cose da fare, commessa, etichette).
+//   Non salva niente: la proposta torna all'app, l'utente la corregge e la conferma.
+// - azione 'rispondi' (@assistente in chat): Claude legge gli ultimi messaggi della stanza, da consulente tecnico con l'archivio tecnico
+//   (solo i documenti condivisi: la risposta la leggono tutti), e scrive la risposta come messaggio dell'assistente.
 import Anthropic from '@anthropic-ai/sdk';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ETICHETTE, pulisciEtichette } from '../src/domain/documenti.js';
+import { ESPERTO, TOOLS_ESPERTO } from '../src/domain/esperto.js';
+import { ASSISTENTE } from '../src/domain/squadra.js';
+import { eseguiEsperto, type CtxEsperto } from './_esperto.js';
 
 const MODELLO = 'claude-opus-5-5';
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -44,6 +50,60 @@ Regole:
 - La commessa la scegli dall'elenco solo se in chat se ne parla chiaramente (nome, cliente, numero o località).
 Rispondi con il JSON richiesto.`;
 
+const MAX_GIRI = 6;
+const errAI = (e: unknown) => {
+  if (e instanceof Anthropic.AuthenticationError) return json(500, { error: 'Chiave ANTHROPIC_API_KEY non valida.' });
+  if (e instanceof Anthropic.RateLimitError) return json(429, { error: 'Troppe richieste o credito esaurito su Anthropic: riprova tra poco.' });
+  if (e instanceof Anthropic.APIError) return json(502, { error: `Errore dal servizio AI (${e.status}): ${e.message}` });
+  return json(500, { error: (e as Error).message });
+};
+const sistemaChat = (oggi: string, stanza: string) => `Sei l'assistente di Terranova S.r.l. dentro la chat di squadra dell'app: i colleghi ti chiamano con @assistente.
+Oggi è ${oggi}. Stanza: ${stanza}.
+Rispondi in italiano all'ultima domanda rivolta a te, tenendo conto della conversazione: breve e concreto come in una chat (poche righe, elenco con "- " solo se serve), testo semplice senza markdown.
+Non puoi modificare dati dell'app: se ti chiedono di farlo, spiega che si fa dall'assistente (✦) o dall'app.
+Nell'archivio tecnico vedi solo i documenti condivisi, perché la risposta la leggono tutti.
+${ESPERTO}`;
+
+/** @assistente: risposta scritta nella chat come messaggio dell'assistente, nella stessa stanza, in risposta alla domanda. */
+async function rispondi(admin: SupabaseClient, me: string, b: any) {
+  if (!process.env.ANTHROPIC_API_KEY) return json(500, { error: 'Sul server manca ANTHROPIC_API_KEY (Vercel → Settings → Environment Variables).' });
+  const chat = String(b?.chat || '').slice(-40_000).trim(), domanda = String(b?.domanda || '');
+  if (!chat || !domanda) return json(400, { error: 'Richiesta incompleta.' });
+  const { data: q } = await admin.from('messaggi').select('id, creato_da, preventivo_id').eq('id', domanda).maybeSingle();
+  if (!q || q.creato_da !== me) return json(400, { error: 'Domanda non trovata.' });
+  const preventivi = (Array.isArray(b?.commesse) ? b.commesse : []).slice(0, 400).map((c: any) => ({ id: String(c.id), num: String(c.num || ''), nome: String(c.nome || ''), cliente: String(c.cliente || '') }));
+  const st = preventivi.find((p: any) => p.id === q.preventivo_id);
+  const oggi = new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Rome' });
+  // Archivio solo condiviso: con un autore che non esiste i documenti privati restano fuori.
+  const ctx: CtxEsperto = { admin, email: ASSISTENTE, D: { listino: [], template: [], sizes: {}, preventivi, aperto: q.preventivo_id || null } };
+  const tools = TOOLS_ESPERTO.filter(t => t.name !== 'proponi_memoria') as Anthropic.Beta.BetaTool[];
+  const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: `Chat (le ultime righe sono le più recenti):\n${chat}` }];
+  const client = new Anthropic();
+  let testo = '';
+  try {
+    for (let giro = 0; giro < MAX_GIRI && !testo; giro++) {
+      const r = await client.beta.messages.create({
+        model: MODELLO, max_tokens: 8000, system: sistemaChat(oggi, st ? `commessa N° ${st.num} ${st.nome} (${st.cliente})` : 'Generale'), tools, messages,
+        output_config: { effort: 'medium' },
+        betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+      });
+      messages.push({ role: 'assistant', content: r.content });
+      if (r.stop_reason === 'refusal') { testo = 'Non posso aiutarti con questa richiesta.'; break; }
+      if (r.stop_reason !== 'tool_use') { testo = r.content.flatMap(c => (c.type === 'text' ? [c.text] : [])).join('\n').trim() || 'Non ho una risposta: prova a riformulare la domanda.'; break; }
+      const risultati: Anthropic.Beta.BetaToolResultBlockParam[] = [];
+      for (const c of r.content) {
+        if (c.type !== 'tool_use') continue;
+        const x = await eseguiEsperto(c.name, c.input, ctx, c.id);
+        risultati.push({ type: 'tool_result', tool_use_id: c.id, content: x?.contenuto ?? 'Strumento non disponibile in chat.', is_error: !x || !!x.errore });
+      }
+      messages.push({ role: 'user', content: risultati });
+    }
+  } catch (e) { return errAI(e); }
+  if (!testo) testo = 'Ci ho messo troppi passaggi: prova con una domanda più precisa.';
+  const { error } = await admin.from('messaggi').insert({ testo: testo.slice(0, 20_000), creato_da: ASSISTENTE, preventivo_id: q.preventivo_id || null, risposta_a: q.id });
+  return error ? json(500, { error: error.message }) : json(200, { ok: true });
+}
+
 export async function POST(req: Request) {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return json(500, { error: 'Sul server manca SUPABASE_SERVICE_ROLE_KEY (Vercel → Settings → Environment Variables).' });
@@ -57,6 +117,7 @@ export async function POST(req: Request) {
   if (!row || !row.attivo) return json(403, { error: 'Utente non attivo.' });
 
   const b = await req.json().catch(() => null);
+  if (b?.azione === 'rispondi') return rispondi(admin, me, b);
   const chat = String(b?.chat || '').slice(0, 60_000).trim();
   if (!chat) return json(400, { error: 'Nessun messaggio da riassumere.' });
   const commesse = (Array.isArray(b?.commesse) ? b.commesse : []).slice(0, 400)
@@ -83,10 +144,5 @@ export async function POST(req: Request) {
       preventivo_id: ids.has(x.preventivo_id) ? x.preventivo_id : null,
       da_fare: (Array.isArray(x.da_fare) ? x.da_fare : []).map((d: any) => ({ cosa: String(d.cosa || ''), chi: String(d.chi || '').toLowerCase(), entro: date.test(d.entro) ? d.entro : '' })),
     });
-  } catch (e) {
-    if (e instanceof Anthropic.AuthenticationError) return json(500, { error: 'Chiave ANTHROPIC_API_KEY non valida.' });
-    if (e instanceof Anthropic.RateLimitError) return json(429, { error: 'Troppe richieste o credito esaurito su Anthropic: riprova tra poco.' });
-    if (e instanceof Anthropic.APIError) return json(502, { error: `Errore dal servizio AI (${e.status}): ${e.message}` });
-    return json(500, { error: (e as Error).message });
-  }
+  } catch (e) { return errAI(e); }
 }

@@ -11,7 +11,7 @@ import { aggiornaDoc, chiediAssistente, online, salvaNota, salvaScadenza } from 
 import { apriGmail } from './Email';
 import { TabellaVarianti, scaricaOfferte } from './Varianti';
 import { archVarianti } from '../store/actions';
-import { PANNELLO, apriPannello } from './Squadra';
+import { PANNELLO, apriPannello } from './pannelli';
 
 type Voce = { ruolo: 'tu' | 'ai' | 'err'; testo: string; proposte?: Proposta[] };
 const cap = (g: string) => g.charAt(0) + g.slice(1).toLowerCase();

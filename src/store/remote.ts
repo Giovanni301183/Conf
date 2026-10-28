@@ -379,7 +379,8 @@ function leaveDocumenti() { if (docCh) supabase!.removeChannel(docCh); docCh = n
 const SQ_MAX = 300;
 export const squadra = { mm: [] as Messaggio[], err: '', visto: '' };
 const KEY_VISTO = 'tracker_prev_squadra_visto_v1';
-const sqErr = (m: string) => (/messaggi/.test(m) ? 'manca la migrazione 20261029000000_squadra.sql (va eseguita nel SQL Editor di Supabase)' : m);
+const sqErr = (m: string) => (/preventivo_id|risposta_a|menzioni/.test(m) ? 'per stanze, risposte e @nomi manca la migrazione 20261029010000_squadra_stanze.sql (va eseguita nel SQL Editor di Supabase)'
+  : /messaggi/.test(m) ? 'manca la migrazione 20261029000000_squadra.sql (va eseguita nel SQL Editor di Supabase)' : m);
 async function loadMessaggi() {
   const { data, error } = await supabase!.from('messaggi').select('*').order('creato', { ascending: false }).limit(SQ_MAX);
   if (error) { squadra.err = sqErr(error.message); squadra.mm = []; return; }
@@ -391,10 +392,28 @@ export function chatVista() {
   if (t <= squadra.visto) return;
   squadra.visto = t; const v = load(KEY_VISTO) || {}; v[mioEmail()] = t; store(KEY_VISTO, v);
 }
-export async function scriviMessaggio(testo: string, documento_id: string | null = null): Promise<string> {
-  const { error } = await supabase!.from('messaggi').insert({ testo: testo.trim() || null, documento_id });
+/** Nuovo messaggio. Stanza, risposta e menzioni si mandano solo se ci sono (così il Generale va anche senza la seconda migrazione). */
+export async function scriviMessaggio(testo: string, documento_id: string | null = null, extra: { preventivo_id?: string | null; risposta_a?: string | null; menzioni?: string[] } = {}): Promise<{ errore: string; id?: string }> {
+  const v: Record<string, unknown> = { testo: testo.trim() || null, documento_id };
+  if (extra.preventivo_id) v.preventivo_id = extra.preventivo_id;
+  if (extra.risposta_a) v.risposta_a = extra.risposta_a;
+  if (extra.menzioni?.length) v.menzioni = extra.menzioni;
+  const { data, error } = await supabase!.from('messaggi').insert(v).select('id').single();
+  if (error) return { errore: sqErr(error.message) };
+  await loadMessaggi(); return { errore: '', id: data.id };
+}
+/** Sposta un messaggio nella stanza di una commessa (o di nuovo nel Generale). */
+export async function spostaMessaggio(id: string, preventivo_id: string | null): Promise<string> {
+  const { error } = await supabase!.from('messaggi').update({ preventivo_id }).eq('id', id);
   if (error) return sqErr(error.message);
   await loadMessaggi(); return '';
+}
+/** @assistente in chat: il server legge gli ultimi messaggi della stanza e scrive la risposta come messaggio (la vedono tutti). */
+export async function assistenteInChat(body: { domanda: string; stanza: string | null; chat: string; commesse: unknown[] }): Promise<void> {
+  const r = await fetch('/api/squadra', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify({ azione: 'rispondi', ...body }) });
+  const j = await r.json().catch(() => ({ error: `Risposta non valida dal server (${r.status})` }));
+  if (!r.ok) throw new Error(j.error || `Errore ${r.status}`);
+  await loadMessaggi();
 }
 export async function eliminaMessaggio(id: string): Promise<string> {
   const { error } = await supabase!.from('messaggi').delete().eq('id', id);

@@ -8,6 +8,7 @@ import { toast } from '../store/actions';
 import { persone } from '../domain/calendario';
 import { ModuloEmail, contestoEmail } from '../components/Email';
 import { aggiornaDoc, assegnaNota, caricaFile, ricaricaDocumenti, cloud, eliminaDoc, leggendo, leggiScheda, linkAnteprime, linkDoc, mioEmail, online, puoGestireDoc, salvaNota, type PatchDoc } from '../store/remote';
+import { apriChat } from '../components/pannelli';
 
 const nomeDi = (email: string) => cloud.colleghi.find(u => u.email === email)?.nome || email.split('@')[0];
 const quandoDoc = (iso: string) => new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -295,7 +296,8 @@ export function Documenti() {
         {CARTELLE.map(([k, l]) => <button key={k} className={cart === k ? 'on' : ''} onClick={() => vai(k)}><span>{l}</span><em>{n[k] || ''}</em></button>)}
       </nav>
       <section className="card">
-        <h2 style={{ marginTop: 0 }}>{cart ? nomeCartella(cart) : 'Tutti i documenti'} <span className="muted small">· {S.prev._nome}</span></h2>
+        <h2 style={{ marginTop: 0, display: 'flex', alignItems: 'baseline', gap: 6 }}>{cart ? nomeCartella(cart) : 'Tutti i documenti'} <span className="muted small" style={{ flex: 1 }}>· {S.prev._nome}</span>
+          <button className="btn s" onClick={() => apriChat(id)} title="Apre la chat di squadra nella stanza di questa commessa">💬 Discussione</button></h2>
         <DocPanel preventivo={id} cartella={cart} />
       </section>
     </div>
