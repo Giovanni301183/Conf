@@ -77,7 +77,7 @@ export function Mappa() {
         <div className="card mapcard">
           <div className="maphead">
             <span><b>{conPos.length}</b> impiant{conPos.length === 1 ? 'o' : 'i'} sulla mappa · {fN(T.kwp, 0)} kWp · {eur(T.prezzo)}</span>
-            <span className="klegend">{['bozza', 'inviato', 'vinto', 'perso'].map(k => <StatoTag key={k} k={k} />)}<span className="muted small">grandezza = kWp</span></span>
+            <span className="klegend">{['bozza', 'inviato', 'vinto', 'perso', 'alternativa'].map(k => <StatoTag key={k} k={k} />)}<span className="muted small">grandezza = kWp</span></span>
           </div>
           {piazza && <div className="mapmode">Clic sulla mappa per posizionare <b>{S.arch.find(a => a.id === piazza)?.nome}</b> <button className="btn s" onClick={() => setPiazza(null)}>Annulla</button></div>}
           <div ref={box} className={`map ${piazza ? 'aim' : ''}`} />

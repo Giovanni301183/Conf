@@ -38,3 +38,16 @@ desktop.ini
 
 # File temporanei di Excel/Office
 ~$*
+
+# Copie di sicurezza del database (scripts/backup.py)
+backup/
+
+# Flussi n8n con il codice di bypass Vercel (scripts/n8n-flussi.py)
+n8n/da-importare/
+
+# Segnalazioni: offerte, screenshot e file dei clienti da controllare (restano solo su questo PC)
+problemi/
+
+# Python (DXF degli impianti fissi)
+__pycache__/
+.venv/

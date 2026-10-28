@@ -1,0 +1,10 @@
+Comandi del bot: in @BotFather scrivi /setcommands, scegli il bot e incolla le righe qui sotto (senza questa intestazione).
+
+urgente - Segnala un'urgenza (es. /urgente mancano bulloni commessa Ripo)
+preventivo - Nuovo preventivo da compilare (es. /preventivo Rossi Srl)
+oggi - Agenda di oggi
+settimana - Agenda dei prossimi 7 giorni
+mie - Solo le voci mie o assegnate a me
+collega - Collega il tuo account (codice dal pulsante Telegram nell'app)
+id - Id di questa chat
+aiuto - Cosa puo' fare l'assistente

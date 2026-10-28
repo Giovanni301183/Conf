@@ -118,7 +118,7 @@ export function lavorWorkbook(){
   if(!D.righe.length)s1.rows.push({c:[{v:'Nessun tracker',s:S_.muted}]});
   if(D.imp.length){s1.rows.push({c:[]},{h:20,c:[{v:'Componenti di impianto',s:S_.sec}]});
     s1.rows.push(hdr(['Codice','Descrizione','','','','','','','','Q.tà'],[9],[]));
-    for(const x of D.imp){s1.rows.push({c:[{v:x.code,s:S_.code},{v:x.desc,s:S_.txt},...Array(7).fill({s:S_.txt}),{v:x.q,s:S_.intB}]});const r=s1.rows.length;s1.merges.push(`B${r}:I${r}`);}
+    for(const x of D.imp){s1.rows.push({c:[{v:x.art??x.code,s:S_.code},{v:x.desc,s:S_.txt},...Array(7).fill({s:S_.txt}),{v:x.q,s:S_.intB}]});const r=s1.rows.length;s1.merges.push(`B${r}:I${r}`);}
     const r=s1.rows.length-D.imp.length;s1.merges.push(`B${r}:I${r}`);}
   s1.rows.push({c:[]},{c:[]},{c:[{v:'Redatto da',s:S_.lab},{s:S_.fill},{s:S_.fill},{},{v:'Approvato da',s:S_.lab},{s:S_.fill},{s:S_.fill},{},{v:'Data',s:S_.lab},{s:S_.fill}]});
 
@@ -128,7 +128,7 @@ export function lavorWorkbook(){
   const notaRow=(sh,n)=>{sh.rows.push({c:[]},{c:[{v:nota,s:S_.sub}]});sh.merges.push(`A${sh.rows.length}:${xcol(n-1)}${sh.rows.length}`);};
   const N2=11, s2:any={name:'Produzione',cols:[20,40,13,9,11,11,12,12,13,10,7],...top('PRODUZIONE · DISTINTA PEZZI',N2),freeze:4,titles:'4:4',footer};
   s2.rows.push(hdr(['Codice','Descrizione','Lavorazione','L (m)','Q.tà / tracker','Q.tà totale','Peso unit. nero kg','Peso tot. nero kg','Peso tot. zincato kg','Zincatura','✓'],[3,4,5,6,7,8],[9,10]));
-  const pRow=x=>({c:[{v:x.code,s:S_.code},{v:x.desc,s:S_.txt},{v:LAV_T[x.t],s:S_.muted},x.L!==''?{v:x.L,s:S_.len}:{s:S_.txt},q(x.qPer),{...q(x.q),s:Number.isInteger(x.q)?S_.intB:S_.d2B},{v:x.kgU,s:S_.d2},{v:x.kgT,s:S_.d1},zc(x.kgZ),{v:x.zinc?'Sì':'No',s:S_.ctr},{s:S_.ctr}]});
+  const pRow=x=>({c:[{v:x.art??x.code,s:S_.code},{v:x.desc,s:S_.txt},{v:LAV_T[x.t],s:S_.muted},x.L!==''?{v:x.L,s:S_.len}:{s:S_.txt},q(x.qPer),{...q(x.q),s:Number.isInteger(x.q)?S_.intB:S_.d2B},{v:x.kgU,s:S_.d2},{v:x.kgT,s:S_.d1},zc(x.kgZ),{v:x.zinc?'Sì':'No',s:S_.ctr},{s:S_.ctr}]});
   for(const x of D.righe){band(s2,`R${x.i+1} · ${fN(x.n,0)} tracker · ${rigaCfg(x.r)}`,N2,S_.g1);
     for(const G of x.gruppi){band(s2,G.nome,N2,S_.g2);G.items.forEach(it=>s2.rows.push(pRow(it)));}
     s2.rows.push({c:[{v:`Totale R${x.i+1}`,s:S_.totT},...Array(6).fill({s:S_.totX}),zt(x.kg),zt(x.kgZ),{s:S_.totX},{s:S_.totX}]});}
@@ -141,7 +141,7 @@ export function lavorWorkbook(){
   s3.rows.push(hdr(['Profilo','Descrizione','Lunghezza m','Pezzi','Metri totali','Peso nero kg','Peso zincato kg','Zincatura','Righe','✓'],[2,3,4,5,6],[7,9]));
   for(const code of [...new Set(D.taglio.map(x=>x.code))]){const xs=D.taglio.filter(x=>x.code===code);
     band(s3,`${code} · ${xs[0].desc}`,N3,S_.g2);
-    for(const x of xs)s3.rows.push({c:[{v:x.code,s:S_.code},{v:x.desc,s:S_.txt},{v:x.L,s:S_.len},{v:x.pz,s:S_.intB},{v:x.pz*x.L,s:S_.d2},{v:x.kg,s:S_.d1},zc(x.kgZ),{v:x.zinc?'Sì':'No',s:S_.ctr},{v:[...x.righe].join(', '),s:S_.muted},{s:S_.ctr}]});
+    for(const x of xs)s3.rows.push({c:[{v:x.art??x.code,s:S_.code},{v:x.desc,s:S_.txt},{v:x.L,s:S_.len},{v:x.pz,s:S_.intB},{v:x.pz*x.L,s:S_.d2},{v:x.kg,s:S_.d1},zc(x.kgZ),{v:x.zinc?'Sì':'No',s:S_.ctr},{v:[...x.righe].join(', '),s:S_.muted},{s:S_.ctr}]});
     s3.rows.push({c:[{v:`Totale ${code}`,s:S_.totT},{s:S_.totX},{s:S_.totX},{v:xs.reduce((a,x)=>a+x.pz,0),s:st({b:1,bg:TOT,bd:'all',nf:'#,##0'})},{v:xs.reduce((a,x)=>a+x.pz*x.L,0),s:st({b:1,bg:TOT,bd:'all',nf:'#,##0.00'})},{v:xs.reduce((a,x)=>a+x.kg,0),s:S_.totN},zt(xs.reduce((a,x)=>a+x.kgZ,0)),{s:S_.totX},{s:S_.totX},{s:S_.totX}]});}
   if(!D.taglio.length)s3.rows.push({c:[{v:'Nessun profilo da tagliare',s:S_.muted}]});
   else notaRow(s3,N3);
@@ -151,7 +151,7 @@ export function lavorWorkbook(){
   s4.rows.push(hdr(['Codice','Descrizione','U.M.','Quantità','Peso nero kg','Peso zincato kg','Zincatura','Costo unit.','Costo totale','Fornitore','N. ordine','Consegna'],[3,4,5,7,8],[2,6]));
   for(const g of D.ordini){band(s4,g.cat,N4,S_.g1); let ct=0,kt=0,kz=0;
     for(const x of g.items){ct+=x.cost;kt+=x.kg;kz+=x.kgZ;
-      s4.rows.push({c:[{v:x.code,s:S_.code},{v:x.desc,s:S_.txt},{v:x.um,s:S_.ctr},x.um==='m'?{v:x.qty,s:S_.d2B}:{...q(x.qty),s:S_.intB},{v:x.kg,s:S_.d1},zc(x.kgZ),{v:x.t==='comm'?'':x.zinc?'Sì':'No',s:S_.ctr},{v:x.qty?x.cost/x.qty:0,s:S_.eur},{v:x.cost,s:S_.eur},{s:S_.fill},{s:S_.fill},{s:S_.fill}]});
+      s4.rows.push({c:[{v:x.art??x.code,s:S_.code},{v:x.desc,s:S_.txt},{v:x.um,s:S_.ctr},x.um==='m'?{v:x.qty,s:S_.d2B}:{...q(x.qty),s:S_.intB},{v:x.kg,s:S_.d1},zc(x.kgZ),{v:x.t==='comm'?'':x.zinc?'Sì':'No',s:S_.ctr},{v:x.qty?x.cost/x.qty:0,s:S_.eur},{v:x.cost,s:S_.eur},{s:S_.fill},{s:S_.fill},{s:S_.fill}]});
       if(x.sd)for(const c of x.sd)s4.rows.push({c:[{v:'↳ '+c.c,s:S_.sdT},{v:c.d,s:S_.sdT},{v:'pz',s:S_.ctr},{v:x.qty*num(c.q),s:S_.sdN},{s:S_.txt},{s:S_.txt},{s:S_.txt},{v:num(c.p),s:S_.sdE},{v:x.qty*num(c.q)*num(c.p),s:S_.sdE},{s:S_.fill},{s:S_.fill},{s:S_.fill}]});}
     s4.rows.push({c:[{v:`Totale ${g.cat.toLowerCase()}`,s:S_.totT},...Array(3).fill({s:S_.totX}),{v:kt,s:S_.totN},zt(kz),{s:S_.totX},{s:S_.totX},{v:ct,s:S_.totE},{s:S_.totX},{s:S_.totX},{s:S_.totX}]});}
   s4.rows.push({c:[]},{c:[{v:'TOTALE COMMESSA',s:S_.totT},...Array(3).fill({s:S_.totX}),{v:D.kg,s:S_.totN},zt(D.kgZ),{s:S_.totX},{s:S_.totX},{v:D.cost,s:S_.totE},{s:S_.totX},{s:S_.totX},{s:S_.totX}]});
@@ -257,12 +257,12 @@ export function downloadMontXlsx(){
 export function csvRow(a){return a.map(x=>typeof x==='number'?String(Math.round(x*10000)/10000).replace('.',','):`"${String(x??'').replace(/"/g,'""')}"`).join(';');}
 export function exportCSV(){
   const rows=[['Riga','Gruppo','Categoria','Sottogruppo','Codice','Descrizione','Lunghezza m','Q.tà','Peso kg','Materiale','Zincatura','Lavorazione','Acquisto','Altro','Totale']];
-  for(const l of R.lines)rows.push([l.rigaLabel,l.gruppo,l.cat,l.sub,l.code,l.desc,l.L,l.q,l.peso,l.mat,l.zinc,l.lav,l.acq,l.altro,tot(l)]);
+  for(const l of R.lines)rows.push([l.rigaLabel,l.gruppo,l.cat,l.sub,l.art??l.code,l.desc,l.L,l.q,l.peso,l.mat,l.zinc,l.lav,l.acq,l.altro,tot(l)]);
   rows.push(['TOTALE','','','','','','','',R.T.peso,R.T.mat,R.T.zinc,R.T.lav,R.T.acq,R.T.altro,R.total]);
   download(`distinta_costi_${(S.prev.rif||'preventivo').replace(/[^\w-]+/g,'_')}.csv`,'﻿'+rows.map(csvRow).join('\r\n'),'text/csv');
 }
 export function exportListinoCSV(){
-  const rows=[['Categoria','Sottogruppo','Tipo','Codice','Descrizione','kg/m o kg/pz','€/kg acquisto','€/kg zincatura','€/kg lavorazione','Costo €/pz']];
-  for(const it of S.data.listino)rows.push([it.cat,it.sub,it.t,it.c,it.d,num(it.kg),it.t==='comm'?'':num(it.acq),it.t==='comm'?'':num(it.zn),it.t==='comm'?'':num(it.lav),it.t==='comm'?unitCost(it):'']);
+  const rows=[['Categoria','Sottogruppo','Tipo','Codice','Codice articolo','Descrizione','kg/m o kg/pz','€/kg acquisto','€/kg zincatura','€/kg lavorazione','Costo €/pz']];
+  for(const it of S.data.listino)rows.push([it.cat,it.sub,it.t,it.c,it.art||'',it.d,num(it.kg),it.t==='comm'?'':num(it.acq),it.t==='comm'?'':num(it.zn),it.t==='comm'?'':num(it.lav),it.t==='comm'?unitCost(it):'']);
   download('listino_tracker.csv','﻿'+rows.map(csvRow).join('\r\n'),'text/csv');
 }

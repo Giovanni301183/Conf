@@ -1,0 +1,54 @@
+/* Modulo del preventivo dentro Telegram: colori del tema di Telegram (chiaro o scuro), con valori di riserva fuori da Telegram. */
+:root{
+  --bg:var(--tg-theme-bg-color,#fff); --bg2:var(--tg-theme-secondary-bg-color,#f1f3f5); --ink:var(--tg-theme-text-color,#1f2b33);
+  --muted:var(--tg-theme-hint-color,#7a868c); --acc:var(--tg-theme-button-color,#2f6fb0); --acc-ink:var(--tg-theme-button-text-color,#fff);
+  --line:color-mix(in srgb,var(--muted) 30%,transparent); --warn:#b7791f;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg2);color:var(--ink);font:15px/1.45 -apple-system,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:640px;margin:0 auto;padding:14px 12px 96px}
+h1{font-size:19px;margin:4px 4px 12px}
+h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 10px;font-weight:600}
+h3{font-size:14px;margin:14px 0 6px}
+section{background:var(--bg);border-radius:14px;padding:14px;margin-bottom:12px}
+.campo{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;min-width:0}
+.campo>span{font-size:13px;color:var(--muted)}
+.campo small{font-size:12px;color:var(--muted)}
+input,select{width:100%;font:inherit;color:var(--ink);background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 11px;min-height:42px}
+input:focus,select:focus{outline:2px solid var(--acc);outline-offset:-1px}
+.due{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.seg{display:flex;background:var(--bg2);border-radius:10px;padding:3px;gap:3px}
+.seg button{flex:1;min-height:36px;border:0;border-radius:8px;background:transparent;color:var(--ink);font:inherit;font-size:14px;padding:0 6px}
+.seg button.on{background:var(--acc);color:var(--acc-ink);font-weight:600}
+.riga{border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
+.rtesta{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.fisso{display:flex;align-items:center;min-height:42px}
+button{font:inherit;cursor:pointer}
+.barra button,.azioni button,.sec,.file{border:0;border-radius:12px;min-height:46px;padding:0 16px;font-weight:600}
+.barra{position:fixed;left:0;right:0;bottom:0;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--line)}
+.barra button{display:block;width:100%;max-width:616px;margin:0 auto;background:var(--acc);color:var(--acc-ink);font-size:16px}
+.barra button:disabled{opacity:.6}
+.azioni{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.azioni button{flex:1;background:var(--acc);color:var(--acc-ink)}
+.sec{background:var(--bg2);color:var(--acc);width:100%;margin-bottom:10px}
+.azioni .sec{margin:0}
+.x{border:0;background:none;color:#c0453a;font-size:13.5px}
+.link{border:0;background:none;color:var(--acc);padding:4px 0 10px;font-size:14px}
+.file{display:flex;align-items:center;justify-content:center;background:var(--bg2);color:var(--acc);margin-top:10px}
+.file input{display:none}
+.lay{width:100%;border-radius:10px;border:1px solid var(--line);background:#fff}
+.muted{color:var(--muted);font-size:13.5px}
+.err{color:#c0453a}
+.riep{white-space:pre-wrap;font:inherit;background:var(--bg2);border-radius:10px;padding:10px;margin:0}
+.prev{outline:2px solid var(--acc)}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0}
+dt{color:var(--muted);font-size:13.5px}
+dd{margin:0;font-weight:500;overflow-wrap:anywhere}
+.avv{margin-top:12px;font-size:13.5px;color:var(--warn)}
+.avv p{margin:4px 0}
+@media (max-width:360px){.due{grid-template-columns:1fr}}
+/* Servizi opzionali: spunta, nome, prezzo e ✕ su una riga; sotto i 420 px il prezzo va a capo */
+.servizio{display:grid;grid-template-columns:24px minmax(0,1fr) 120px 42px;gap:6px;align-items:center;margin-bottom:8px}
+.servizio input[type=checkbox]{width:20px;height:20px;min-height:0;accent-color:var(--acc)}
+.servizio .x{width:42px;min-height:42px;padding:0;margin:0}
+@media (max-width:420px){.servizio{grid-template-columns:24px minmax(0,1fr) 42px}.servizio .prz{grid-column:2;grid-row:2}}

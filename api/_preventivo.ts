@@ -1,0 +1,354 @@
+// Preventivo da Telegram (azioni "preventivo", "offerta" e "layout" di /api/agenda, e modulo di /api/modulo; il trattino basso tiene
+// questo file fuori dalle route di Vercel).
+// "preventivo" crea un preventivo nell'archivio, o ne cambia uno esistente, con i campi detti all'assistente o scritti nel modulo;
+// lo calcola e manda l'offerta. "offerta" rimanda l'offerta PowerPoint di un preventivo gia' salvato, cosi' com'e'.
+// "layout" mette nel preventivo il DXF o l'immagine mandati al bot (file_id di Telegram); anche "preventivo" accetta file_id.
+// Da un DXF si contano i tracker: un preventivo nuovo senza righe le prende da li' (agrivoltaico).
+// "margini" manda in chat privata il riepilogo dei margini di un preventivo salvato, come la scheda Margini dell'app.
+// "varianti" crea copie di un preventivo salvato cambiando solo il materiale (profilo, asse, omega): vedi src/domain/varianti.ts.
+// Il listino non si tocca mai da qui: un preventivo nuovo usa quello condiviso, uno esistente il listino salvato con lui.
+// L'offerta arriva in PDF nella chat privata con il bot (mai nel gruppo: ci sono i prezzi), con TELEGRAM_BOT_TOKEN e CONVERTAPI_TOKEN su Vercel.
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { compute } from '../src/domain/compute.js';
+import { eur, fN, fP, fileName } from '../src/domain/format.js';
+import { MCATS, MIN_CUSC, OPT_LCUSC, OPT_LFOND, clone, defRiga, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../src/domain/model.js';
+import { pilastri } from '../src/domain/referenze.js';
+import { margineSpot, testoMargini } from '../src/domain/margini.js';
+import { etichetta, nomeVariante, profDa, rigaVariante, variante, type Variante } from '../src/domain/varianti.js';
+import { PROGETTO, compilaPptxBytes, layoutImg, offPrev, prezzoTesto } from '../src/domain/offerta.js';
+import { datiOffertaDi, modelloOfferta } from '../src/domain/offertaFisso.js';
+import { layoutDaTelegram } from './_layout.js';
+import { inPdf } from './_pdf.js';
+
+type Db = SupabaseClient;
+const fail = (errore: string) => ({ ok: false, errore });
+const vuoto = (v: unknown) => v === '' || v == null;
+// L'assistente manda gli elenchi come testo JSON; accetta anche l'oggetto gia' pronto.
+const daJson = (v: unknown) => { if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return undefined; } };
+const breve = (v: unknown, max: number) => String(v).trim().slice(0, max);
+const MAX_RIF = 60;   // il riferimento e' il titolo della copertina e della slide Layout: solo un nome breve
+
+// Opzioni della configurazione di una riga, come nella scheda Configura: [valore salvato, come si scrive].
+// I profili dei pilastri sono quelli spuntati nel listino (opzioni(data)).
+export const OFFERTA_TESTI = ['email', 'zona', 'resa', 'pagamento', 'consegna', 'validita'] as const;
+export const OPZIONI = {
+  asse: [['2,5', '2,5 mm'], ['3,0', '3,0 mm']],
+  omega: [['2,0', '2,0 mm'], ['1,8', '1,8 mm']],
+  lFond: OPT_LFOND, lCusc: OPT_LCUSC, minCusc: MIN_CUSC,
+};
+// Componenti di impianto nel modulo: [campo del modulo, chiave in prev.imp, nome]. Quadri e sensori della parte elettronica.
+export const IMPIANTO = [['quadri_campo', 'quadA', 'quadri di campo'], ['quadri_generali', 'quadGen', 'quadri generali'],
+  ['centralina', 'box', 'centraline meteo'], ['piranometro', 'piran', 'piranometri'], ['anemometro', 'anem', 'anemometri'],
+  ['temp_aria', 'termAria', "sensori di temperatura dell'aria"], ['temp_pannello', 'termCont', 'sensori di temperatura dei pannelli']] as const;
+export const opzioni = (data: any) => ({ prof: pilastri(data), ...OPZIONI });
+const vicino = (lista: number[], v: number) => lista.find(x => Math.abs(x - v) < 1e-6);
+
+/** Una riga tracker dai campi detti o scritti nel modulo; i dati tecnici non detti restano quelli predefiniti. Stringa = errore. */
+function rigaDa(r: any, taglie: string[], data: any): any {
+  const n = num(r?.n), taglia = String(num(r?.taglia)), tipo = /bass/i.test(String(r?.tipo ?? '')) ? 'Basso' : 'Agrivoltaico';
+  if (!(n > 0 && Number.isInteger(n))) return `Numero di tracker non valido: ${r?.n ?? 'mancante'}.`;
+  if (!taglie.includes(taglia)) return `Taglia ${r?.taglia ?? 'mancante'} non a listino: le taglie sono ${taglie.join(', ')} moduli.`;
+  const riga: any = { ...defRiga(), taglia, n, tipo };
+  if (!vuoto(r.prof)) { try { riga.prof = profDa(r.prof, data); } catch (e) { return (e as Error).message; } }
+  for (const k of ['asse', 'omega'] as const) if (!vuoto(r[k])) {
+    const o = OPZIONI[k].find(([v]) => Math.abs(num(v) - num(r[k])) < 1e-6);
+    if (!o) return `Spessore ${k} ${r[k]} non previsto: ${OPZIONI[k].map(x => x[1]).join(' o ')}.`;
+    riga[k] = o[0];
+  }
+  if (!vuoto(r.lFond) && tipo !== 'Basso') {
+    const v = vicino(OPT_LFOND, num(r.lFond)); if (v == null) return `Fondazione ${r.lFond} m non prevista: da ${fN(OPT_LFOND[0], 1)} a ${fN(OPT_LFOND.at(-1), 1)} m.`;
+    riga.lFond = v;
+  }
+  if (!vuoto(r.lCusc)) {
+    const v = vicino(OPT_LCUSC, num(r.lCusc));
+    if (v == null || v < MIN_CUSC[tipo] - 1e-9) return `Cuscinetto ${r.lCusc} m non previsto per ${tipo.toLowerCase()}: da ${fN(MIN_CUSC[tipo], 1)} a ${fN(OPT_LCUSC.at(-1), 1)} m.`;
+    riga.lCusc = v;
+  }
+  if (riga.lCusc < MIN_CUSC[tipo]) riga.lCusc = MIN_CUSC[tipo];   // come fixRiga nell'app
+  return riga;
+}
+
+/** Applica al preventivo i campi detti all'assistente o scritti nel modulo; quelli vuoti restano come sono. Ritorna l'errore da spiegare. */
+export function applica(P: any, b: any, data: any): string | null {
+  const O = offPrev(P);
+  if (!vuoto(b.cliente)) P.cliente = breve(b.cliente, 120);
+  if (b.rif != null) {
+    const r = String(b.rif).trim();
+    if (r.length > MAX_RIF) return `Il riferimento è il titolo della copertina: solo un nome breve (massimo ${MAX_RIF} caratteri). I dati tecnici (profilo, asse, omega, fondazione) vanno nelle righe tracker.`;
+    P.rif = r;
+  }
+  if (!vuoto(b.modulo)) P.modulo.marca = breve(b.modulo, 80);
+  if (!vuoto(b.wp)) { const wp = num(b.wp); if (!(wp >= 100 && wp <= 1000)) return 'Potenza del modulo non valida: va in W, es. 600.'; P.modulo.wp = wp; }
+  if (b.localita != null) P.luogo = { ...P.luogo, nome: breve(b.localita, 80) };
+  if (b.referente != null) O.referente = breve(b.referente, 80);
+  if (!vuoto(b.rev)) O.rev = breve(b.rev, 5);
+  // Informazioni generali e condizioni commerciali dell'offerta: testi brevi, vuoto = «–» (il pagamento «Da concordare»).
+  for (const k of OFFERTA_TESTI) if (b[k] != null) O[k] = breve(b[k], 120);
+
+  if (!vuoto(b.righe)) {
+    const rr = daJson(b.righe);
+    if (!Array.isArray(rr) || !rr.length) return 'Righe tracker non leggibili: servono numero, taglia (moduli) e tipo per ogni riga.';
+    const righe: any[] = [];
+    for (const r of rr) { const x = rigaDa(r, Object.keys(data.sizes), data); if (typeof x === 'string') return x; righe.push(x); }
+    P.righe = righe;
+  }
+  for (const [k, campo, nome] of IMPIANTO)
+    if (!vuoto(b[k])) { const q = num(b[k]); if (!(q >= 0 && Number.isInteger(q))) return `Numero di ${nome} non valido.`; P.imp[campo] = q; }
+  // Condizioni di progetto e dati del modulo (slide "Dati di progetto"): testi brevi, vuoto = «–» nell'offerta.
+  if (b.prog && typeof b.prog === 'object') for (const [k] of PROGETTO) if (b.prog[k] != null) O.prog[k] = breve(b.prog[k], 40);
+  if (b.lat != null && b.lng != null) {
+    const lat = num(b.lat), lng = num(b.lng);
+    if (b.lat === '' || b.lng === '') P.luogo = { ...P.luogo, lat: null, lng: null };
+    else if (lat >= 35 && lat <= 48 && lng >= 6 && lng <= 19) P.luogo = { ...P.luogo, lat, lng };
+    else return 'Coordinate non valide: devono essere in Italia (es. 37,80 e 12,44).';
+  }
+
+  const ric = P.marg.modo === 'ricarico', okM = (v: number) => (ric ? v > -100 : v < 100);
+  if (!vuoto(b.margine)) { const m = num(b.margine); if (!okM(m)) return 'Margine non valido: con il margine sul prezzo deve essere sotto il 100 %.'; P.marg.gen = m; }
+  if (!vuoto(b.margini)) {
+    const mm = daJson(b.margini);
+    if (!mm || typeof mm !== 'object' || Array.isArray(mm)) return 'Margini per categoria non leggibili.';
+    for (const [c0, v] of Object.entries(mm)) {
+      const c = MCATS.find(x => x === String(c0).trim().toUpperCase());
+      if (!c) return `Categoria "${c0}" sconosciuta: le categorie sono ${MCATS.join(', ')}.`;
+      if (vuoto(v)) { P.marg.cat[c] = ''; continue; }   // vuoto = torna al margine generale
+      if (!okM(num(v))) return `Margine di ${c} non valido.`;
+      P.marg.cat[c] = num(v);
+    }
+  }
+  // Prezzi dell'offerta: trasporto e posa vanno tali e quali nell'offerta (0 = escluso / non inclusa; il trasporto anche a parole); pieno = prezzo barrato.
+  for (const k of ['trasporto', 'posa', 'pieno'] as const) if (b[k] != null) {
+    if (b[k] === '') { O[k] = ''; continue; }
+    if (k === 'trasporto' && prezzoTesto(b[k])) { O[k] = breve(b[k], 40); continue; }   // «Incluso»: va tale e quale
+    const v = num(b[k]); if (!(v >= 0)) return `Importo ${k === 'pieno' ? 'del prezzo pieno' : 'del ' + k} non valido.`; O[k] = v;
+  }
+  // Servizi opzionali (slide «Forniture e servizi opzionali»): elenco intero come nel modulo; null = elenco standard.
+  if (b.servizi === null) delete O.servizi;
+  else if (b.servizi != null) {
+    const ss = daJson(b.servizi);
+    if (!Array.isArray(ss) || ss.length > 20) return 'Servizi opzionali non leggibili: serve un elenco (al massimo 20) di voce, prezzo e in offerta sì/no.';
+    O.servizi = ss.filter((x: any) => x && !vuoto(x.voce)).map((x: any) => ({ ...(x.k === 'trasporto' || x.k === 'posa' ? { k: x.k } : {}),
+      voce: breve(x.voce, 120), prezzo: breve(x.prezzo ?? '', 40), on: x.on !== false }));
+  }
+  // Layout preparato nel modulo (DXF disegnato o immagine ridotta nel telefono); false = toglierlo.
+  if (b.layout === false) Object.assign(O, { layout: '', layoutW: 0, layoutH: 0, layoutNome: '', dxf: null });
+  else if (b.layout && typeof b.layout === 'object') {
+    const L = b.layout;
+    if (!/^data:image\/(png|jpeg);base64,/.test(String(L.url)) || String(L.url).length > 4e6 || !(num(L.w) > 0 && num(L.h) > 0)) return 'Layout non valido: ricaricalo (DXF, PNG o JPG).';
+    const dxf = L.dxf && typeof L.dxf === 'object' ? Object.fromEntries(Object.entries(L.dxf).map(([t, n]) => [String(num(t)), num(n)])) : null;
+    Object.assign(O, { layout: L.url, layoutW: num(L.w), layoutH: num(L.h), layoutNome: breve(L.nome || 'layout', 120), dxf });
+  }
+  return null;
+}
+
+/** Campi del modulo da un preventivo salvato, per riaprirlo e correggerlo. */
+export function campiModulo(P: any) {
+  const O = offPrev(P), s = (v: unknown) => (v == null ? '' : String(v));
+  return {
+    cliente: s(P.cliente), rif: s(P.rif), localita: s(P.luogo?.nome), referente: s(O.referente), rev: s(O.rev || '0'),
+    wp: s(P.modulo?.wp), modulo: s(P.modulo?.marca),
+    righe: P.righe.map((r: any) => ({ n: s(r.n), taglia: s(r.taglia), tipo: r.tipo, prof: r.prof, asse: r.asse, omega: r.omega, lFond: num(r.lFond), lCusc: num(r.lCusc) })),
+    ...Object.fromEntries(IMPIANTO.map(([k, c]) => [k, num(P.imp?.[c]) ? s(P.imp[c]) : ''])),
+    prog: Object.fromEntries(PROGETTO.map(([k]) => [k, s(O.prog[k])])), lat: s(P.luogo?.lat), lng: s(P.luogo?.lng),
+    margine: s(P.marg?.gen), margini: Object.fromEntries(MCATS.map(c => [c, s(P.marg?.cat?.[c])])),
+    trasporto: s(O.trasporto), posa: s(O.posa), pieno: s(O.pieno), servizi: Array.isArray(O.servizi) ? O.servizi : null, ...Object.fromEntries(OFFERTA_TESTI.map(k => [k, s(O[k])])),
+    layout: O.layout ? { url: O.layout, w: O.layoutW, h: O.layoutH, nome: O.layoutNome, dxf: O.dxf } : null,
+  };
+}
+
+/** Riepilogo per la chat: numero, righe, kWp, costo, prezzo e margine. */
+export function riepilogo(P: any, R: any) {
+  const mg = R.prezzo - R.total;
+  return [`📄 Preventivo N° ${P.num || '–'} · ${[P.cliente, P.rif].filter(Boolean).join(' · ') || 'senza nome'}`,
+    `${righeTxt(P)} · ${fN(R.kwp, 2)} kWp`,
+    `Costo ${eur(R.total)} · prezzo ${eur(R.prezzo)} · margine ${R.prezzo ? fP((mg / R.prezzo) * 100) : '–'}`,
+    `€/Wp vendita ${R.kwp ? fN(R.prezzo / (R.kwp * 1000), 4) : '–'}`].join('\n');
+}
+
+// Modello PowerPoint del settore del preventivo: dal disco della funzione (vercel.json → includeFiles) o, se manca, dal sito stesso.
+async function modello(P: any): Promise<Uint8Array> {
+  const file = modelloOfferta(P);
+  try { return await readFile(join(process.cwd(), 'public', 'offerta', file)); } catch { /* sotto */ }
+  const host = process.env.VERCEL_URL, by = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  if (!host) throw new Error('modello dell\'offerta non trovato');
+  const r = await fetch(`https://${host}/offerta/${file}`, { headers: by ? { 'x-vercel-protection-bypass': by } : {} });
+  if (!r.ok) throw new Error(`modello dell'offerta non trovato (${r.status})`);
+  return new Uint8Array(await r.arrayBuffer());
+}
+
+// La posa vuota nell'app viene dal totale della scheda Montaggio, che qui non si calcola: senza importo detto, "non inclusa".
+const offertaDi = (P: any, R: any, data: any) => {
+  const D = datiOffertaDi(P, R, data, 0);
+  return { D, avvisi: D.avvisi.filter(a => !/salvalo per assegnarlo/.test(a)) };
+};
+
+/** Compila l'offerta e la manda in PDF nella chat privata con il bot (il PowerPoint solo se il PDF non riesce). Ritorna l'errore, se c'e'. */
+async function inviaOfferta(P: any, R: any, data: any, chat: number): Promise<{ errore?: string; avvisi: string[] }> {
+  const { D, avvisi } = offertaDi(P, R, data);
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return { errore: "Sul server manca TELEGRAM_BOT_TOKEN (Vercel → Settings → Environment Variables): l'offerta non si può mandare.", avvisi };
+  const O = P.offerta;
+  const bytes = await compilaPptxBytes(await modello(P), D, layoutImg(O));
+  const nome = `Offerta_${P.num ? fileName(P.num) + '_' : ''}${fileName(P.cliente || P._nome || 'cliente')}${O.rev && O.rev !== '0' ? '_rev' + fileName(O.rev) : ''}`;
+  const pdf = await inPdf(bytes, nome + '.pptx');
+  if (!pdf) avvisi.unshift('PDF non disponibile in questo momento: ti ho mandato il PowerPoint.');
+  const fd = new FormData();
+  fd.append('chat_id', String(chat));
+  fd.append('caption', `Offerta N° ${P.num || '–'} · ${P.cliente || 'cliente'} · ${eur(R.prezzo)} + IVA`);
+  fd.append('document', new Blob([(pdf || bytes) as BlobPart]), nome + (pdf ? '.pdf' : '.pptx'));
+  const r = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, { method: 'POST', body: fd });
+  if (!r.ok) {
+    const j: any = await r.json().catch(() => ({}));
+    return { errore: r.status === 403 ? 'Non posso scriverti in privato: apri la chat con il bot e premi Avvia, poi riprova.' : `Telegram non ha accettato il file: ${j.description || r.status}`, avvisi };
+  }
+  return { avvisi };
+}
+
+/** Preventivo pronto da calcolare: caricato (id) o nuovo, con i campi applicati e l'eventuale layout da Telegram. */
+async function prepara(db: Db, b: any, oggi: string): Promise<{ errore: string } | { P: any; data: any; nuovo: boolean; daDxf: string }> {
+  const id = String(b.id ?? '').trim(), nuovo = !id;
+  let P: any, data: any;
+  if (id) {
+    const { data: e } = await db.from('preventivi').select('id, nome, prev, dati').eq('id', id).maybeSingle();
+    if (!e) return { errore: 'Preventivo non trovato: cercalo con cerca_commesse e usa il suo id.' };
+    P = normPrev(clone(e.prev)); P._id = e.id; P._nome = e.nome; data = e.dati;
+    // I comandi del bot (righe, materiali, margini, layout) sono dei tracker: di un impianto fisso per ora si manda solo l'offerta.
+    if (P.settore === 'fisso' && b.azione !== 'offerta')
+      return { errore: "È un preventivo di impianti fissi: dal bot per ora puoi solo mandarne l'offerta (azione offerta); le modifiche si fanno nell'app." };
+  }
+  if (!data) {
+    const { data: l } = await db.from('listino').select('dati').maybeSingle();
+    data = l?.dati || defaultData();
+  }
+  if (b.azione === 'offerta' || b.azione === 'layout') {
+    if (nuovo) return { errore: `Per ${b.azione === 'layout' ? 'mettere il layout' : "mandare un'offerta"} serve l'id del preventivo (da cerca_commesse).` };
+    if (b.azione === 'offerta') return { P, data, nuovo, daDxf: '' };
+    if (vuoto(b.file_id)) return { errore: 'Manca il file: mandami il DXF (come file) o una foto del layout.' };
+  }
+  let daDxf = '';
+  if (nuovo) { P = newPrev(); P.data = oggi; P.righe = []; }
+  const errore = applica(P, b, data);
+  if (errore) return { errore };
+  if (!vuoto(b.file_id)) {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) return { errore: 'Sul server manca TELEGRAM_BOT_TOKEN: non posso scaricare il file da Telegram.' };
+    try { Object.assign(offPrev(P), await layoutDaTelegram(token, String(b.file_id), String(b.file_nome ?? ''))); }
+    catch (e) { return { errore: 'Layout non caricato: ' + (e as Error).message }; }
+    const T = P.offerta.dxf as Record<string, number> | null;
+    if (T && !P.righe.length) {
+      P.righe = Object.entries(T).filter(([t]) => data.sizes[t]).map(([taglia, n]) => ({ ...defRiga(), taglia, n }));
+      daDxf = 'Righe tracker prese dal DXF (agrivoltaico): ' + righeTxt(P) + '. Falle confermare.';
+    }
+  }
+  if (!P.righe.some((r: any) => num(r.n) > 0)) return { errore: 'Mancano i tracker: dimmi quanti, di che taglia (moduli) e se agrivoltaico o basso.' };
+  if (!P.cliente) return { errore: 'Manca il cliente.' };
+  return { P, data, nuovo, daDxf };
+}
+
+/** Anteprima per il modulo: calcolo e testi dell'offerta, senza salvare ne' mandare niente. */
+/** Prezzo spot dal modulo: margini (generale e per categoria, spostati degli stessi punti) che portano il prezzo al valore scritto. */
+export async function spot(db: Db, b: any, oggi: string): Promise<Record<string, unknown>> {
+  const p = await prepara(db, { ...b, azione: 'preventivo', file_id: undefined }, oggi);
+  if ('errore' in p) return fail(p.errore);
+  const r = margineSpot(p.data, p.P, num(b.spot));
+  if ('errore' in r) return fail(r.errore);
+  return { ok: true, margine: String(r.marg.gen), margini: Object.fromEntries(MCATS.map(c => [c, r.marg.cat?.[c] == null ? '' : String(r.marg.cat[c])])),
+    delta: r.delta, prezzo: r.prezzo, testo: `Margini ${r.delta >= 0 ? '+' : ''}${fN(r.delta, 2)} punti → prezzo ${eur(r.prezzo)}` };
+}
+
+export async function anteprima(db: Db, b: any, oggi: string): Promise<Record<string, unknown>> {
+  const p = await prepara(db, { ...b, azione: 'preventivo', file_id: undefined }, oggi);
+  if ('errore' in p) return fail(p.errore);
+  const { P, data } = p, R = compute(data, P), { D, avvisi } = offertaDi(P, R, data), c = D.campi;
+  return { ok: true, testo: riepilogo(P, R), costo: R.total, prezzo: R.prezzo, kwp: R.kwp,
+    offerta: { titolo: c.nome_impianto, potenza: `${c.potenza_kwp} kWp · pannelli ${c.potenza_modulo_w} W`,
+      tracker: D.righe.map(r => `${r.n} × ${r.taglia} moduli`), prezzi: D.prezzi, servizi: D.liste.servizi, layout: P.offerta.layoutNome || '' },
+    avvisi: [...new Set([...R.warn, ...avvisi])] };
+}
+
+/** Salva il preventivo nell'archivio; uno nuovo prende id e il numero successivo. Ritorna l'errore, se c'e'. */
+async function salva(db: Db, P: any, R: any, data: any, email: string, nuovo: boolean): Promise<string | null> {
+  if (nuovo) {
+    const { data: nn } = await db.from('preventivi').select('num:prev->>num');
+    P.num = numSucc(P, (nn || []).map((x: any) => ({ prev: { num: x.num } })));
+    P._id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); P._nome = P._nome || [P.cliente, P.rif].filter(Boolean).join(' · ');
+  }
+  const riga: Record<string, unknown> = { id: P._id, nome: P._nome, cliente: P.cliente, rif: P.rif, data: P.data, salvato: new Date().toISOString(),
+    totale: R.total, prezzo: R.prezzo, kwp: R.kwp, n_tracker: R.nTracker, righe: righeTxt(P), prev: P, dati: data, modificato_da: email };
+  if (nuovo) riga.creato_da = email;
+  const { error } = await db.from('preventivi').upsert(riga);
+  return error ? error.message : null;
+}
+
+export async function preventivoBot(db: Db, b: any, email: string, chat: number, oggi: string): Promise<Record<string, unknown>> {
+  const p = await prepara(db, b, oggi);
+  if ('errore' in p) return fail(p.errore);
+  const { P, data, nuovo, daDxf } = p, R = compute(data, P);
+
+  if (b.azione !== 'offerta') {
+    const errore = await salva(db, P, R, data, email, nuovo);
+    if (errore) return fail(errore);
+  }
+
+  const testo = riepilogo(P, R);
+  if (b.invia === false || b.invia === 'false') return { ok: true, id: P._id, numero: P.num, nuovo, testo, avvisi: daDxf ? [daDxf] : [], offerta: 'non richiesta' };
+  const inv = await inviaOfferta(P, R, data, chat);
+  return { ok: true, id: P._id, numero: P.num, nuovo, testo, avvisi: daDxf ? [daDxf, ...inv.avvisi] : inv.avvisi,
+    offerta: inv.errore ? `non inviata: ${inv.errore}` : 'inviata nella chat privata con il bot' };
+}
+
+/** Varianti di un preventivo salvato (id): una copia per ogni materiale detto, ciascuna con il suo numero e la sua offerta
+ *  in chat privata, piu' il confronto. Una variante uguale al base non si ricrea: conta il base. */
+export async function variantiBot(db: Db, b: any, email: string, chat: number): Promise<Record<string, unknown>> {
+  const id = String(b.id ?? '').trim();
+  if (!id) return fail('Serve il preventivo base: cercalo con cerca_commesse, oppure crealo prima con il modulo.');
+  const { data: e } = await db.from('preventivi').select('id, nome, prev, dati').eq('id', id).maybeSingle();
+  if (!e) return fail('Preventivo non trovato: cercalo con cerca_commesse e usa il suo id.');
+  const base = normPrev(clone(e.prev)), data = e.dati;
+  base._id = e.id; base._nome = e.nome;
+  const vv = daJson(b.varianti) as Variante[];
+  if (!Array.isArray(vv) || !vv.length) return fail('Varianti non leggibili: servono profilo e/o asse per ognuna, es. [{"prof":"IPEA","asse":2.5}].');
+  if (vv.length > 8) return fail('Al massimo 8 varianti per volta.');
+  // Prima si controllano tutte: se una non va, non si crea niente.
+  const fatte: any[] = [], uguali: string[] = [];
+  for (const v of vv) {
+    let P: any;
+    try { P = variante(base, v, data); } catch (x) { return fail((x as Error).message); }
+    if (!P) uguali.push(etichetta(base));
+    else if (!fatte.some(f => etichetta(f) === etichetta(P))) fatte.push(P);
+  }
+  const Rb = compute(data, base), invia = b.invia !== false && b.invia !== 'false';
+  const righe = [`📊 Varianti di N° ${base.num} · ${base.cliente || ''}`, `Base: ${rigaVariante(base, Rb)}`];
+  const avvisi: string[] = [];
+  // Prima l'offerta del base, poi quelle delle varianti: in chat arrivano tutte quelle da confrontare.
+  if (invia && fatte.length) { const inv = await inviaOfferta(base, Rb, data, chat); if (inv.errore) avvisi.push(`Offerta N° ${base.num} non inviata: ${inv.errore}`); }
+  for (const P of fatte) {
+    P._nome = nomeVariante(e.nome, P);
+    const R = compute(data, P), errore = await salva(db, P, R, data, email, true);
+    if (errore) return fail(`Salvataggio non riuscito dopo ${righe.length - 2} varianti: ${errore}`);
+    righe.push(rigaVariante(P, R));
+    if (invia) {
+      const inv = await inviaOfferta(P, R, data, chat);
+      if (inv.errore) avvisi.push(`Offerta N° ${P.num} non inviata: ${inv.errore}`);
+    }
+  }
+  if (uguali.length) avvisi.push(`${uguali[0]} è già il preventivo base N° ${base.num}: non l'ho duplicato.`);
+  return { ok: true, creati: fatte.map(P => ({ id: P._id, numero: P.num, materiale: etichetta(P) })), testo: righe.join('\n'), avvisi,
+    offerte: invia ? 'base e varianti mandate nella chat privata con il bot' : 'non richieste' };
+}
+
+/** Riepilogo dei margini di un preventivo salvato (id), calcolato con il suo listino e mandato nella chat privata: mai nel gruppo. */
+export async function marginiBot(db: Db, b: any, chat: number): Promise<Record<string, unknown>> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return fail('Sul server manca TELEGRAM_BOT_TOKEN: non posso mandare i margini.');
+  const id = String(b.id ?? '').trim();
+  const { data: e } = id ? await db.from('preventivi').select('id, nome, prev, dati').eq('id', id).maybeSingle() : { data: null };
+  if (!e) return fail('Preventivo non trovato: cercalo con cerca_commesse e usa il suo id.');
+  const P = normPrev(clone(e.prev)); P._nome = e.nome;
+  const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chat_id: chat, text: testoMargini(P, compute(e.dati, P)) }) });
+  if (!r.ok) return fail(r.status === 403 ? 'Non posso scriverti in privato: apri la chat con il bot e premi Avvia, poi riprova.' : 'Telegram non ha accettato il messaggio con i margini.');
+  return { ok: true, testo: `Ti ho mandato in privato i margini del preventivo N° ${P.num || '–'}.` };
+}

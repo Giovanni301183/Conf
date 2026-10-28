@@ -1,34 +1,46 @@
-// Scheda Preventivi: archivio dei preventivi salvati, bozza recuperabile, backup su file; cruscotto KPI e mappa.
+// Home: calendario in cima (si nasconde), sotto note e allarmi. Scheda Preventivi: archivio dei preventivi salvati, bozza recuperabile, backup su file; cruscotto KPI e mappa.
+import { Fragment, useState } from 'react';
 import { Fold, Seg } from '../components/ui';
+import { ModuloVarianti, scaricaOfferte } from '../components/Varianti';
 import { eStato, testo } from '../domain/kpi';
 import { Cruscotto, StatoSel } from './Cruscotto';
 import { Mappa } from './Mappa';
+import { Cerca } from './Cerca';
+import { CalendarioHome } from './Calendario';
 import { eur, fDate, fN } from '../domain/format';
+import { SETTORI, infoSettore, settoreDi } from '../domain/settori';
 import { KEY_DRAFT, S, commit, load } from '../store/state';
 import { cloud, isAdmin, uploadLocali } from '../store/remote';
 import { archDel, archDl, archDup, archExp, archOpen, archRename, archSave, draftDel, draftOpen, isDirty, newPreventivo, pickFile, prevName, righeTxt } from '../store/actions';
 
 const fd = (iso: string) => { const d = new Date(iso); return isNaN(+d) ? '–' : d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }); };
+// Quanti documenti e note ha un preventivo (compresi quelli delle sue voci d'agenda).
+const nDoc = (id: string) => S.docs.filter(d => d.preventivo_id === id).length;
 const run = (f: () => void) => () => { f(); commit(); };
+
+export const Home = () => <CalendarioHome />;
 
 export function Preventivi() {
   const q = S.ui.aq.trim().toLowerCase();
-  const list = S.arch.filter(e => !q || testo(e).includes(q));
+  const list = S.arch.filter(e => (!q || testo(e).includes(q)) && (!S.ui.aset || settoreDi(e.prev) === S.ui.aset));
   const dr = load(KEY_DRAFT);
   const n = S.arch.length;
+  const [varId, setVarId] = useState<string | null>(null);
   return (
     <>
       <div className="card head"><div className="headrow">
         <div><h2>Archivio preventivi</h2>
           <p className="hint" style={{ margin: 0 }}>{n} preventiv{n === 1 ? 'o salvato' : 'i salvati'} {cloud.session ? "nell'archivio condiviso" : 'in questo browser'}. Ogni preventivo conserva anche il listino usato.</p></div>
         <span className="sp" />
-        <Seg path="ui.av" opts={[['elenco', 'Elenco'], ['kpi', 'Cruscotto'], ['mappa', 'Mappa']]} />
+        <Seg path="ui.av" opts={[['elenco', 'Elenco'], ['kpi', 'Cruscotto'], ['mappa', 'Mappa'], ['cerca', 'Cerca']]} />
         {S.ui.av === 'elenco' && <input placeholder="Cerca per nome, cliente, commessa…" value={S.ui.aq} onChange={e => { S.ui.aq = e.target.value; commit(); }} style={{ width: 260 }} />}
+        {S.ui.av === 'elenco' && <select value={S.ui.aset} onChange={e => { S.ui.aset = e.target.value as typeof S.ui.aset; commit(); }} title="Filtra per settore">
+          <option value="">Tutti i settori</option>{SETTORI.map(s => <option key={s.k} value={s.k}>{s.nome}</option>)}</select>}
         <button className="btn" onClick={run(() => archSave(false))}>Salva preventivo corrente</button>
         <button className="btn p" onClick={run(newPreventivo)}>+ Nuovo preventivo</button>
       </div></div>
 
-      {S.ui.av === 'kpi' ? <Cruscotto /> : S.ui.av === 'mappa' ? <Mappa /> : <>
+      {S.ui.av === 'kpi' ? <Cruscotto /> : S.ui.av === 'mappa' ? <Mappa /> : S.ui.av === 'cerca' ? <Cerca /> : <>
       {cloud.locali.length > 0 && (
         <div className="card head"><div className="headrow">
           <div><h2>Preventivi solo in questo browser</h2><p className="hint" style={{ margin: 0 }}>
@@ -47,7 +59,7 @@ export function Preventivi() {
       )}
 
       {!list.length ? (
-        <div className="card"><div className="empty">{n ? 'Nessun preventivo corrisponde alla ricerca.' : <>L'archivio è vuoto. Configura un preventivo e premi <b>Salva</b> in alto.</>}</div></div>
+        <div className="card"><div className="empty">{n ? (S.ui.aset && !q ? `Nessun preventivo in ${infoSettore(S.ui.aset).nome}.` : 'Nessun preventivo corrisponde alla ricerca.') : <>L'archivio è vuoto. Configura un preventivo e premi <b>Salva</b> in alto.</>}</div></div>
       ) : (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}><div className="wrap" style={{ border: 0, borderRadius: 0 }}>
           <table className="arch"><tbody>
@@ -55,19 +67,24 @@ export function Preventivi() {
             {list.map(e => {
               const cur = S.prev._id === e.id;
               return (
-                <tr key={e.id} className={cur ? 'cur' : ''}>
-                  <td><b>{e.nome}</b>{cur && <> <span className="tag on">aperto{isDirty() ? ' · modificato' : ''}</span></>}<div className="muted small">{e.prev?.num ? <>N° {e.prev.num} · </> : null}{e.cliente || '–'}</div></td>
+                <Fragment key={e.id}>
+                <tr className={cur ? 'cur' : ''}>
+                  <td><b>{e.nome}</b>{nDoc(e.id) ? <span className="muted small" title="Documenti e note"> · 📎 {nDoc(e.id)}</span> : null}{cur && <> <span className="tag on">aperto{isDirty() ? ' · modificato' : ''}</span></>}<div className="muted small">{!S.ui.aset ? <>{infoSettore(settoreDi(e.prev)).nome} · </> : null}{e.prev?.num ? <>N° {e.prev.num} · </> : null}{e.cliente || '–'}{e.prev?.variante?.num ? <> · variante di N° {e.prev.variante.num}</> : null}</div></td>
                   <td>{e.rif || '–'}<div className="muted small">{fDate(e.data)}</div></td>
                   <td><StatoSel id={e.id} k={eStato(e)} /></td><td className="small">{e.righe}</td><td className="n">{fN(e.kwp, 2)}</td><td className="n">{eur(e.totale)}</td><td className="n"><b>{e.prezzo != null ? eur(e.prezzo) : '–'}</b>{e.totale > 0 && e.prezzo != null && e.prezzo - e.totale < 0.5 ? <div className="small" style={{ color: 'var(--warn)' }}>margine 0 %</div> : null}</td>
                   <td className="small muted">{fd(e.salvato)}{e.autore ? <div>{e.autore.split('@')[0]}</div> : null}</td>
                   <td className="acts">
                     <button className="btn s p" onClick={run(() => archOpen(e.id))}>Apri</button>
                     <button className="btn s" onClick={run(() => archDup(e.id))} title="Duplica">Duplica</button>
+                    <button className="btn s" onClick={() => setVarId(varId === e.id ? null : e.id)} title="Altri preventivi uguali con profilo o asse diversi">Varianti</button>
                     <button className="btn s" onClick={run(() => archRename(e.id))} title="Cambia il nome del preventivo">Rinomina</button>
-                    <button className="btn s" onClick={() => archDl(e.id)} title="Scarica come file">Scarica</button>
+                    <button className="btn s" onClick={() => scaricaOfferte(e.id, [])} title="Scarica l'offerta del preventivo in PDF, così com'è salvato">PDF</button>
+                    <button className="btn s" onClick={() => archDl(e.id)} title="Copia di sicurezza del preventivo (.json), da reimportare in Backup e trasferimento: non è un PDF">Backup</button>
                     {isAdmin() && <button className="btn s del" onClick={run(() => archDel(e.id))} title="Elimina il preventivo (solo amministratore)">Elimina</button>}
                   </td>
                 </tr>
+                {varId === e.id && <tr><td colSpan={9}><ModuloVarianti id={e.id} chiudi={() => setVarId(null)} /></td></tr>}
+                </Fragment>
               );
             })}
           </tbody></table>

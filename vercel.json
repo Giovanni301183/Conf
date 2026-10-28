@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/agenda.ts": { "includeFiles": "public/offerta/modello-offerta*.pptx" },
+    "api/modulo.ts": { "includeFiles": "public/offerta/modello-offerta*.pptx" },
+    "api/dxf_fisso.py": { "includeFiles": "fisso_dxf/**" }
+  }
+}

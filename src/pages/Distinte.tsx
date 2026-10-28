@@ -5,9 +5,9 @@ import { GROUPS, SIZES0, TEMPLATE0, clone } from '../domain/model';
 import { S, commit, save } from '../store/state';
 
 const done = () => { save(); commit(); };
-const codeOpts = (extra: [string, string][]) => [...extra, ...S.data.listino.map(x => [x.c, `${x.c} — ${x.d}`] as [string, string])];
+const codeOpts = (extra: [string, string][]) => [...extra, ...S.data.listino.map(x => [x.c, x.art ? `${x.art} — ${x.d} (${x.c})` : `${x.c} — ${x.d}`] as [string, string])];
 const assiTxt = (s: any) => s.assi.filter(a => a.c === '$ASSE').map(a => `${a.q}×${fL(a.L)} m`).join(' + ');
-const PH: [string, string][] = [['$PROF', '$PROF — profilo pilastri (IPE/IPEA)'], ['$OMEGA', '$OMEGA — omega scelto (2,0/1,8)'], ['$ASSE', '$ASSE — asse scelto']];
+const PH: [string, string][] = [['$PROF', '$PROF — profilo pilastri (scelto in Configura)'], ['$OMEGA', '$OMEGA — omega scelto (2,0/1,8)'], ['$ASSE', '$ASSE — asse scelto']];
 
 export function Distinte() {
   const D = S.data, sizes = D.sizes, keys = Object.keys(sizes).sort((a: any, b: any) => a - b);

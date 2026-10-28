@@ -3,9 +3,11 @@
 import { useSyncExternalStore } from 'react';
 import { compute } from '../domain/compute';
 import { defaultData, newPrev } from '../domain/model';
+import { normListinoFisso } from '../domain/fissoCosti';
+import { PASSI, infoSettore, type Settore } from '../domain/settori';
 
 export const KEY_DATA = 'tracker_prev_data_v1', KEY_PREV = 'tracker_prev_prev_v1', KEY_UI = 'tracker_prev_ui_v1';
-export const KEY_ARCH = 'tracker_prev_archivio_v1', KEY_DRAFT = 'tracker_prev_bozza_v1';
+export const KEY_ARCH = 'tracker_prev_archivio_v1', KEY_DRAFT = 'tracker_prev_bozza_v1', KEY_SCAD = 'tracker_prev_scadenze_v1';
 
 export function load(k: string): any {
   try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : null; } catch { return null; }
@@ -17,31 +19,41 @@ export function unstore(k: string) {
   try { localStorage.removeItem(k); } catch { /* storage non disponibile */ }
 }
 
-export const TABS = [['archivio', 'Home'], ['listino', 'Listino'], ['distinte', 'Distinte base'], ['config', 'Configura'], ['costi', 'Costi'],
-  ['extra', 'Voci extra'], ['margini', 'Margini'], ['invia', 'Invia preventivo'], ['lavor', 'Distinta lavorazione'], ['mont', 'Montaggio'], ['utenti', 'Utenti']] as const;
+export const TABS = [['archivio', 'Home'], ['prev', 'Preventivi'], ['listino', 'Listino'], ['distinte', 'Distinte base'], ['config', 'Configura'], ['costi', 'Costi'],
+  ['extra', 'Voci extra'], ['margini', 'Margini'], ['invia', 'Invia preventivo'], ['docs', 'Documenti'], ['lavor', 'Distinta lavorazione'], ['mont', 'Montaggio'], ['utenti', 'Utenti']] as const;
 export type Tab = (typeof TABS)[number][0];
 
 export interface Ui {
-  tab: Tab; view: string; av: 'elenco' | 'kpi' | 'mappa'; kf: { anno: string; mese: string; stato: string; cliente: string }; folds: Record<string, boolean>; open: Set<string>; sizeSel: string; openSd: Set<number>; filter: string; aq: string;
+  tab: Tab; view: string; av: 'elenco' | 'kpi' | 'mappa' | 'cerca'; cerca: { q: string; stato: string; anno: string }; cal: boolean; calV: 'mese' | 'agenda'; calMie: boolean; kf: { anno: string; mese: string; stato: string; cliente: string }; folds: Record<string, boolean>; open: Set<string>; sizeSel: string; openSd: Set<number>; filter: string; aq: string; docCart: string;
+  set: Settore; sopen: boolean; area: string; aset: Settore | '';   // menu: settore scelto (e se è aperto), macro area aperta ('' = tutte chiuse); filtro per settore dell'archivio
 }
-export interface State { data: any; prev: any; ui: Ui; arch: any[] }
+// scad = scadenze del calendario inserite a mano (dal server, o dal browser senza Supabase).
+// docs = documenti e note (solo con il server: i file stanno nello Storage di Supabase).
+export interface State { data: any; prev: any; ui: Ui; arch: any[]; scad: any[]; docs: any[] }
 
 const UI0 = load(KEY_UI) || {};
 const hashTab = TABS.find(t => t[0] === location.hash.slice(1))?.[0];
 // All'avvio si parte sempre da un preventivo nuovo, sulla schermata Preventivi (elenco dell'archivio).
 export const S: State = {
-  data: load(KEY_DATA) || defaultData(), prev: newPrev(), arch: load(KEY_ARCH) || [],
-  ui: { tab: hashTab || 'archivio', view: UI0.view || 'cat', av: UI0.av || 'elenco', kf: { anno: '', mese: '', stato: '', cliente: '' }, folds: UI0.folds || {}, open: new Set(), sizeSel: '12', openSd: new Set(), filter: '', aq: '' },
+  data: load(KEY_DATA) || defaultData(), prev: newPrev(), arch: load(KEY_ARCH) || [], scad: load(KEY_SCAD) || [], docs: [],
+  ui: { tab: hashTab || 'archivio', view: UI0.view || 'cat', av: ['elenco', 'kpi', 'mappa', 'cerca'].includes(UI0.av) ? UI0.av : 'elenco', cal: UI0.cal ?? true, calV: UI0.calV === 'agenda' ? 'agenda' : 'mese', calMie: !!UI0.calMie, kf: { anno: '', mese: '', stato: '', cliente: '' }, cerca: { q: '', stato: '', anno: '' }, folds: UI0.folds || {}, open: new Set(), sizeSel: '12', openSd: new Set(), filter: '', aq: '', docCart: '', set: infoSettore(UI0.set).k, sopen: true, area: (PASSI as readonly string[]).includes(hashTab || '') ? infoSettore(UI0.set).gruppo : '', aset: '' },
 };
 
 // Risultato del calcolo sul preventivo aperto: si aggiorna a ogni commit().
+normListinoFisso(S.data);
 export let R = compute(S.data, S.prev);
+
+/** Esegue f come se fosse aperto un altro preventivo (es. le date di una commessa in archivio), poi rimette tutto com'era. */
+export function withPrev<T>(prev: any, f: () => T): T {
+  const p0 = S.prev, r0 = R;
+  try { S.prev = prev; R = compute(S.data, prev); return f(); } finally { S.prev = p0; R = r0; }
+}
 
 // Chiamato dopo ogni salvataggio: con Supabase attivo invia il listino al server.
 let saveHook = () => {};
 export function setSaveHook(f: () => void) { saveHook = f; }
 export function save() { store(KEY_DATA, S.data); store(KEY_PREV, S.prev); saveHook(); }
-export function saveUi() { store(KEY_UI, { tab: S.ui.tab, view: S.ui.view, av: S.ui.av, folds: S.ui.folds }); }
+export function saveUi() { store(KEY_UI, { tab: S.ui.tab, view: S.ui.view, av: S.ui.av, cal: S.ui.cal, calV: S.ui.calV, calMie: S.ui.calMie, folds: S.ui.folds, set: S.ui.set }); }
 
 let version = 0;
 const subs = new Set<() => void>();

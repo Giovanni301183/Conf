@@ -25,7 +25,7 @@ export function Lavorazione() {
   if (vuota) return <>{head}<div className="card"><div className="empty">La distinta è vuota. In <b>Configura</b> imposta almeno un tracker o un componente di impianto.</div></div></>;
   const nota = <p className="hint">Peso nero = peso teorico del listino (acquisto acciaio e lavorazione). Peso zincato = nero + {fN(D.mz * 100, 1)} % di maggiorazione, solo sui pezzi che vanno allo zincatore.</p>;
   const row = (x: any, k: string) => (
-    <tr key={k}><td><span className="code">{x.code}</span></td><td>{x.desc}</td><td className="muted">{LAV_T[x.t]}</td><td className="n">{x.L !== '' ? fL(x.L) : ''}</td><td className="n">{fQ(x.qPer)}</td>
+    <tr key={k}><td><span className="code">{x.art ?? x.code}</span></td><td>{x.desc}</td><td className="muted">{LAV_T[x.t]}</td><td className="n">{x.L !== '' ? fL(x.L) : ''}</td><td className="n">{fQ(x.qPer)}</td>
       <td className="n"><b>{fQ(x.q)}</b></td><td className="n">{fN(x.kgU, 2)}</td><td className="n">{fN(x.kgT, 1)}</td><td className="n">{kz(x.kgZ)}</td><td className="c">{yn(x.zinc)}</td></tr>
   );
   const G = buildGantt(D);
@@ -56,7 +56,7 @@ export function Lavorazione() {
         <div className="wrap"><table className="dl"><tbody>
           <tr><th>Profilo</th><th>Descrizione</th><th className="n">Lunghezza m</th><th className="n">Pezzi</th><th className="n">Metri totali</th><th className="n">Peso nero kg</th><th className="n">Peso zincato kg</th><th className="c">Zincatura</th><th>Righe</th></tr>
           {D.taglio.map((x, j) => (
-            <tr key={j}><td><b>{x.code}</b></td><td>{x.desc}</td><td className="n">{fL(x.L)}</td><td className="n"><b>{fQ(x.pz)}</b></td><td className="n">{fN(x.pz * x.L, 2)}</td><td className="n">{fN(x.kg, 1)}</td><td className="n">{kz(x.kgZ)}</td><td className="c">{yn(x.zinc)}</td><td className="muted">{[...x.righe].join(', ')}</td></tr>
+            <tr key={j}><td><b>{x.art ?? x.code}</b></td><td>{x.desc}</td><td className="n">{fL(x.L)}</td><td className="n"><b>{fQ(x.pz)}</b></td><td className="n">{fN(x.pz * x.L, 2)}</td><td className="n">{fN(x.kg, 1)}</td><td className="n">{kz(x.kgZ)}</td><td className="c">{yn(x.zinc)}</td><td className="muted">{[...x.righe].join(', ')}</td></tr>
           ))}
         </tbody></table></div>
       </>}</Fold>
@@ -66,7 +66,7 @@ export function Lavorazione() {
         for (const g of D.ordini) {
           rows.push(<tr key={g.cat} className={`g1 cat-${g.cat.split(' ')[0]}`}><td colSpan={9}><span className="dot" />{g.cat}</td></tr>);
           for (const x of g.items) {
-            rows.push(<tr key={g.cat + x.code}><td><span className="code">{x.code}</span></td><td>{x.desc}</td><td>{x.um}</td><td className="n"><b>{x.um === 'm' ? fN(x.qty, 2) : fQ(x.qty)}</b></td><td className="n">{fN(x.kg, 1)}</td><td className="n">{kz(x.kgZ)}</td>
+            rows.push(<tr key={g.cat + x.code}><td><span className="code">{x.art ?? x.code}</span></td><td>{x.desc}</td><td>{x.um}</td><td className="n"><b>{x.um === 'm' ? fN(x.qty, 2) : fQ(x.qty)}</b></td><td className="n">{fN(x.kg, 1)}</td><td className="n">{kz(x.kgZ)}</td>
               <td className="c">{x.t === 'comm' ? '' : yn(x.zinc)}</td><td className="n">{x.qty ? fN(x.cost / x.qty) : '–'}</td><td className="n">{fN(x.cost)}</td></tr>);
             if (x.sd) x.sd.forEach((c, j) => rows.push(<tr key={g.cat + x.code + '#' + j} className="sd"><td>↳ {c.c}</td><td>{c.d}</td><td>pz</td><td className="n">{fQ(x.qty * num(c.q))}</td><td></td><td></td><td></td><td className="n">{fN(num(c.p))}</td><td className="n">{fN(x.qty * num(c.q) * num(c.p))}</td></tr>));
           }

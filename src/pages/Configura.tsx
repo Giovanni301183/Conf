@@ -6,7 +6,9 @@ import { toast } from '../store/actions';
 import { unitCost } from '../domain/compute';
 import { eur, fDate, fL, fN } from '../domain/format';
 import { IMP, MIN_CUSC, OPT_LCUSC, OPT_LFOND, STATI, clone, defRiga, num } from '../domain/model';
+import { pilastri } from '../domain/referenze';
 import { R, S, commit, save } from '../store/state';
+import { AgendaPreventivo } from './Calendario';
 
 const done = () => { save(); commit(); };
 
@@ -43,6 +45,7 @@ export function Configura() {
   return (
     <>
       <TabTools />
+      <AgendaPreventivo />
       <Fold id="cf-comm" step={1} title="Commessa" sum={(comm || 'Da compilare') + ' · ' + fDate(P.data)}>{() => (
         <div className="grid">
           <label className="f">N° preventivo<Inp path="prev.num" type="txt" ph="assegnato al salvataggio" /></label>
@@ -78,7 +81,7 @@ export function Configura() {
                 <td style={{ minWidth: 112 }}><Sel path={p + 'taglia'} opts={sizes.map(k => [k, k + ' moduli'] as const)} /></td>
                 <td style={{ width: 64 }}><Inp path={p + 'n'} /></td>
                 <td><Seg path={p + 'tipo'} opts={['Agrivoltaico', 'Basso']} /></td>
-                <td><Seg path={p + 'prof'} opts={[['IPE 140', 'IPE'], ['IPEA 140', 'IPEA']]} /></td>
+                <td><Seg path={p + 'prof'} opts={pilastri(S.data, r.prof)} /></td>
                 <td><Seg path={p + 'asse'} opts={[['3,0', '3,0 mm'], ['2,5', '2,5 mm']]} /></td>
                 <td><Seg path={p + 'omega'} opts={[['2,0', '2,0 mm'], ['1,8', '1,8 mm']]} /></td>
                 <td style={{ minWidth: 92 }}>{r.tipo === 'Basso' ? <span className="muted">—</span> : <Sel path={p + 'lFond'} type="num" opts={OPT_LFOND.map(x => [x, fL(x) + ' m'] as const)} />}</td>

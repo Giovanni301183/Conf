@@ -1,10 +1,16 @@
 // Azioni dell'app: archivio preventivi, frecce dei campi numerici, tendine, stampa, file.
 import { flushSync } from 'react-dom';
 import { compute } from '../domain/compute';
-import { MIN_CUSC, clone, defaultData, newPrev, normPrev, num } from '../domain/model';
+import { MIN_CUSC, clone, defaultData, newPrev, normPrev, num, numSucc, righeTxt } from '../domain/model';
 import { download, fileName } from '../domain/format';
+import { listinoFisso } from '../domain/fissoCosti';
 import { AUTO } from '../domain/plan';
+import { infoSettore, settoreDi, type Settore } from '../domain/settori';
+/** Apre nel menu il settore (e la sua macro area). */
+const apriSettore = (k: Settore) => { S.ui.set = k; S.ui.sopen = true; S.ui.area = infoSettore(k).gruppo; };
+import { daNonScegliere, etichetta, nomeVariante, variante, type Variante } from '../domain/varianti';
 import { KEY_ARCH, KEY_DRAFT, KEY_PREV, R, S, commit, getP, load, save, setP, store, unstore } from './state';
+import type { Tab } from './state';
 import { delArch, isAdmin, online, pushArch } from './remote';
 
 /* ---------- Avvisi ---------- */
@@ -24,17 +30,12 @@ export const snap = (o: unknown) => JSON.stringify(o, (k, v) => (k === '_imp' ? 
 })();
 export function curEntry() { return S.prev._id ? S.arch.find(a => a.id === S.prev._id) : null; }
 // Un preventivo nuovo ancora vuoto (salvo la data) non conta come modifica non salvata.
-export function isBlank(p) { return !p._id && snap({ ...p, data: '' }) === snap({ ...newPrev(), data: '' }); }
+export function isBlank(p) { return !p._id && snap({ ...p, data: '', settore: '' }) === snap({ ...newPrev(settoreDi(p)), data: '', settore: '' }); }
 export function isDirty() { const e = curEntry(); return e ? snap(e.prev) !== snap(S.prev) : !isBlank(S.prev); }
 export function prevName(p) { return p._nome || [p.cliente, p.rif].filter(Boolean).join(' · ') || 'Preventivo senza nome'; }
-// Progressivo del preventivo "AAAA/NNN": l'anno e' quello della data del preventivo, il numero riparte ogni anno.
-export function nextNum(p, arch = S.arch) {
-  const y = /^\d{4}/.test(p.data || '') ? p.data.slice(0, 4) : String(new Date().getFullYear());
-  const max = arch.reduce((m, e) => { const r = /^(\d{4})\/(\d+)$/.exec((e.prev?.num || '').trim()); return r && r[1] === y ? Math.max(m, +r[2]) : m; }, 0);
-  return `${y}/${String(max + 1).padStart(3, '0')}`;
-}
+export const nextNum = (p, arch = S.arch) => numSucc(p, arch);
 const numUsed = (num: string, id: string) => !!num && S.arch.some(a => a.id !== id && (a.prev?.num || '').trim() === num.trim());
-export function righeTxt(p) { return p.righe.map(r => `${num(r.n)}×${r.taglia} ${r.tipo === 'Basso' ? 'Basso' : 'Agri'}`).join(', '); }
+export { righeTxt };
 // Con Supabase le voci cambiate vanno al server (archivio condiviso); senza, l'archivio resta nel browser.
 function saveArch(changed: any[] = []) {
   if (online()) { pushArch(changed); return true; }
@@ -54,25 +55,56 @@ export function archSave(asNew: boolean) {
     totale: R.total, prezzo: R.prezzo, kwp: R.kwp, nTracker: R.nTracker, righe: righeTxt(P), prev: clone(P), dati: clone(S.data) };
   const i = S.arch.findIndex(a => a.id === id);
   if (i >= 0) S.arch[i] = e; else S.arch.unshift(e);
-  if (saveArch([e])) toast((i >= 0 ? `Preventivo "${nome}" aggiornato` : `Preventivo N° ${P.num} "${nome}" salvato nell'archivio`)
-    + (numUsed(P.num, id) ? ` · attenzione: il N° ${P.num} è già usato da un altro preventivo` : ''));
+  const altri = nonScelte(e);
+  if (saveArch([e, ...altri])) toast((i >= 0 ? `Preventivo "${nome}" aggiornato` : `Preventivo N° ${P.num} "${nome}" salvato nell'archivio`)
+    + (numUsed(P.num, id) ? ` · attenzione: il N° ${P.num} è già usato da un altro preventivo` : '') + (altri.length ? ' · ' + testoNonScelte(altri) : ''));
   save();
 }
 export function archOpen(id: string) {
   const e = S.arch.find(a => a.id === id); if (!e) return;
   if (S.prev._id !== id && isDirty() && !confirm('Il preventivo aperto ha modifiche non salvate che andranno perse. Continuare?')) return;
   normPrev(e.prev); S.prev = clone(e.prev); S.prev._id = e.id; S.prev._nome = e.nome;
-  // Parametri del Gantt e listino montaggio non contano come "listino cambiato".
-  const dSnap = d => snap({ ...d, mont: undefined, params: { ...d.params, gantt: undefined } });
+  // Parametri del Gantt, listino montaggio e codici articolo non contano come "listino cambiato".
+  // Ogni settore guarda solo il suo listino: un impianto fisso solo data.fisso (mancante = prezzi DE VITA), un tracker tutto il resto.
+  const fisso = settoreDi(e.prev) === 'fisso';
+  const dSnap = d => (fisso ? snap(listinoFisso(d)) : snap({ ...d, fisso: undefined, mont: undefined, params: { ...d.params, gantt: undefined }, listino: d.listino?.map(({ art, ...x }) => x) }));
   if (e.dati && dSnap(e.dati) !== dSnap(S.data) && !confirm(`Il listino è cambiato dopo il salvataggio di "${e.nome}".\n\nOK → ricalcola con il listino ATTUALE (prezzi aggiornati)\nAnnulla → ripristina il listino salvato con il preventivo`))
-    S.data = { ...clone(e.dati), mont: S.data.mont, params: { ...e.dati.params, gantt: S.data.params.gantt } };
-  save(); S.ui.tab = 'config'; toast(`Aperto "${e.nome}"`);
+    S.data = fisso ? { ...S.data, fisso: clone(listinoFisso(e.dati)) } : { ...clone(e.dati), fisso: S.data.fisso, mont: S.data.mont, params: { ...e.dati.params, gantt: S.data.params.gantt } };
+  apriSettore(settoreDi(S.prev)); save(); S.ui.tab = 'config'; toast(`Aperto "${e.nome}"`);
 }
 export function archDup(id: string) {
   const e = S.arch.find(a => a.id === id); if (!e) return;
   const c = clone(e); c.id = 'p' + Date.now().toString(36); c.nome = e.nome + ' (copia)'; c.salvato = new Date().toISOString(); c.prev._id = c.id; c.prev._nome = c.nome;
   c.prev.num = nextNum(c.prev);
   S.arch.unshift(c); saveArch([c]);
+}
+/** Anteprima delle varianti di un preventivo dell'archivio: copie calcolate col listino salvato, senza salvarle. Errore = eccezione. */
+export function anteprimaVarianti(id: string, vv: Variante[]) {
+  const e = S.arch.find(a => a.id === id); if (!e) throw new Error('preventivo base non trovato in archivio');
+  const base = normPrev(clone(e.prev)), dati = e.dati || S.data;
+  base._id = e.id; base._nome = e.nome;
+  const fatte: any[] = [], uguali: string[] = [];
+  for (const v of vv) {
+    const P = variante(base, v, dati);
+    if (!P) uguali.push(etichetta(base));
+    else if (!fatte.some(f => etichetta(f) === etichetta(P))) fatte.push(P);
+  }
+  return { e, base, dati, uguali, varianti: fatte.map(P => ({ P, R: compute(dati, P) })), R: compute(dati, base) };
+}
+// Ogni variante e' un preventivo nuovo, con il numero successivo e lo stesso listino del base.
+export function archVarianti(id: string, vv: Variante[]) {
+  const a = anteprimaVarianti(id, vv), added: any[] = [];
+  a.varianti.forEach(({ P, R: r }, i) => {
+    const c = 'p' + Date.now().toString(36) + i;
+    P._id = c; P._nome = nomeVariante(a.e.nome, P); P.num = nextNum(P);
+    S.arch.unshift({ id: c, nome: P._nome, cliente: P.cliente, rif: P.rif, data: P.data, salvato: new Date().toISOString(),
+      totale: r.total, prezzo: r.prezzo, kwp: r.kwp, nTracker: r.nTracker, righe: righeTxt(P), prev: P, dati: clone(a.dati) });
+    added.push(S.arch[0]);
+  });
+  if (added.length) saveArch(added);
+  const t = added.length ? `Create ${added.length} varianti: ${added.map(x => 'N° ' + x.prev.num).join(', ')}` : 'Nessuna variante nuova';
+  toast(t + (a.uguali.length ? ` · ${a.uguali[0]} è già il preventivo base` : ''));
+  return { testo: t, ids: added.map(x => x.id) };
 }
 // Rinomina senza aprire il preventivo; se e' quello aperto il nome cambia anche li', senza segnarlo come modificato.
 export function archRename(id: string) {
@@ -95,8 +127,21 @@ export function archPatch(id: string, f: (p: any) => void) {
   const e = S.arch.find(a => a.id === id); if (!e) return;
   normPrev(e.prev); f(e.prev); e.salvato = new Date().toISOString();
   if (S.prev._id === id) { normPrev(S.prev); f(S.prev); save(); }
-  saveArch([e]);
+  const altri = nonScelte(e);
+  if (saveArch([e, ...altri]) && altri.length) toast(testoNonScelte(altri));
 }
+// Vinto un preventivo con varianti, gli altri del gruppo ancora in bozza o inviati diventano "non scelta"
+// (cosi' non restano offerte aperte ne' richiami). Ritorna le voci cambiate, da salvare insieme.
+function nonScelte(e: any): any[] {
+  if (e.prev?.stato !== 'vinto') return [];
+  const altri = daNonScegliere(S.arch, e.id);
+  for (const a of altri) {
+    a.prev.stato = 'alternativa'; a.salvato = new Date().toISOString();
+    if (S.prev._id === a.id) { S.prev.stato = 'alternativa'; save(); }
+  }
+  return altri;
+}
+const testoNonScelte = (aa: any[]) => aa.length ? `${aa.map(a => 'N° ' + (a.prev.num || '–')).join(', ')} ${aa.length === 1 ? 'segnato' : 'segnati'} «Non scelta»` : '';
 export function archDl(id: string) {
   const e = S.arch.find(a => a.id === id);
   if (e) download(`preventivo_${fileName(e.nome)}.json`, JSON.stringify({ tipo: 'preventivo', nome: e.nome, prev: e.prev, data: e.dati }, null, 1));
@@ -119,14 +164,18 @@ function archImport(j) {
   else throw new Error('il file non contiene preventivi');
   saveArch(added); toast(`${n} preventiv${n === 1 ? 'o importato' : 'i importati'} nell'archivio`);
 }
-export function newPreventivo() {
+export function newPreventivo(set: Settore = 'tracker') {
   if (isDirty() && !confirm('Il preventivo attuale ha modifiche non salvate. Iniziare comunque un nuovo preventivo?')) return;
-  S.prev = newPrev(); S.ui.tab = 'config'; save();
+  S.prev = newPrev(set); apriSettore(set); S.ui.tab = 'config'; save();
+}
+/** Scheda di un settore con aperto un preventivo vuoto di un altro settore: il preventivo diventa del settore della scheda. */
+export function allineaSettore() {
+  if (settoreDi(S.prev) !== S.ui.set && isBlank(S.prev)) { S.prev = { ...newPrev(S.ui.set), data: S.prev.data }; save(); }
 }
 export function draftOpen() {
   const dr = load(KEY_DRAFT); if (!dr) return;
   if (isDirty() && !confirm('Il preventivo attuale ha modifiche non salvate che andranno perse. Continuare?')) return;
-  S.prev = normPrev(dr); unstore(KEY_DRAFT); S.ui.tab = 'config'; save();
+  S.prev = normPrev(dr); unstore(KEY_DRAFT); apriSettore(settoreDi(S.prev)); S.ui.tab = 'config'; save();
 }
 export function draftDel() { if (confirm('Scartare definitivamente la bozza non salvata?')) unstore(KEY_DRAFT); }
 
@@ -154,7 +203,8 @@ export async function onFilePicked(f: File) {
 }
 export function resetData() {
   if (!confirm("Ripristinare listino e distinte ai valori dell'Excel? Le modifiche al listino andranno perse.")) return;
-  S.data = defaultData(); save(); commit();
+  // L'Excel e' quello dei tracker: i prezzi degli impianti fissi restano.
+  S.data = { ...defaultData(), fisso: S.data.fisso }; save(); commit();
 }
 
 /* ---------- Campi ---------- */
@@ -177,6 +227,9 @@ export function stepFor(path: string) {
   if (/^data\.params\.gantt\.kg/.test(path)) return 500;
   if (/\.(n|mot|cusc|omega)$|^prev\.imp\.|\.sd\.\d+\.q$/.test(path)) return 1;
   if (path === 'prev.modulo.wp') return 5;
+  const f = path.match(/^prev\.fisso\.\w+\.(?:\d+\.)?(\w+)$/);
+  if (f) return ({ potenza_modulo: 0.005, peso_modulo: 0.1, altezza_min_terra: 10, infissione_ant: 50, infissione_post: 50, lat: 0.0001, lng: 0.0001,
+    altitudine: 10, tr: 10, cp_giu: 0.05, cp_su: 0.05, cd: 0.05 } as Record<string, number>)[f[1]] ?? 1;
   if (/\.(acq|zn|lav|kg)$/.test(path)) return 0.01;
   if (/\.(costo|p)$/.test(path)) return 1;
   if (/\.L$/.test(path)) return 0.05;
@@ -209,6 +262,19 @@ export function foldAll(on: boolean) {
 export function printCosti() {
   S.ui.tab = 'costi'; S.ui.folds['co-riep'] = true; S.ui.folds['co-cat'] = true;
   flushSync(commit); setTimeout(() => window.print(), 50);
+}
+/** Porta dove si corregge un dato: apre la scheda e la tendina, ci scorre, la evidenzia e mette il cursore sul campo (se indicato). */
+export function vaiA(d: { tab: string; fold: string; path?: string }) {
+  S.ui.tab = d.tab as Tab; S.ui.folds[d.fold] = true; flushSync(commit);
+  requestAnimationFrame(() => {
+    const f = document.querySelector<HTMLElement>(`[data-fold="${d.fold}"]`); if (!f) return;
+    const campo = d.path ? f.querySelector<HTMLInputElement>(`[data-path="${d.path}"]`) : null;
+    (campo || f).scrollIntoView({ behavior: 'smooth', block: campo ? 'center' : 'start' });
+    campo?.focus({ preventScroll: true });
+    const ev = campo?.closest<HTMLElement>('.f') || f;
+    ev.classList.remove('evid'); void ev.offsetWidth; ev.classList.add('evid');
+    setTimeout(() => ev.classList.remove('evid'), 2600);
+  });
 }
 // Stampa solo le tendine indicate (classe pcard), A4 orizzontale; tutto torna com'era dopo la stampa.
 export function printPage(ids: string[]) {
