@@ -33,6 +33,8 @@ const VIEWS: Record<Tab, () => React.ReactNode> = {
 // Schede proprie degli impianti fissi; le altre sono comuni a tutti i settori.
 const VIEWS_FISSO: Partial<Record<Tab, () => React.ReactNode>> = { config: ConfiguraFisso, distinte: DistintaFisso };
 const goTab = (t: Tab, set?: Settore) => { S.ui.tab = t; if (set) { S.ui.set = set; allineaSettore(); } window.scrollTo(0, 0); commit(); };
+// Nell'app installata non c'è il pulsante del browser: si ricarica da qui (o con F5).
+const ricarica = () => { if (!isDirty() || confirm('Il preventivo aperto ha modifiche non salvate. Ricaricare comunque?')) location.reload(); };
 const save = () => { (document.activeElement as HTMLElement | null)?.blur?.(); archSave(false); commit(); };
 
 // Barra laterale: Home e archivio, poi i settori (ognuno con la sua cascata di schede, aperto uno alla volta), poi i dati comuni.
@@ -143,6 +145,7 @@ export default function App() {
         {cloud.session && (
           <div className="user" title={cloud.sync === 'errore' ? 'Ultimo salvataggio sul server non riuscito' : cloud.sync === 'salvo' ? 'Salvataggio sul server…' : 'Dati sincronizzati con il server'}>
             <span className={`dot ${cloud.sync}`} /><span className="em" title={cloud.session.user.email}>{cloud.me?.nome || cloud.session.user.email}{cloud.me?.ruolo === 'admin' ? ' · admin' : ''}</span>
+            <button className="btn s ricarica" onClick={ricarica} title="Ricarica l'app: prende i dati e l'ultima versione pubblicata (anche F5)" aria-label="Ricarica l'app">↻</button>
             <button className="btn s" onClick={() => { if (!isDirty() || confirm('Il preventivo aperto ha modifiche non salvate. Uscire comunque?')) logout().then(commit); }}>Esci</button>
           </div>
         )}

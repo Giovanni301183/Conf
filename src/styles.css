@@ -654,3 +654,4 @@ table.rows tr.sel td{background:var(--acc-soft)}
 .disegno .quota{stroke:var(--muted);stroke-width:15}
 .disegno .quota-testo{font-size:320px;text-anchor:middle;fill:var(--muted)}
 .disegno .terreno{stroke:var(--muted);stroke-width:20;stroke-dasharray:80 60}
+.user .ricarica{font-size:14px;line-height:1;padding:3px 8px}

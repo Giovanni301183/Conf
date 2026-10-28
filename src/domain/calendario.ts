@@ -87,7 +87,7 @@ export function vociScadenze(sc: Scadenza[], arch: any[]): Voce[] {
   });
 }
 
-/** Voci del calendario. Le voci fatte passano nell'archivio delle attivita': qui solo con conFatte (dettaglio del giorno, agenda del preventivo). */
+/** Voci del calendario. Le voci fatte passano nell'archivio delle attivita': qui solo con conFatte (agenda del preventivo). */
 export function voci(arch: any[], sc: Scadenza[], conFatte = false): Voce[] {
   return [...arch.flatMap(dateCommessa), ...arch.flatMap(richiamo), ...vociScadenze(conFatte ? sc : sc.filter(s => !s.fatto), arch)]
     .sort((a, b) => a.giorno - b.giorno || a.tipo.localeCompare(b.tipo) || (oraBreve(a.s) || '99').localeCompare(oraBreve(b.s) || '99') || a.titolo.localeCompare(b.titolo));

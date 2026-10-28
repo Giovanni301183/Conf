@@ -46,7 +46,7 @@ async function risposta(s: Scadenza) {
 // Voci visibili: prima la scelta personale «Cosa vedo», poi con "Le mie" solo quelle create da me o assegnate a me.
 // Le fatte stanno nell'Archivio attività.
 const soloMie = (vv: Voce[]) => { const me = mioEmail(), x = filtraVista(vv, miaVista(), me); return S.ui.calMie && me ? x.filter(v => mia(v, me)) : x; };
-const vociVisibili = (conFatte = false) => soloMie(voci(S.arch, S.scad, conFatte));
+const vociVisibili = () => soloMie(voci(S.arch, S.scad));
 /** Voci scadute e non fatte, per il numerino sulla voce Home del menu. */
 export const nScadute = () => { const a = allarmi(vociVisibili(), dToday()); return a.urgenze.length + a.scadute.length; };
 
@@ -217,7 +217,7 @@ export function Calendario({ sotto }: { sotto?: React.ReactNode }) {
   const nuova = (g = sel) => setBozza({ genere: 'attivita', categoria: '', giorno: isoDay(g), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '' });
   const modifica = (s: Scadenza) => { setSel(Date.UTC(+s.giorno.slice(0, 4), +s.giorno.slice(5, 7) - 1, +s.giorno.slice(8, 10)) / DAY); setBozza(bozzaDa(s)); };
   const vista = (k: 'mese' | 'agenda') => { S.ui.calV = k; commit(); };
-  const delGiorno = perGiorno(vociVisibili(true)).get(sel) || [];   // nel dettaglio del giorno anche le fatte, per poterle riaprire
+  const delGiorno = byDay.get(sel) || [];   // le fatte sono nell'Archivio attività, da dove si riaprono
   return (
     <>
       {cloud.scadErr && <div className="warn">L'agenda non si legge dal server ({cloud.scadErr}). Probabilmente manca una migrazione del database
