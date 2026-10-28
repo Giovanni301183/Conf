@@ -13,7 +13,8 @@ import { DocPanel, NoteHome, docNonDisponibili } from './Documenti';
 import { ModuloEmail, contestoEmail } from '../components/Email';
 import { PermessoAvvisi } from '../components/AvvisiRiunioni';
 import { linkRiunione } from '../domain/riunione';
-import { cloud, eliminaScadenza, mioEmail, online, puoModificare, puoSpuntare, salvaScadenza, spuntaScadenza } from '../store/remote';
+import { cloud, eliminaScadenza, miaVista, mioEmail, online, puoModificare, puoSpuntare, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
+import { VISTA_TUTTO, filtraVista, normVista, vedeTutto, type Quanto, type Vista } from '../domain/vista';
 
 const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 const meseNome = (y: number, m: number) => new Date(Date.UTC(y, m, 1)).toLocaleDateString('it-IT', { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -42,8 +43,9 @@ async function risposta(s: Scadenza) {
   const nota = [s.nota, n.trim() && `Risposta del ${dFmt(dToday())}: ${n.trim()}`].filter(Boolean).join('\n');
   const e = await salvaScadenza({ ...s, nota, fatto: true }); if (e) toast('Voce non aggiornata: ' + e); commit();
 }
-// Voci visibili: con "Le mie" solo quelle create da me o assegnate a me. Le fatte stanno nell'Archivio attività.
-const soloMie = (vv: Voce[]) => { const me = mioEmail(); return S.ui.calMie && me ? vv.filter(v => mia(v, me)) : vv; };
+// Voci visibili: prima la scelta personale «Cosa vedo», poi con "Le mie" solo quelle create da me o assegnate a me.
+// Le fatte stanno nell'Archivio attività.
+const soloMie = (vv: Voce[]) => { const me = mioEmail(), x = filtraVista(vv, miaVista(), me); return S.ui.calMie && me ? x.filter(v => mia(v, me)) : x; };
 const vociVisibili = (conFatte = false) => soloMie(voci(S.arch, S.scad, conFatte));
 /** Voci scadute e non fatte, per il numerino sulla voce Home del menu. */
 export const nScadute = () => { const a = allarmi(vociVisibili(), dToday()); return a.urgenze.length + a.scadute.length; };
@@ -209,7 +211,7 @@ export function Calendario({ sotto }: { sotto?: React.ReactNode }) {
   const oggi = dToday(), t = dDate(oggi);
   const [ym, setYm] = useState({ y: t.getUTCFullYear(), m: t.getUTCMonth() });
   const [sel, setSel] = useState(oggi);
-  const [bozza, setBozza] = useState<Bozza | null>(null);
+  const [bozza, setBozza] = useState<Bozza | null>(null), [cosa, setCosa] = useState(false);
   const vv = vociVisibili(), byDay = perGiorno(vv), mese = S.ui.calV === 'mese';
   const sposta = (d: number) => { const x = new Date(Date.UTC(ym.y, ym.m + d, 1)); setYm({ y: x.getUTCFullYear(), m: x.getUTCMonth() }); };
   const nuova = (g = sel) => setBozza({ genere: 'attivita', categoria: '', giorno: isoDay(g), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '' });
@@ -220,6 +222,7 @@ export function Calendario({ sotto }: { sotto?: React.ReactNode }) {
     <>
       {cloud.scadErr && <div className="warn">L'agenda non si legge dal server ({cloud.scadErr}). Probabilmente manca una migrazione del database
         (<b>20261020000000_calendario_scadenze.sql</b> o <b>20261020010000_agenda.sql</b>): va eseguita nel SQL Editor di Supabase.</div>}
+      {cosa && <div className="card"><CosaVedo chiudi={() => setCosa(false)} /></div>}
       <div className="calgrid calhome">
         <section className="card calmain">
           <div className="calhead">
@@ -235,6 +238,7 @@ export function Calendario({ sotto }: { sotto?: React.ReactNode }) {
             {cloud.session && <span className="seg"><button className={S.ui.calMie ? '' : 'on'} onClick={() => { S.ui.calMie = false; commit(); }}>Tutte</button>
               <button className={S.ui.calMie ? 'on' : ''} onClick={() => { S.ui.calMie = true; commit(); }}>Le mie</button></span>}
             <PermessoAvvisi />
+            <button className={`btn s${vedeTutto(miaVista()) ? '' : ' on'}`} onClick={() => setCosa(!cosa)} title="Scegli cosa vedere nel calendario: le tue voci si vedono sempre">👁 Cosa vedo{vedeTutto(miaVista()) ? '' : ' · filtrato'}</button>
             <button className="btn s" onClick={() => mostra(false)} title="Toglie il calendario dalla Home: restano solo gli allarmi">Nascondi calendario</button>
           </div>
           {mese ? <Mese ym={ym} sel={sel} setSel={setSel} nuova={nuova} byDay={byDay} oggi={oggi} /> : <Agenda vv={vv} oggi={oggi} sel={sel} setSel={setSel} onEdit={modifica} />}
@@ -326,6 +330,50 @@ export function ArchivioAttivita() {
       {vv.length ? [...mesi].map(([m, vs]) => <div key={m} className="agiorno"><h3>{m}</h3>{vs.map(v => <Riga key={v.key} v={v} oggi={oggi} />)}</div>)
         : <p className="hint" style={{ margin: '12px 0 0' }}>{tutte.length ? 'Nessuna attività fatta con questi filtri.' : 'Ancora nessuna attività fatta.'}</p>}
       {vv.length > n && <button className="btn s" style={{ marginTop: 8 }} onClick={() => setN(n + 100)}>Mostra altre ({vv.length - n})</button>}
+    </div>
+  );
+}
+
+const QUANTO: [Quanto, string][] = [['tutte', 'Tutte'], ['seguite', 'Solo delle commesse che seguo'], ['nessuna', 'Nessuna']];
+/** Cosa vedere nel calendario: la mia scelta, o (amministratore, dalla pagina Utenti) quella di un collega. */
+export function CosaVedo({ utente, chiudi }: { utente?: Utente; chiudi: () => void }) {
+  const email = utente?.email, altrui = !!email && email !== mioEmail();
+  const iniziale = altrui ? normVista(utente!.vista) : miaVista();
+  const [v, setV] = useState<Vista>(iniziale), [q, setQ] = useState(''), [busy, setBusy] = useState(false);
+  const salva = async (x: Vista) => {
+    setBusy(true); const e = await salvaVista(x, email); setBusy(false);
+    if (e) { toast('Scelta non salvata: ' + e); return; }
+    toast(vedeTutto(x) ? 'Ora si vede tutto il calendario' : 'Scelta salvata: vale su ogni dispositivo'); chiudi(); commit();
+  };
+  const t = q.trim().toLowerCase(), segue = new Set(v.seguo);
+  const elenco = [...S.arch].sort((a, b) => +(eStato(b) === 'vinto') - +(eStato(a) === 'vinto') || String(b.data || '').localeCompare(String(a.data || '')))
+    .filter(e => segue.has(e.id) || !t || [e.nome, e.cliente, e.prev?.num].some(x => x && String(x).toLowerCase().includes(t)));
+  const giu = (k: 'altri' | 'commesse', l: string) => (
+    <div className="f"><span>{l}</span><span className="seg">{QUANTO.map(([x, n]) => <button key={x} className={v[k] === x ? 'on' : ''} onClick={() => setV({ ...v, [k]: x })}>{n}</button>)}</span></div>
+  );
+  return (
+    <div className="cvista">
+      <h2>Cosa vedo nel calendario{altrui ? ` · ${nomeDi(email!)}` : ''}<span className="sp" />
+        <button className="btn s" disabled={busy} onClick={() => salva(VISTA_TUTTO)}>Vedi tutto</button></h2>
+      <p className="hint">{altrui ? 'Le sue voci' : 'Le tue voci'} (create {altrui ? 'da lui o assegnate a lui' : 'da te o assegnate a te'}) si vedono sempre. Il resto lo scegli qui; vale anche per il numerino degli allarmi.</p>
+      <div className="vgrid">
+        {giu('altri', 'Voci degli altri colleghi')}
+        {giu('commesse', 'Date delle commesse (produzione e montaggio)')}
+        <label className="chk"><input type="checkbox" checked={v.urgenze} onChange={e => setV({ ...v, urgenze: e.target.checked })} />Urgenze di tutti</label>
+        <label className="chk"><input type="checkbox" checked={v.richiami} onChange={e => setV({ ...v, richiami: e.target.checked })} />Richiami ai clienti (offerte senza risposta)</label>
+      </div>
+      <h3>Commesse che seguo <span className="tag">{v.seguo.length}</span></h3>
+      <input type="search" className="vcerca" value={q} placeholder="Cerca commessa, cliente, numero…" onChange={e => setQ(e.target.value)} />
+      <div className="vlist">
+        {elenco.slice(0, 60).map(e => <label key={e.id} className="chk"><input type="checkbox" checked={segue.has(e.id)}
+          onChange={() => setV({ ...v, seguo: segue.has(e.id) ? v.seguo.filter(x => x !== e.id) : [...v.seguo, e.id] })} />
+          {e.nome}<small className="muted">{[e.cliente, eStato(e) === 'vinto' ? 'commessa' : ''].filter(Boolean).join(' · ')}</small></label>)}
+        {elenco.length > 60 && <p className="hint" style={{ margin: 0 }}>… altre {elenco.length - 60}: usa la ricerca.</p>}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button className="btn p" disabled={busy} onClick={() => salva(v)}>{busy ? 'Salvo…' : 'Salva'}</button>
+        <button className="btn" onClick={chiudi}>Annulla</button>
+      </div>
     </div>
   );
 }

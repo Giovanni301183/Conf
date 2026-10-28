@@ -1,6 +1,8 @@
 // Scheda Utenti (solo amministratore): invito di nuovi utenti, ruolo, attivazione, reset della password.
 import { useEffect, useState, type FormEvent } from 'react';
 import { toast } from '../store/actions';
+import { CosaVedo } from './Calendario';
+import { normVista, vedeTutto } from '../domain/vista';
 import { cloud, invitaUtente, isAdmin, listUtenti, online, patchUtente, resetPassword, ultimiAccessi, type Utente } from '../store/remote';
 
 const RUOLI = [['utente', 'Utente'], ['admin', 'Amministratore']] as const;
@@ -10,7 +12,7 @@ const fd = (iso: string) => new Date(iso).toLocaleString('it-IT', { day: '2-digi
 export function Utenti() {
   const [list, setList] = useState<Utente[] | null>(null), [err, setErr] = useState('');
   const [email, setEmail] = useState(''), [nome, setNome] = useState(''), [ruolo, setRuolo] = useState('utente'), [busy, setBusy] = useState(false);
-  const [accessi, setAccessi] = useState<Record<string, string> | null>(null);
+  const [accessi, setAccessi] = useState<Record<string, string> | null>(null), [vista, setVista] = useState<Utente | null>(null);
   const reload = () => { listUtenti().then(setList, e => setErr((e as Error).message)); ultimiAccessi().then(setAccessi); };
   useEffect(() => { if (online() && isAdmin()) reload(); }, []);
 
@@ -52,6 +54,7 @@ export function Utenti() {
         </form>
       </div>
 
+      {vista && <div className="card"><CosaVedo key={vista.email} utente={vista} chiudi={() => { setVista(null); reload(); }} /></div>}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}><div className="wrap" style={{ border: 0, borderRadius: 0 }}>
         {err ? <div className="empty">Impossibile leggere l'elenco utenti: {err}</div> : !list ? <div className="empty">Caricamento…</div> : (
           <table className="arch"><tbody>
@@ -69,6 +72,7 @@ export function Utenti() {
                     : <span className="muted">{!accessi ? '–' : accessi[u.email] ? 'ultimo: ' + fd(accessi[u.email]) : 'mai entrato'}</span>}</td>
                   <td className="small muted">{u.creato ? new Date(u.creato).toLocaleDateString('it-IT') : '–'}{u.invitato_da ? <div>da {u.invitato_da.split('@')[0]}</div> : null}</td>
                   <td className="acts">
+                    <button className={`btn s${vedeTutto(normVista(u.vista)) ? '' : ' on'}`} onClick={() => setVista(u)} title="Cosa vede nel calendario e nel riepilogo Telegram">👁 Calendario{vedeTutto(normVista(u.vista)) ? '' : ' · filtrato'}</button>
                     <button className="btn s" onClick={async () => { const e = await resetPassword(u.email); toast(e ? 'Invio non riuscito: ' + e : `Email per la nuova password inviata a ${u.email}`); }}>Reset password</button>
                     {!io && <button className="btn s" onClick={() => (u.attivo ? confirm(`Disattivare ${u.email}? Non potrà più accedere ai preventivi né al listino.`) : true) && patch(u, { attivo: !u.attivo }, u.attivo ? `${u.email} disattivato` : `${u.email} riattivato`)}>{u.attivo ? 'Disattiva' : 'Riattiva'}</button>}
                   </td>

@@ -4,10 +4,11 @@ import { linkType, supabase } from '../lib/supabase';
 import type { Scadenza } from '../domain/calendario';
 import { normListinoFisso } from '../domain/fissoCosti';
 import { LIMITE_MB, percorsoPer, type Documento } from '../domain/documenti';
+import { normVista, type Vista } from '../domain/vista';
 import { KEY_ARCH, KEY_DRAFT, KEY_SCAD, S, commit, load, setSaveHook, store, unstore } from './state';
 
 type Fase = 'locale' | 'avvio' | 'login' | 'password' | 'carico' | 'pronto' | 'negato' | 'errore';
-export interface Utente { email: string; nome: string | null; ruolo: 'admin' | 'utente'; attivo: boolean; creato?: string; invitato_da?: string | null; telegram_id?: number | null }
+export interface Utente { email: string; nome: string | null; ruolo: 'admin' | 'utente'; attivo: boolean; creato?: string; invitato_da?: string | null; telegram_id?: number | null; vista?: Partial<Vista> | null }
 export const cloud = {
   fase: (supabase ? 'avvio' : 'locale') as Fase,
   session: null as Session | null,
@@ -188,6 +189,18 @@ export async function ultimiAccessi(): Promise<Record<string, string> | null> {
 // Senza server le scadenze restano nel browser; con il server si rileggono a ogni modifica, anche dei colleghi.
 const SCAD_COLS = 'id, giorno, ora, genere, categoria, titolo, nota, preventivo_id, assegnata_a, fatto, origine, creato_da, creato';
 export const mioEmail = () => cloud.session?.user.email?.toLowerCase() ?? '';
+/** Cosa vedo nel calendario (scelta personale). Senza server resta in questo browser. */
+const KEY_VISTA = 'tracker_prev_vista_v1';
+export const miaVista = (): Vista => normVista(supabase ? cloud.me?.vista : load(KEY_VISTA));
+/** Salva la scelta: la mia, oppure (amministratore, dalla pagina Utenti) quella di un collega. */
+export async function salvaVista(v: Vista, email = mioEmail()): Promise<string> {
+  if (!supabase) { store(KEY_VISTA, v); return ''; }
+  const { error } = email === mioEmail() ? await supabase.rpc('salva_mia_vista', { v }) : await supabase.from('utenti').update({ vista: v }).eq('email', email);
+  if (error) return /salva_mia_vista|vista/.test(error.message) ? 'manca la migrazione 20261028000000_vista_calendario.sql nel database' : error.message;
+  if (email === mioEmail() && cloud.me) cloud.me = { ...cloud.me, vista: v };
+  const c = cloud.colleghi.find(u => u.email === email); if (c) c.vista = v;
+  return '';
+}
 export const puoModificare = (s: Scadenza) => isAdmin() || s.creato_da === mioEmail();
 // Chi ha la voce assegnata puo' solo segnarla come fatta (lo garantisce anche il database).
 export const puoSpuntare = (s: Scadenza) => puoModificare(s) || s.assegnata_a === mioEmail();
