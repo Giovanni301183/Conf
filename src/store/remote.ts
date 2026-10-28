@@ -3,7 +3,8 @@ import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { linkType, supabase } from '../lib/supabase';
 import { perMe, type Scadenza } from '../domain/calendario';
 import { normListinoFisso } from '../domain/fissoCosti';
-import { LIMITE_MB, percorsoPer, tecnico, type Documento } from '../domain/documenti';
+import { LIMITE_MB, libero, percorsoPer, tecnico, type Documento } from '../domain/documenti';
+import type { Messaggio, PropostaNota } from '../domain/squadra';
 import { normVista, type Vista } from '../domain/vista';
 import { leggibile } from '../domain/esperto';
 import { KEY_ARCH, KEY_DRAFT, KEY_SCAD, S, commit, load, setSaveHook, store, unstore } from './state';
@@ -268,17 +269,22 @@ const dbErr = (m: string) => (/documenti_legato/.test(m) ? "il file deve restare
 type Dove = { preventivo_id?: string | null; scadenza_id?: string | null; nota_id?: string | null };
 /** Carica un file. Con etichette e privato (archivio tecnico); un allegato è privato se lo è la sua nota. Un file tecnico lo legge subito l'AI. */
 export async function caricaFile(f: File, dove: Dove, cartella: string, extra: { etichette?: string[]; privato?: boolean } = {}): Promise<string> {
-  if (!supabase) return 'I documenti si salvano solo con il server.';
-  if (f.size > LIMITE_MB * 1024 * 1024) return `"${f.name}" supera ${LIMITE_MB} MB.`;
+  return (await caricaFileId(f, dove, cartella, extra)).errore;
+}
+/** Come caricaFile, con l'id del documento creato (per la chat di squadra). */
+export async function caricaFileId(f: File, dove: Dove, cartella: string, extra: { etichette?: string[]; privato?: boolean } = {}): Promise<{ errore: string; id?: string }> {
+  const e = (errore: string) => ({ errore });
+  if (!supabase) return e('I documenti si salvano solo con il server.');
+  if (f.size > LIMITE_MB * 1024 * 1024) return e(`"${f.name}" supera ${LIMITE_MB} MB.`);
   const percorso = percorsoPer(dove.nota_id ? 'note' : dove.preventivo_id || (dove.scadenza_id ? null : 'liberi'), crypto.randomUUID(), f.name);
   const up = await supabase.storage.from(BUCKET).upload(percorso, f, { contentType: f.type || undefined, upsert: false });
-  if (up.error) return `"${f.name}" non caricato: ${up.error.message}`;
+  if (up.error) return e(`"${f.name}" non caricato: ${up.error.message}`);
   const nota = dove.nota_id ? S.docs.find(d => d.id === dove.nota_id) : null, privato = !!(extra.privato || nota?.privato);
   const { data, error } = await supabase.from('documenti').insert({ preventivo_id: dove.preventivo_id || null, scadenza_id: dove.scadenza_id || null, nota_id: dove.nota_id || null, cartella, tipo: 'file',
     titolo: f.name.slice(0, 200), percorso, mime: f.type || null, dimensione: f.size, ...(extra.etichette?.length ? { etichette: extra.etichette } : {}), ...(privato ? { privato } : {}) }).select().single();
-  if (error) { await supabase.storage.from(BUCKET).remove([percorso]); return `"${f.name}" non salvato: ${/nota_id/.test(error.message) ? 'manca la migrazione 20261025040000_allegati_note.sql' : dbErr(error.message)}`; }
+  if (error) { await supabase.storage.from(BUCKET).remove([percorso]); return e(`"${f.name}" non salvato: ${/nota_id/.test(error.message) ? 'manca la migrazione 20261025040000_allegati_note.sql' : dbErr(error.message)}`); }
   forseScheda([data as Documento], nota ? [nota, data] : [data]);
-  return '';
+  return { errore: '', id: data.id };
 }
 
 /* Scheda dell'AI per i file tecnici: si scrive in sottofondo appena un file entra nell'archivio tecnico (caricato, etichettato o allegato
@@ -368,6 +374,56 @@ function joinDocumenti() {
 }
 function leaveDocumenti() { if (docCh) supabase!.removeChannel(docCh); docCh = null; }
 
+/* ---------- Chat di squadra ---------- */
+// Ultimi messaggi (i più vecchi prima); a ogni messaggio nuovo, anche dei colleghi, si rilegge. sqErr = tabella mancante o altro errore.
+const SQ_MAX = 300;
+export const squadra = { mm: [] as Messaggio[], err: '', visto: '' };
+const KEY_VISTO = 'tracker_prev_squadra_visto_v1';
+const sqErr = (m: string) => (/messaggi/.test(m) ? 'manca la migrazione 20261029000000_squadra.sql (va eseguita nel SQL Editor di Supabase)' : m);
+async function loadMessaggi() {
+  const { data, error } = await supabase!.from('messaggi').select('*').order('creato', { ascending: false }).limit(SQ_MAX);
+  if (error) { squadra.err = sqErr(error.message); squadra.mm = []; return; }
+  squadra.err = ''; squadra.mm = (data as Messaggio[]).reverse();
+}
+/** Segna la chat come letta fino a adesso (ricordato in questo browser, per persona). */
+export function chatVista() {
+  const t = squadra.mm.at(-1)?.creato || new Date().toISOString();
+  if (t <= squadra.visto) return;
+  squadra.visto = t; const v = load(KEY_VISTO) || {}; v[mioEmail()] = t; store(KEY_VISTO, v);
+}
+export async function scriviMessaggio(testo: string, documento_id: string | null = null): Promise<string> {
+  const { error } = await supabase!.from('messaggi').insert({ testo: testo.trim() || null, documento_id });
+  if (error) return sqErr(error.message);
+  await loadMessaggi(); return '';
+}
+export async function eliminaMessaggio(id: string): Promise<string> {
+  const { error } = await supabase!.from('messaggi').delete().eq('id', id);
+  if (error) return sqErr(error.message);
+  await loadMessaggi(); return '';
+}
+/** Proposta di nota dall'AI per un tratto di chat (via /api/squadra, l'unica con la chiave di Anthropic). */
+export async function propostaNota(body: { chat: string; commesse: unknown[]; colleghi: unknown[] }): Promise<PropostaNota> {
+  const r = await fetch('/api/squadra', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({ error: `Risposta non valida dal server (${r.status})` }));
+  if (!r.ok) throw new Error(j.error || `Errore ${r.status}`);
+  return j;
+}
+/** Nota confermata: i messaggi usati la ricordano, i file mandati in chat (quelli che posso cambiare) diventano suoi allegati. */
+export async function segnaNota(ids: string[], notaId: string): Promise<string> {
+  const { error } = await supabase!.from('messaggi').update({ nota_id: notaId }).in('id', ids);
+  const file = squadra.mm.filter(m => ids.includes(m.id) && m.documento_id).map(m => S.docs.find(d => d.id === m.documento_id)).filter((d): d is Documento => !!d && libero(d) && puoGestireDoc(d));
+  if (file.length) { await supabase!.from('documenti').update({ nota_id: notaId }).in('id', file.map(d => d.id)); await loadDocumenti(); }
+  await loadMessaggi();
+  return error ? sqErr(error.message) : '';
+}
+let sqCh: RealtimeChannel | null = null;
+function joinSquadra() {
+  if (sqCh) return;
+  squadra.visto = (load(KEY_VISTO) || {})[mioEmail()] || '';
+  sqCh = supabase!.channel('messaggi').on('postgres_changes', { event: '*', schema: 'public', table: 'messaggi' }, async () => { await loadMessaggi(); commit(); }).subscribe();
+}
+function leaveSquadra() { if (sqCh) supabase!.removeChannel(sqCh); sqCh = null; squadra.mm = []; }
+
 /* ---------- Telegram ---------- */
 // Codice di 6 cifre (valido 10 minuti) da scrivere al bot come "/collega 123456"; lo abbina /api/agenda.
 export async function codiceTelegram(): Promise<{ codice?: string; error?: string }> {
@@ -386,17 +442,17 @@ async function loadAll() {
   cloud.fase = 'carico'; cloud.err = ''; commit();
   try {
     if (!(await loadMe())) { cloud.fase = 'negato'; commit(); return; }
-    await Promise.all([loadArch(), loadListino(true), loadScadenze(), loadDocumenti()]);
+    await Promise.all([loadArch(), loadListino(true), loadScadenze(), loadDocumenti(), loadMessaggi()]);
     if (S.prev._id && !S.arch.some(e => e.id === S.prev._id)) delete S.prev._id;
     cloud.fase = 'pronto';
-    joinPresenza(); joinScadenze(); joinDocumenti();
+    joinPresenza(); joinScadenze(); joinDocumenti(); joinSquadra();
   } catch (err) { cloud.fase = 'errore'; cloud.err = (err as Error).message; }
   commit();
 }
 // Al ritorno sulla finestra si rileggono archivio e listino, per vedere il lavoro dei colleghi.
 async function refresh() {
   if (cloud.fase !== 'pronto') return;
-  try { await Promise.all([loadArch(), loadListino(false), loadScadenze(), loadDocumenti()]); commit(); } catch { /* si riprova al prossimo ritorno */ }
+  try { await Promise.all([loadArch(), loadListino(false), loadScadenze(), loadDocumenti(), loadMessaggi()]); commit(); } catch { /* si riprova al prossimo ritorno */ }
 }
 
 export function initCloud() {
@@ -405,8 +461,8 @@ export function initCloud() {
     const prima = cloud.session?.user.id;
     cloud.session = session;
     if (ev === 'PASSWORD_RECOVERY' || (session && linkType && cloud.fase === 'avvio')) { cloud.fase = 'password'; commit(); return; }
-    if (!session) { leavePresenza(); leaveScadenze(); leaveDocumenti(); cloud.fase = 'login'; commit(); return; }
-    if (session.user.id !== prima && cloud.fase !== 'password') { leavePresenza(); leaveScadenze(); leaveDocumenti(); setTimeout(loadAll); }   // fuori dalla callback: evita blocchi del client
+    if (!session) { leavePresenza(); leaveScadenze(); leaveDocumenti(); leaveSquadra(); cloud.fase = 'login'; commit(); return; }
+    if (session.user.id !== prima && cloud.fase !== 'password') { leavePresenza(); leaveScadenze(); leaveDocumenti(); leaveSquadra(); setTimeout(loadAll); }   // fuori dalla callback: evita blocchi del client
   });
   window.addEventListener('focus', refresh);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
@@ -429,7 +485,7 @@ export async function setPassword(password: string) {
 }
 export async function logout() {
   if (cloud.sync === 'salvo' || (cloud.fase === 'pronto' && JSON.stringify(S.data) !== synced)) await pushListino();
-  leavePresenza(); leaveScadenze(); leaveDocumenti();
+  leavePresenza(); leaveScadenze(); leaveDocumenti(); leaveSquadra();
   await supabase!.auth.signOut();
   S.arch = []; S.scad = []; S.docs = []; synced = ''; listinoTs = ''; cloud.me = null;
 }

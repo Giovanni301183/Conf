@@ -19,6 +19,7 @@ import { Utenti } from './pages/Utenti';
 import { ArchivioTecnico } from './pages/ArchivioTecnico';
 import { Presenza } from './components/Presenza';
 import { Assistente } from './components/Assistente';
+import { Squadra } from './components/Squadra';
 import { Telegram } from './components/Telegram';
 import { ArchivioAttivita, nScadute } from './pages/Calendario';
 import { AltroSettore, InSviluppo } from './pages/InSviluppo';
@@ -187,6 +188,7 @@ export default function App() {
       <input type="file" ref={setFileInput} accept=".json,application/json" className="hide" onChange={e => { const f = e.target.files?.[0]; if (f) onFilePicked(f); }} />
       <AvvisiRiunioni />{node}
       </div>
+      <Squadra />
       <Assistente />
     </div>
   );

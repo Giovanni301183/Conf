@@ -11,6 +11,7 @@ import { aggiornaDoc, chiediAssistente, online, salvaNota, salvaScadenza } from 
 import { apriGmail } from './Email';
 import { TabellaVarianti, scaricaOfferte } from './Varianti';
 import { archVarianti } from '../store/actions';
+import { PANNELLO, apriPannello } from './Squadra';
 
 type Voce = { ruolo: 'tu' | 'ai' | 'err'; testo: string; proposte?: Proposta[] };
 const cap = (g: string) => g.charAt(0) + g.slice(1).toLowerCase();
@@ -160,6 +161,7 @@ export function Assistente() {
   useEffect(() => { fondo.current?.scrollIntoView({ block: 'end' }); }, [voci, esiti, aperto]);
   useEffect(() => () => rec.current?.abort(), []);
   useEffect(() => { if (!aperto) rec.current?.stop(); }, [aperto]);
+  useEffect(() => { const f = (e: Event) => { if ((e as CustomEvent).detail !== 'assistente') setAperto(false); }; window.addEventListener(PANNELLO, f); return () => window.removeEventListener(PANNELLO, f); }, []);
   if (!online()) return null;
 
   const detta = () => {
@@ -197,7 +199,7 @@ export function Assistente() {
   const nuova = () => { conv.current = []; note.current = []; setVoci([]); setEsiti({}); };
 
   return <>
-    {!aperto && <button className="aifab noprint" onClick={() => setAperto(true)} title="Assistente AI">✦ Assistente</button>}
+    {!aperto && <button className="aifab noprint" onClick={() => { apriPannello('assistente'); setAperto(true); }} title="Assistente AI">✦ Assistente</button>}
     {aperto && <aside className="aipanel noprint">
       <div className="aihead"><b>✦ Assistente</b><span style={{ flex: 1 }} />
         {voci.length > 0 && <button className="btn s" onClick={nuova}>Nuova chat</button>}

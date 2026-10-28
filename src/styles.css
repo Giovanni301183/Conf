@@ -572,6 +572,31 @@ label.chk small{margin-left:4px}
 .aimic.on{background:#c62828;border-color:#c62828;color:#fff;animation:aipulse 1.2s ease-in-out infinite}
 @keyframes aipulse{50%{opacity:.6}}
 @media print{.aifab,.aipanel{display:none!important}}
+/* Chat di squadra: stesso pannello dell'assistente, pulsante a sinistra del suo */
+.sqfab{right:150px;background:var(--card);color:var(--ink);border:1px solid var(--line);display:inline-flex;align-items:center;gap:6px}
+.sqfab:hover{background:var(--soft2)}
+.sqbadge{font-style:normal;font-size:11px;font-weight:700;background:var(--bad);color:#fff;border-radius:10px;padding:1px 7px}
+.sqpanel .aibody{gap:4px}
+.sqday{align-self:center;font-size:11.5px;color:var(--ink2);background:var(--soft2);border-radius:10px;padding:2px 10px;margin:8px 0 4px;text-transform:capitalize}
+.sqmsg{max-width:85%;display:flex;flex-direction:column;gap:2px;align-self:flex-start;border-radius:12px}
+.sqmsg.mio{align-self:flex-end}
+.sqchi{font-size:11.5px;font-weight:600;color:var(--acc2);margin:4px 0 0 4px}
+.sqtxt{background:var(--soft2);border-radius:12px;padding:7px 10px 5px;font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere;display:flex;flex-direction:column;gap:4px}
+.sqmsg.mio .sqtxt{background:var(--acc-soft)}
+.sqora{align-self:flex-end;font-size:10.5px;color:var(--ink2);display:inline-flex;gap:4px;align-items:center}
+.sqdel{border:0;background:none;color:var(--ink2);cursor:pointer;font-size:10px;padding:0 2px;opacity:0}
+.sqmsg:hover .sqdel{opacity:.7}.sqdel:hover{opacity:1;color:var(--bad)}
+.sqfile{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:4px 8px;font:inherit;font-size:12.5px;text-align:left;cursor:pointer;color:var(--ink)}
+.sqfile:disabled{cursor:default;color:var(--ink2)}
+.sqmsg.scegli{cursor:pointer;opacity:.45}
+.sqmsg.scelto{opacity:1}.sqmsg.scelto .sqtxt{box-shadow:0 0 0 2px var(--yel)}
+.sqnota{align-self:center;font-size:12px;color:var(--acc);font-weight:600;margin:2px 0 6px}
+.sqok{align-self:center;font-weight:600;color:var(--acc);font-size:13px}
+.sqerr{background:#fbeceb;color:var(--bad);border-radius:10px;padding:8px 11px;font-size:13px}
+.sqscelta{align-items:center}
+.sqcard select.aiin{font:inherit;font-size:13px}
+@media(max-width:640px){.sqfab{right:auto;left:16px}}
+@media print{.sqfab,.sqpanel{display:none!important}}
 
 /* Documenti e note */
 .dgrid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:18px;align-items:start}
