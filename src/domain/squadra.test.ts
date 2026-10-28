@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASSISTENTE, diStanza, inizioProposto, menzioniIn, nomeDi, nonLetti, perMeNonLetti, tagDi, tagInCorso, testoNota, trattoPerAI, type Messaggio } from './squadra';
+import { ASSISTENTE, chatComeAppunti, daAvvisare, diStanza, inizioProposto, menzioniIn, nomeDi, nonLetti, perMeNonLetti, tagDi, tagInCorso, testoNota, trattoPerAI, type Messaggio } from './squadra';
 
 const msg = (p: Partial<Messaggio>): Messaggio => ({ id: 'm', testo: 'ciao', documento_id: null, nota_id: null, creato_da: 'a@terranovasrl.net', creato: '2026-10-28T08:00:00Z', ...p });
 const colleghi = [{ email: 'a@terranovasrl.net', nome: 'Anna' }, { email: 'b@terranovasrl.net', nome: null }];
@@ -39,6 +39,22 @@ describe('chat di squadra', () => {
     expect(diStanza(mm, 'p1')).toHaveLength(1);
     expect(diStanza(mm, null)).toHaveLength(2);
     expect(perMeNonLetti(mm, '2026-10-28T08:30:00Z', 'b@terranovasrl.net')).toBe(1);
+  });
+  it('avvisi secondo la scelta personale', () => {
+    const io = 'a@terranovasrl.net', mio = msg({ id: 'm1', creato_da: io });
+    const risp = msg({ id: 'm2', creato_da: 'b@terranovasrl.net', risposta_a: 'm1' }), tag = msg({ id: 'm3', creato_da: 'b@terranovasrl.net', menzioni: [io] });
+    const altro = msg({ id: 'm4', creato_da: 'b@terranovasrl.net' }), mm = [mio, risp, tag, altro];
+    expect(daAvvisare([mio, risp, tag, altro], mm, io, 'tutti').map(m => m.id)).toEqual(['m2', 'm3', 'm4']);
+    expect(daAvvisare([risp, tag, altro], mm, io, 'mie').map(m => m.id)).toEqual(['m2', 'm3']);
+    expect(daAvvisare([risp, tag, altro], mm, io, 'no')).toEqual([]);
+  });
+  it("chat come appunti per l'assistente", () => {
+    const mm = [msg({ testo: 'primo', creato: '2026-10-27T08:00:00Z' }), msg({ testo: 'secondo', creato: '2026-10-28T08:00:00Z', preventivo_id: 'p1' }),
+      msg({ testo: null, documento_id: 'd', creato: '2026-10-28T09:00:00Z' }), msg({ testo: 'terzo', creato: '2026-10-28T10:00:00Z', preventivo_id: 'p1' })];
+    const aa = chatComeAppunti(mm, colleghi, id => (id === 'p1' ? 'Rossi' : ''));
+    expect(aa.map(a => [a.quando, a.titolo])).toEqual([['2026-10-28', 'Chat di squadra · Rossi'], ['2026-10-27', 'Chat di squadra · Generale']]);
+    expect(aa[0].testo).toMatch(/Anna: secondo\n.*Anna: terzo/);
+    expect(chatComeAppunti([msg({ testo: 'x'.repeat(50) })], colleghi, () => '', 10)[0].testo).toBe('…' + 'x'.repeat(10));
   });
   it('testo della nota con le cose da fare', () => {
     expect(testoNota({ testo: 'Riassunto', da_fare: [{ cosa: 'Ordinare bulloni', chi: 'a@terranovasrl.net', entro: '2026-11-03' }, { cosa: ' ', chi: '', entro: '' }] }, colleghi))

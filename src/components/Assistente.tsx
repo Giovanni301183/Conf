@@ -7,7 +7,8 @@ import { datiTecnici } from '../domain/esperto';
 import { sostituisci } from '../domain/referenze';
 import { clone } from '../domain/model';
 import { S, commit, save } from '../store/state';
-import { aggiornaDoc, chiediAssistente, online, salvaNota, salvaScadenza } from '../store/remote';
+import { aggiornaDoc, chiediAssistente, cloud, online, salvaNota, salvaScadenza, squadra } from '../store/remote';
+import { chatComeAppunti } from '../domain/squadra';
 import { apriGmail } from './Email';
 import { TabellaVarianti, scaricaOfferte } from './Varianti';
 import { archVarianti } from '../store/actions';
@@ -19,12 +20,14 @@ const giorno = (d: string) => new Date(d + 'T12:00').toLocaleDateString('it-IT',
 // Dettatura col riconoscimento vocale del browser (Chrome/Edge): il testo va nella casella, si invia a mano.
 const Riconoscimento: any = typeof window !== 'undefined' ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition : undefined;
 
-/** Appunti per l'assistente: note dei documenti e note degli eventi, i più recenti prima, con il nome della commessa. */
+/** Appunti per l'assistente: note dei documenti, note degli eventi e chat di squadra, i più recenti prima, con il nome della commessa. */
 function appunti(): Appunto[] {
   const comm = (id?: string | null) => (id && S.arch.find(a => a.id === id)?.nome) || '';
   const note = S.docs.filter(d => d.tipo === 'nota').map(d => ({ quando: String(d.creato || '').slice(0, 10), commessa: comm(d.preventivo_id), titolo: d.titolo, testo: (d.testo || '').slice(0, 2000), id: d.id, etichette: d.etichette || [] }));
   const eventi = S.scad.filter(x => x.nota).map(x => ({ quando: x.giorno, commessa: comm(x.preventivo_id), titolo: 'Evento: ' + x.titolo, testo: String(x.nota).slice(0, 2000) }));
-  return [...note, ...eventi].sort((a, b) => b.quando.localeCompare(a.quando)).slice(0, 300);
+  // Le discussioni della chat di squadra (una per giorno e stanza), così si può chiedere cosa si è deciso in chat.
+  const chat = chatComeAppunti(squadra.mm, cloud.colleghi, comm);
+  return [...note, ...eventi, ...chat].sort((a, b) => b.quando.localeCompare(a.quando)).slice(0, 300);
 }
 
 function CardEmail({ p, stato, onFatto }: { p: Extract<Proposta, { tipo: 'email' }>; stato?: string; onFatto: (esito: string, nota: string) => void }) {

@@ -1,4 +1,4 @@
-// Home, scheda Cerca: una sola ricerca su preventivi, voci d'agenda e documenti/note. Tutte le parole devono comparire.
+// Home, scheda Cerca: una sola ricerca su preventivi, voci d'agenda, documenti/note e messaggi della chat di squadra. Tutte le parole devono comparire.
 import type { ReactNode } from 'react';
 import { eur, fDate, fN } from '../domain/format';
 import { eAnno, eStato, testo, anni } from '../domain/kpi';
@@ -9,6 +9,9 @@ import { S, commit } from '../store/state';
 import { archOpen } from '../store/actions';
 import { StatoSel } from './Cruscotto';
 import { apriFile } from './Documenti';
+import { nomeDi } from '../domain/squadra';
+import { cloud, squadra } from '../store/remote';
+import { apriChat } from '../components/pannelli';
 
 const parole = (q: string) => q.toLowerCase().split(/\s+/).filter(Boolean);
 const tutte = (t: string, pp: string[]) => { const s = t.toLowerCase(); return pp.every(p => s.includes(p)); };
@@ -51,11 +54,12 @@ export function Cerca() {
   // Agenda e documenti solo quando si scrive qualcosa: senza parole sarebbero l'elenco completo.
   const scad: Scadenza[] = pp.length ? S.scad.filter(s => tutte(`${s.titolo} ${s.nota || ''} ${s.categoria || ''} ${nomePrev(s.preventivo_id)}`, pp)) : [];
   const docs: Documento[] = pp.length ? S.docs.filter(d => tutte(`${d.titolo} ${d.testo || ''} ${nomeCartella(d.cartella)} ${nomePrev(d.preventivo_id)}`, pp)) : [];
+  const chat = pp.length ? squadra.mm.filter(m => tutte(`${m.testo || ''} ${nomeDi(m.creato_da, cloud.colleghi)} ${nomePrev(m.preventivo_id || null)}`, pp)).reverse() : [];
   const act = c.q || c.stato || c.anno;
   return (
     <>
       <div className="card kfilt noprint">
-        <input autoFocus placeholder="Cerca in preventivi, agenda, documenti e note…" value={c.q} onChange={e => set('q', e.target.value)} style={{ width: 340 }} />
+        <input autoFocus placeholder="Cerca in preventivi, agenda, documenti, note e chat…" value={c.q} onChange={e => set('q', e.target.value)} style={{ width: 340 }} />
         <select value={c.anno} onChange={e => set('anno', e.target.value)}><option value="">Tutti gli anni</option>{anni(S.arch).map(a => <option key={a}>{a}</option>)}</select>
         <span className="chips">{STATI.map(([k, l, col, ic]) => (
           <button key={k} className={`chip ${c.stato === k ? 'on' : ''}`} style={{ '--sc': col } as React.CSSProperties} onClick={() => set('stato', c.stato === k ? '' : k)}><i>{ic}</i>{l}</button>))}</span>
@@ -109,7 +113,21 @@ export function Cerca() {
             ))}
           </tbody></table></div>
         </Sezione>
-      </> : <p className="hint">Scrivi una o più parole per cercare anche nelle voci d'agenda e nei documenti e note.</p>}
+
+        <Sezione titolo="Chat di squadra" n={chat.length}>
+          <div className="wrap"><table className="arch"><tbody>
+            <tr><th>Quando</th><th>Messaggio</th><th>Stanza</th><th></th></tr>
+            {chat.slice(0, 100).map(m => (
+              <tr key={m.id}>
+                <td className="small">{fDate(m.creato.slice(0, 10))} {new Date(m.creato).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</td>
+                <td><b><Hl t={nomeDi(m.creato_da, cloud.colleghi)} pp={pp} /></b><div className="muted small"><Hl t={brano(m.testo || '', pp)} pp={pp} /></div></td>
+                <td className="small">{m.preventivo_id ? <Hl t={nomePrev(m.preventivo_id) || '–'} pp={pp} /> : 'Generale'}</td>
+                <td className="acts"><button className="btn s" onClick={() => apriChat(m.preventivo_id || null)}>💬 Apri chat</button></td>
+              </tr>
+            ))}
+          </tbody></table></div>
+        </Sezione>
+      </> : <p className="hint">Scrivi una o più parole per cercare anche nelle voci d'agenda, nei documenti e note e nella chat di squadra.</p>}
     </>
   );
 }

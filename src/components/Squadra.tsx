@@ -3,12 +3,18 @@
 // 🎤 Vocale: si registra l'audio (file nei Documenti) e, su Chrome/Edge, intanto il browser lo trascrive: il testo va nel messaggio e lo legge anche l'AI.
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ETICHETTE, cartellaPer, immagine, type Documento } from '../domain/documenti';
-import { ASSISTENTE, diStanza, inizioProposto, menzioniIn, nomeDi, nonLetti, perMeNonLetti, tagDi, tagInCorso, testoNota, trattoPerAI, type Messaggio, type PropostaNota } from '../domain/squadra';
+import { ASSISTENTE, AVVISI, daAvvisare, diStanza, perMeMsg, type Avvisi, inizioProposto, menzioniIn, nomeDi, nonLetti, perMeNonLetti, tagDi, tagInCorso, testoNota, trattoPerAI, type Messaggio, type PropostaNota } from '../domain/squadra';
 import { S, commit } from '../store/state';
 import { assistenteInChat, caricaFileId, chatVista, cloud, eliminaMessaggio, isAdmin, linkAnteprime, linkDoc, mioEmail, online, propostaNota, salvaNota, salvaScadenza, scriviMessaggio, segnaNota, spostaMessaggio, squadra } from '../store/remote';
 import { Etq, OpzioniPreventivi } from '../pages/Documenti';
 
-import { APRI_CHAT, PANNELLO, apriPannello } from './pannelli';
+import { APRI_CHAT, PANNELLO, apriChat, apriPannello } from './pannelli';
+import { toast } from '../store/actions';
+
+// Avvisi dei messaggi nuovi (scelta di questo browser): notifica del computer se l'app è in un'altra finestra, altrimenti il messaggio in basso.
+const KEY_AVVISI = 'tracker_prev_squadra_avvisi_v1';
+const leggiAvvisi = (): Avvisi => { try { const v = localStorage.getItem(KEY_AVVISI); return v === 'mie' || v === 'no' ? v : 'tutti'; } catch { return 'tutti'; } };
+const notifiche = () => typeof Notification !== 'undefined';
 
 const ora = (t: string) => new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 const oggiIso = () => new Date().toLocaleDateString('sv-SE');
@@ -154,6 +160,30 @@ export function Squadra() {
     return () => { window.removeEventListener(PANNELLO, chiudi); window.removeEventListener(APRI_CHAT, apriIn); };
   }, []);
   useEffect(() => { if (aperto) { chatVista(); commit(); } }, [aperto, ultimo]);
+  const [avvisi, setAvvisi] = useState(leggiAvvisi), [menuAvvisi, setMenuAvvisi] = useState(false);
+  const [permesso, setPermesso] = useState(() => (notifiche() ? Notification.permission : 'denied'));
+  const scegliAvvisi = (k: Avvisi) => { setAvvisi(k); try { localStorage.setItem(KEY_AVVISI, k); } catch { /* resta per questa sessione */ } };
+  // Messaggi già visti da questa finestra: si avvisa solo di quelli arrivati dopo l'apertura dell'app.
+  const visti = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (cloud.fase !== 'pronto') return;
+    if (!visti.current) { visti.current = new Set(tutti.map(m => m.id)); return; }
+    const nuovi = tutti.filter(m => !visti.current!.has(m.id));
+    nuovi.forEach(m => visti.current!.add(m.id));
+    for (const m of daAvvisare(nuovi, tutti, me, avvisi)) {
+      if (aperto && !document.hidden && (m.preventivo_id || null) === stanza) continue;   // lo sto già guardando
+      const c = m.preventivo_id ? S.arch.find(a => a.id === m.preventivo_id) : undefined;
+      const titolo = `${perMeMsg(m, tutti, me) ? '@ ' : ''}${nomeDi(m.creato_da, cloud.colleghi)}${c ? ' · ' + c.nome : ''}`;
+      const cosa = m.testo || (m.documento_id ? '📎 ' + (S.docs.find(d => d.id === m.documento_id)?.titolo || 'file') : '');
+      if (document.hidden && notifiche() && Notification.permission === 'granted') {
+        // Sul telefono senza service worker il costruttore può non esistere: restano il pallino e il messaggio al ritorno.
+        try {
+          const n = new Notification(titolo, { body: cosa.slice(0, 200), icon: '/logo-terranova.png', tag: 'chat-' + m.id });
+          n.onclick = () => { window.focus(); apriChat(m.preventivo_id || null); n.close(); };
+        } catch { /* niente notifica di sistema */ }
+      } else if (!document.hidden) toast(`💬 ${titolo}: ${cosa.slice(0, 90)}`);
+    }
+  }, [ultimo, cloud.fase]);
   useEffect(() => { fondo.current?.scrollIntoView({ block: 'end' }); }, [aperto, ultimo, prop, pensa, stanza, aiPensa]);
   if (!online() || !cloud.session) return null;
 
@@ -255,7 +285,19 @@ export function Squadra() {
         <span className="muted small" title={cloud.presenti.map(p => p.nome || p.email).join(', ')}>{cloud.presenti.length > 1 ? `${cloud.presenti.length} collegati` : ''}</span>
         <span style={{ flex: 1 }} />
         {mm.length > 0 && da === null && !prop && <button className="btn s" onClick={() => { setEsito(''); setDa(inizioProposto(mm, oggiIso())); }} title="Fai scrivere all'AI una nota da una parte della conversazione">📝 Crea nota</button>}
+        <button className="btn s" onClick={() => setMenuAvvisi(!menuAvvisi)} title={`Avvisi: ${AVVISI.find(a => a[0] === avvisi)![1].toLowerCase()}`}>{avvisi === 'no' ? '🔕' : '🔔'}</button>
         <button className="btn x" onClick={() => setAperto(false)} title="Chiudi">✕</button></div>
+      {menuAvvisi && <div className="sqavv">
+        <b className="small">Avvisami con la notifica del computer</b>
+        {AVVISI.map(([k, l]) => <label key={k} className="small"><input type="radio" name="sqavv" checked={avvisi === k} onChange={() => scegliAvvisi(k)} /> {l}</label>)}
+        {avvisi !== 'no' && permesso === 'denied' && <div className="muted small">Il browser blocca le notifiche: abilitale dal lucchetto accanto all'indirizzo. Intanto restano il pallino e il messaggio in basso.</div>}
+        <div className="muted small">Arrivano con l'app aperta, anche se stai lavorando in un'altra finestra. La scelta vale per questo computer.</div>
+      </div>}
+      {avvisi !== 'no' && permesso === 'default' && <div className="sqavv riga">
+        <span className="small" style={{ flex: 1 }}>🔔 Vuoi la notifica del computer quando arriva un messaggio?</span>
+        <button className="btn p s" onClick={async () => setPermesso(await Notification.requestPermission())}>Sì</button>
+        <button className="btn s" onClick={() => { scegliAvvisi('no'); }}>No</button>
+      </div>}
       <div className="aibody">
         {squadra.err ? <div className="sqerr">{squadra.err}</div> : !mm.length && <div className="muted aihint">{stanza ? <>Stanza della commessa <b>{nomeStanza(stanza)}</b>: qui si parla solo di lei. Foto e file vanno anche nei suoi Documenti.</> : 'Qui scrivete tra colleghi: i messaggi arrivano subito a tutti, anche con foto, file (📎) e vocali (🎤).'}
           <ul><li><b>@nome</b> per chiamare un collega, <b>@assistente</b> per una domanda tecnica all'AI: risponde in chat.</li>

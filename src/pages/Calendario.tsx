@@ -13,6 +13,7 @@ import { DocPanel, NoteHome, docNonDisponibili } from './Documenti';
 import { ModuloEmail, contestoEmail } from '../components/Email';
 import { PermessoAvvisi } from '../components/AvvisiRiunioni';
 import { linkRiunione } from '../domain/riunione';
+import { apriChat } from '../components/pannelli';
 import { cloud, coinvoltiDisponibili, eliminaScadenza, miaVista, mioEmail, online, puoModificare, puoSpuntare, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
 import { VISTA_TUTTO, filtraVista, normVista, vedeTutto, type Quanto, type Vista } from '../domain/vista';
 
@@ -105,6 +106,8 @@ function Riga({ v, oggi, onEdit, data = true, allarme = '' }: { v: Voce; oggi: n
       {v.tipo === 'richiamo' && v.prevId && <StatoSel id={v.prevId} k="inviato" />}
       {link && <a className="btn s p" href={link} target="_blank" rel="noopener noreferrer" title={link}>🎥 Entra</a>}
       {v.prevId && <button className="btn s" onClick={() => apri(v.prevId!)} title={'Apre il preventivo nel configuratore: ' + (S.arch.find(e => e.id === v.prevId)?.nome || '')}>Apri preventivo</button>}
+      {s && online() && (s.preventivo_id || s.nota?.includes('(chat di squadra)')) && <button className="btn s" onClick={() => apriChat(s.preventivo_id || null)}
+        title={s.preventivo_id ? 'Apre la chat di squadra nella stanza della commessa' : 'Apre la chat di squadra da cui è nata la voce'}>💬</button>}
       {attesa && spunta && <button className="btn s p" onClick={() => risposta(s!)} title="Segna la voce come fatta, con una nota su cosa hanno risposto">Risposta arrivata</button>}
       {s && online() && !email && <button className="btn s" onClick={() => setEmail(attesa ? 'sollecito' : 'email')} title={attesa ? 'Scrivi un sollecito cortese' : "Scrivi un'email di aggiornamento da questa voce"}>{attesa ? '✉ Sollecita' : '✉ Email'}</button>}
       {s && <button className={`btn s${vedi ? ' on' : ''}`} onClick={() => setVedi(!vedi)} title="Vedi la voce per intero, con le note e i file allegati">👁 Vedi{nAll ? ' · 📎 ' + nAll : ''}</button>}

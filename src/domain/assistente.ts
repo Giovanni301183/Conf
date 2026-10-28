@@ -59,7 +59,7 @@ export const TOOLS = [
   { name: 'proponi_evento', description: "Prepara un evento nel calendario della Home. Non lo crea: l'utente conferma nell'app.",
     input_schema: obj({ titolo: s('Titolo breve'), giorno: s('Data AAAA-MM-GG'), ora: ns('Ora HH:MM, o null se senza ora'),
       genere: { type: 'string', enum: GENERI_EVENTO, description: 'attivita = da fare, promemoria, scadenza, appuntamento, urgenza' }, nota: ns('Nota facoltativa') }) },
-  { name: 'cerca_appunti', description: 'Cerca negli appunti (note dei documenti e note degli eventi del calendario) per commessa, cliente o parole del testo. Testo vuoto = gli ultimi appunti. Ritorna data, commessa, titolo e testo.',
+  { name: 'cerca_appunti', description: 'Cerca negli appunti (note dei documenti, note degli eventi del calendario e discussioni della chat di squadra, una per giorno e stanza, con titolo "Chat di squadra · …") per commessa, cliente o parole del testo. Per "cosa abbiamo deciso/detto in chat" cerca qui. Testo vuoto = gli ultimi appunti. Ritorna data, commessa, titolo e testo.',
     input_schema: obj({ testo: s('Parole da cercare, anche vuoto') }) },
   { name: 'proponi_email', description: "Prepara un'email di aggiornamento. Non la invia: l'utente la vede, la può correggere e la apre già compilata nel suo Gmail.",
     input_schema: obj({ a: ns('Indirizzi email dei destinatari separati da virgola, solo se l\'utente li ha detti; altrimenti null'),

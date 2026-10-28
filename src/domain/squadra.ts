@@ -30,6 +30,15 @@ export function menzioniIn(testo: string, colleghi: Collega[]): string[] {
 }
 /** Il nome che si sta scrivendo dopo una @ alla fine del testo (per i suggerimenti); null se non si sta scrivendo un nome. */
 export const tagInCorso = (testo: string) => { const m = /(?:^|\s)@([\p{L}\p{N}._-]*)$/u.exec(testo); return m ? m[1] : null; };
+/** Avvisi della chat, scelta personale: tutti i messaggi, solo quelli per me (@nome o risposta a un mio messaggio), nessuno. */
+export type Avvisi = 'tutti' | 'mie' | 'no';
+export const AVVISI: [Avvisi, string][] = [['tutti', 'Tutti i messaggi'], ['mie', 'Solo @nome e risposte a me'], ['no', 'Nessun avviso']];
+/** Il messaggio è per me: mi chiamano con @ o rispondono a un mio messaggio. */
+export const perMeMsg = (m: Messaggio, mm: Messaggio[], me: string) =>
+  !!m.menzioni?.includes(me) || (!!m.risposta_a && mm.find(x => x.id === m.risposta_a)?.creato_da === me);
+/** Messaggi nuovi di cui avvisarmi, secondo la mia scelta (i miei mai). */
+export const daAvvisare = (nuovi: Messaggio[], mm: Messaggio[], me: string, scelta: Avvisi) =>
+  scelta === 'no' ? [] : nuovi.filter(m => m.creato_da !== me && (scelta === 'tutti' || perMeMsg(m, mm, me)));
 /** Messaggi non letti in cui sono chiamato con @. */
 export const perMeNonLetti = (mm: Messaggio[], visto: string, me: string) => mm.filter(m => m.creato_da !== me && m.creato > visto && m.menzioni?.includes(me)).length;
 /** Proposta di nota scritta dall'AI da un tratto di chat. */
@@ -68,4 +77,20 @@ export function testoNota(p: Pick<PropostaNota, 'testo' | 'da_fare'>, colleghi: 
   const giorno = (g: string) => new Date(g + 'T12:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
   const righe = p.da_fare.filter(x => x.cosa.trim()).map(x => `- ${x.cosa.trim()}${x.chi ? ` (${nomeDi(x.chi, colleghi)})` : ''}${x.entro ? ` entro il ${giorno(x.entro)}` : ''}`);
   return [p.testo.trim(), righe.length ? 'Da fare:\n' + righe.join('\n') : ''].filter(Boolean).join('\n\n');
+}
+
+/** La chat come appunti per l'assistente: una voce per giorno e stanza (le più recenti prima), con le righe "ora Nome: testo".
+ *  Di una giornata lunga resta la parte finale (al massimo n caratteri). */
+export function chatComeAppunti(mm: Messaggio[], colleghi: Collega[], commessa: (id: string) => string, n = 2000) {
+  const gruppi = new Map<string, { quando: string; commessa: string; righe: string[] }>();
+  for (const m of mm) {
+    if (!m.testo?.trim()) continue;
+    const d = new Date(m.creato), quando = d.toLocaleDateString('sv-SE'), k = quando + '|' + (m.preventivo_id || '');
+    if (!gruppi.has(k)) gruppi.set(k, { quando, commessa: m.preventivo_id ? commessa(m.preventivo_id) : '', righe: [] });
+    gruppi.get(k)!.righe.push(`${d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} ${nomeDi(m.creato_da, colleghi)}: ${m.testo.trim()}`);
+  }
+  return [...gruppi.values()].sort((a, b) => b.quando.localeCompare(a.quando)).map(g => {
+    const t = g.righe.join('\n');
+    return { quando: g.quando, commessa: g.commessa, titolo: `Chat di squadra · ${g.commessa || 'Generale'}`, testo: t.length > n ? '…' + t.slice(-n) : t };
+  });
 }
