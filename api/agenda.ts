@@ -19,6 +19,7 @@ import { marginiBot, preventivoBot, variantiBot } from './_preventivo.js';
 import { linkGmail, scriviBozza } from './_email.js';
 import { allegatiDaCaricare, indirizzo, leggiEmail, type Commessa, type Lettura } from './_posta.js';
 import { chiaveAvviso, daAvvisare, linkRiunione, minutiA } from '../src/domain/riunione.js';
+import { attesaPer, conCodice, numDaOggetto } from '../src/domain/posta.js';
 import { ETICHETTE, cartellaPer, nomeSicuro, nomiEtichette, pulisciEtichette } from '../src/domain/documenti.js';
 
 export const GENERI = ['attivita', 'promemoria', 'scadenza', 'appuntamento', 'urgenza'] as const;
@@ -228,6 +229,7 @@ async function emailDaAppunto(db: Db, b: any, io: Me, chat: number, origine: str
 
   const r = await scriviBozza({ ...ap, contesto: ctxEmail, richiesta: String(b.richiesta ?? '') }, io.nome || io.email.split('@')[0]);
   if ('errore' in r) return fail(r.errore);
+  r.oggetto = conCodice(r.oggetto, p?.num);   // [TN-numero]: la risposta del cliente si lega da sola alla commessa
   const a = String(b.a ?? '').trim();
   // Telefono: pagina ponte che apre l'app Gmail con la mail compilata (vedi posta.ts). Computer: Gmail sul web.
   const posta = (testo: string) => {
@@ -282,16 +284,19 @@ async function modificaNota(db: Db, b: any, io: Me) {
 /* ---------- Email in arrivo ---------- */
 // allegati: file dell'email caricati da n8n nello Storage (cartella posta/...), legati alla nota o alla voce quando si sceglie.
 export interface AllegatoPosta { nome: string; mime: string; percorso: string }
-export type Proposta = Lettura & { oggetto: string; link?: string; allegati?: AllegatoPosta[] };
-/** Messaggio in chat privata con la lettura dell'email e i pulsanti "pe:<id>:<scelta>" (a appunto, p promemoria, r riunione, x ignora). */
+// attesa = voce «✉ Attesa risposta» aperta a cui sembra rispondere l'email (stessa commessa o stesso oggetto): pulsante «È la risposta».
+export type Proposta = Lettura & { oggetto: string; link?: string; allegati?: AllegatoPosta[]; attesa?: { id: string; titolo: string } };
+const ATTESA = '✉ Attesa risposta · ';
+/** Messaggio in chat privata con la lettura dell'email e i pulsanti "pe:<id>:<scelta>" (v risposta a una voce in attesa, a appunto, p promemoria, r riunione, x ignora). */
 export function propostaTelegram(id: string, l: Proposta, commessa: string | null, oggi: string) {
   const giorno = l.giorno || prossimoLavorativo(oggi), b = (text: string, s: string) => [{ text, callback_data: `pe:${id}:${s}` }];
   const text = [`📧 Email${l.mittente ? ' di ' + l.mittente : ''}`, l.oggetto ? `Oggetto: ${l.oggetto}` : '', '', `👉 ${l.titolo}`, l.riassunto, '',
     l.link ? `🎥 ${l.link}` : '', commessa ? `Commessa: ${commessa}` : 'Commessa: non riconosciuta (l\'appunto resta libero)',
     l.etichette?.length ? `Temi: ${nomiEtichette(l.etichette)}` : '',
-    l.allegati?.length ? `📎 ${l.allegati.length} allegat${l.allegati.length === 1 ? 'o' : 'i'}: ${l.allegati.map(a => a.nome).join(', ')}`.slice(0, 600) : '', '', 'Cosa ne faccio?']
+    l.allegati?.length ? `📎 ${l.allegati.length} allegat${l.allegati.length === 1 ? 'o' : 'i'}: ${l.allegati.map(a => a.nome).join(', ')}`.slice(0, 600) : '',
+    l.attesa ? `↩ Sembra la risposta a: ${l.attesa.titolo.replace(ATTESA, '')}` : '', '', 'Cosa ne faccio?']
     .filter((x, i, a) => x || (i > 0 && a[i - 1])).join('\n').slice(0, 4000);
-  const tasti = [b(commessa ? '📝 Appunto nella commessa' : '📝 Appunto', 'a'), b(`🔔 Promemoria ${giornoIt(giorno)}`, 'p'),
+  const tasti = [...(l.attesa ? [b(`✅ È la risposta: segna fatta e salva`, 'v')] : []), b(commessa ? '📝 Appunto nella commessa' : '📝 Appunto', 'a'), b(`🔔 Promemoria ${giornoIt(giorno)}`, 'p'),
     ...(l.giorno ? [b(`📅 Riunione ${giornoIt(l.giorno)}${l.ora ? ' ' + l.ora : ''}`, 'r')] : []), b('🗑 Ignora', 'x')];
   return { text, reply_markup: { inline_keyboard: tasti } };
 }
@@ -310,14 +315,21 @@ async function postaInArrivo(db: Db, b: any, oggi: string) {
   const commesse = (cc || []) as Commessa[];
   const l = await leggiEmail({ da: String(b.da ?? ''), oggetto, testo: String(b.testo ?? ''), data: String(b.data ?? '') }, commesse, oggi);
   if ('errore' in l) return fail(l.errore);
+  // Il codice [TN-numero] nell'oggetto (messo dall'app nelle email mandate) vale più della lettura dell'AI.
+  const num = numDaOggetto(oggetto), perCodice = num ? commesse.find(c => c.num === num) : undefined;
+  if (perCodice) l.preventivo_id = perCodice.id;
+  const { data: aa } = await db.from('scadenze').select('id, titolo, preventivo_id').eq('genere', 'promemoria').eq('fatto', false).like('titolo', ATTESA + '%')
+    .order('giorno', { ascending: false }).limit(100);
+  const att = attesaPer((aa || []) as { id: string; titolo: string; preventivo_id: string | null }[], oggetto, l.preventivo_id);
   // Allegati: ognuno ha il suo posto nello Storage; n8n li carica con i link firmati che tornano nella risposta.
   const cartellaPosta = `posta/${crypto.randomUUID()}`;
   const scelti = allegatiDaCaricare(Array.isArray(b.allegati) ? b.allegati : [])
     .map((a, i) => ({ chiave: a.chiave, nome: a.nome.slice(0, 200), mime: a.mime || '', percorso: `${cartellaPosta}/${i + 1}_${nomeSicuro(a.nome)}` }));
-  const dati: Proposta = { ...l, oggetto, link: linkRiunione(String(b.testo ?? '')), allegati: scelti.map(({ chiave, ...a }) => a) };
+  const dati: Proposta = { ...l, oggetto, link: linkRiunione(String(b.testo ?? '')), allegati: scelti.map(({ chiave, ...a }) => a),
+    ...(att ? { attesa: { id: att.id, titolo: att.titolo }, preventivo_id: l.preventivo_id || att.preventivo_id || '' } : {}) };
   const { data: p, error } = await db.from('posta_proposte').insert({ email: u.email, gmail_id: gid, dati }).select('id').single();
   if (error) return error.code === '23505' ? { ok: true, doppia: true } : fail(error.message);
-  const c = commesse.find(x => x.id === l.preventivo_id);
+  const c = commesse.find(x => x.id === dati.preventivo_id);
   const t = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ chat_id: u.telegram_id, ...propostaTelegram(p.id, dati, c ? c.nome + (c.num ? ` (N° ${c.num})` : '') : null, oggi) }) });
   if (!t.ok) return fail('Telegram non ha accettato la proposta' + (t.status === 403 ? ': il collega deve aprire la chat con il bot e premere Avvia.' : '.'));
@@ -384,7 +396,22 @@ async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
   const d = p.dati as Proposta, scelta = String(b.scelta ?? '');
   const nota = [d.riassunto, d.link && `🎥 ${d.link}`, `✉ Email${d.mittente ? ' di ' + d.mittente : ''}${d.oggetto ? `: «${d.oggetto}»` : ''}`].filter(Boolean).join('\n\n');
   let testo: string;
-  if (scelta === 'x') {
+  if (scelta === 'v') {
+    // Risposta a un'email mandata dall'app: la voce «Attesa risposta» diventa fatta con il riassunto, l'email resta come appunto legato alla voce.
+    const { data: v } = d.attesa ? await db.from('scadenze').select(COLS).eq('id', d.attesa.id).maybeSingle() : { data: null };
+    if (!v) return fail("La voce in attesa non c'è più: scegli 📝 Appunto.");
+    const giorno = oggi.split('-').reverse().join('/');
+    const nuova = [v.nota, `Risposta del ${giorno}: ${d.riassunto || d.titolo}`].filter(Boolean).join('\n');
+    const { error: e1 } = await db.from('scadenze').update({ fatto: true, nota: nuova }).eq('id', v.id);
+    if (e1) return fail(e1.message);
+    const pid = v.preventivo_id || d.preventivo_id || null, cartella = pid ? 'cliente' : 'altro', etichette = pulisciEtichette(d.etichette);
+    const { data: n, error } = await db.from('documenti').insert({ preventivo_id: pid, scadenza_id: v.id, tipo: 'nota', cartella,
+      titolo: ('Risposta: ' + d.titolo).slice(0, 200), testo: nota, etichette, creato_da: io.email }).select('id').single();
+    if (error) return fail(error.message);
+    const na = await legaAllegati(db, d, { nota_id: n.id }, cartella, io);
+    testo = `✅ Risposta registrata: «${v.titolo.replace(ATTESA, '')}» segnata fatta, email salvata come appunto della voce${conAllegati(na)}`;
+  }
+  else if (scelta === 'x') {
     const pp = (d.allegati || []).map(a => a.percorso);
     if (pp.length) await db.storage.from(BUCKET).remove(pp);
     testo = 'Ok, email ignorata.';

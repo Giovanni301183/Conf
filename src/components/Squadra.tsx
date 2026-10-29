@@ -1,14 +1,16 @@
 // Chat di squadra: pannello a destra, accanto all'assistente, dove i colleghi si scrivono (messaggi a tutti in tempo reale, anche foto e file).
 // «📝 Crea nota»: si sceglie da quale messaggio partire, l'AI propone la nota (api/squadra.ts), la si corregge e si conferma: va nei Documenti.
+// 📌 Collega: il messaggio si lega a una nota o a una voce d'agenda (etichetta cliccabile); chi è assegnato o coinvolto nella voce è avvisato come con @nome.
 // 🎤 Vocale: si registra l'audio (file nei Documenti) e, su Chrome/Edge, intanto il browser lo trascrive: il testo va nel messaggio e lo legge anche l'AI.
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ETICHETTE, cartellaPer, immagine, type Documento } from '../domain/documenti';
-import { ASSISTENTE, AVVISI, daAvvisare, diStanza, perMeMsg, type Avvisi, inizioProposto, menzioniIn, nomeDi, nonLetti, perMeNonLetti, tagDi, tagInCorso, testoNota, trattoPerAI, type Messaggio, type PropostaNota } from '../domain/squadra';
+import { ASSISTENTE, AVVISI, daAvvisare, diStanza, perMeMsg, type Avvisi, inizioProposto, menzioniIn, nomeDi, nonLetti, perMeNonLetti, rifDi, tagDi, tagInCorso, testoNota, trattoPerAI, type Messaggio, type PropostaNota, type Rif } from '../domain/squadra';
 import { S, commit } from '../store/state';
-import { assistenteInChat, caricaFileId, chatVista, cloud, eliminaMessaggio, isAdmin, linkAnteprime, linkDoc, mioEmail, online, propostaNota, salvaNota, salvaScadenza, scriviMessaggio, segnaNota, spostaMessaggio, squadra } from '../store/remote';
+import { assistenteInChat, caricaFileId, chatVista, cloud, collegaMessaggio, eliminaMessaggio, isAdmin, linkAnteprime, linkDoc, mioEmail, online, propostaNota, salvaNota, salvaScadenza, scriviMessaggio, segnaNota, spostaMessaggio, squadra } from '../store/remote';
 import { Etq, OpzioniPreventivi } from '../pages/Documenti';
 
-import { APRI_CHAT, PANNELLO, apriChat, apriPannello } from './pannelli';
+import { APRI_CHAT, PANNELLO, apriChat, apriPannello, type ApriChat } from './pannelli';
+import { RifChip, ScegliRif } from './Collegamento';
 import { toast } from '../store/actions';
 
 // Avvisi dei messaggi nuovi (scelta di questo browser): notifica del computer se l'app è in un'altra finestra, altrimenti il messaggio in basso.
@@ -138,6 +140,8 @@ export function Squadra() {
   const [stanza, setStanza] = useState<string | null>(null);   // commessa della stanza aperta (null = Generale)
   const [risposta, setRisposta] = useState<Messaggio | null>(null), [sposta, setSposta] = useState<string | null>(null), [aiPensa, setAiPensa] = useState(false);
   const [da, setDa] = useState<number | null>(null);   // scelta del tratto per la nota: indice del primo messaggio della stanza
+  // rif = nota o voce a cui legare il prossimo messaggio; scegli = scelta aperta ('' per il prossimo messaggio, id per uno già scritto).
+  const [rif, setRif] = useState<Rif | null>(null), [scegli, setScegli] = useState<string | null>(null);
   const [prop, setProp] = useState<(PropostaNota & { ids: string[] }) | null>(null), [pensa, setPensa] = useState(false), [esito, setEsito] = useState('');
   const fondo = useRef<HTMLDivElement>(null), file = useRef<HTMLInputElement>(null), casella = useRef<HTMLTextAreaElement>(null);
   const tutti = squadra.mm, mm = diStanza(tutti, stanza), me = mioEmail(), ultimo = tutti.at(-1)?.id;
@@ -155,7 +159,11 @@ export function Squadra() {
   }, setErr);
   useEffect(() => {
     const chiudi = (e: Event) => { if ((e as CustomEvent).detail !== 'squadra') setAperto(false); };
-    const apriIn = (e: Event) => { setStanza((e as CustomEvent).detail ?? null); setDa(null); setProp(null); setRisposta(null); apriPannello('squadra'); setAperto(true); };
+    const apriIn = (e: Event) => {
+      const d = (e as CustomEvent<ApriChat>).detail;
+      setStanza(d.stanza ?? null); setDa(null); setProp(null); setRisposta(null); setScegli(null); if (d.rif) setRif(d.rif);
+      apriPannello('squadra'); setAperto(true); setTimeout(() => casella.current?.focus(), 50);
+    };
     window.addEventListener(PANNELLO, chiudi); window.addEventListener(APRI_CHAT, apriIn);
     return () => { window.removeEventListener(PANNELLO, chiudi); window.removeEventListener(APRI_CHAT, apriIn); };
   }, []);
@@ -197,7 +205,7 @@ export function Squadra() {
   const stanze = [...new Set<string>([...S.arch.filter(e => e.prev?.stato === 'vinto').map(e => e.id), ...tutti.map(m => m.preventivo_id || '').filter(Boolean), ...(S.prev._id ? [S.prev._id] : []), ...(stanza ? [stanza] : [])])]
     .filter(id => commessa(id)).sort((a, b) => nomeStanza(a).localeCompare(nomeStanza(b)));
   const nuoviIn = (id: string | null) => nonLetti(diStanza(tutti, id), squadra.visto, me);
-  const cambiaStanza = (s: string | null) => { setStanza(s); setDa(null); setProp(null); setRisposta(null); setSposta(null); setEsito(''); };
+  const cambiaStanza = (s: string | null) => { setStanza(s); setDa(null); setProp(null); setRisposta(null); setSposta(null); setScegli(null); setEsito(''); };
   const commesse = () => S.arch.map(e => ({ id: e.id, num: e.prev?.num || '', nome: e.nome, cliente: e.cliente || '' }));
   const persone = [...cloud.colleghi.filter(c => c.email !== me).map(c => ({ tag: tagDi(c), nome: c.nome || c.email })), { tag: 'assistente', nome: '✦ Assistente (risponde in chat)' }];
   const inCorso = tagInCorso(testo), suggeriti = inCorso === null ? [] : persone.filter(p => p.tag.toLowerCase().startsWith(inCorso.toLowerCase())).slice(0, 6);
@@ -205,10 +213,12 @@ export function Squadra() {
 
   /** Manda nella stanza aperta, con risposta e @menzioni; con @assistente chiede anche la risposta all'AI. */
   async function manda(t: string, documento_id: string | null = null): Promise<string> {
-    const menzioni = menzioniIn(t, cloud.colleghi);
-    const r = await scriviMessaggio(t, documento_id, { preventivo_id: stanza, risposta_a: risposta?.id || null, menzioni });
+    // Legato a una voce d'agenda: chi ne è incaricato o coinvolto è avvisato come se fosse chiamato con @nome.
+    const v = rif?.tipo === 'voce' ? S.scad.find(x => x.id === rif.id) : null;
+    const menzioni = [...new Set([...menzioniIn(t, cloud.colleghi), ...(v ? [v.assegnata_a, ...(v.coinvolti || [])] : []).filter((x): x is string => !!x && x !== me)])];
+    const r = await scriviMessaggio(t, documento_id, { preventivo_id: stanza, risposta_a: risposta?.id || null, menzioni, rif });
     if (r.errore) return r.errore;
-    setRisposta(null);
+    setRisposta(null); setRif(null);
     if (menzioni.includes(ASSISTENTE)) {
       setAiPensa(true);
       // La domanda con le ultime righe della stanza: il server scrive la risposta come messaggio dell'assistente.
@@ -245,6 +255,12 @@ export function Squadra() {
     setSposta(null);
     const x = await spostaMessaggio(m.id, dove || null);
     if (x) setErr(x); else setEsito(`Messaggio spostato in «${nomeStanza(dove || null)}»`);
+    commit();
+  };
+  const collega = async (m: Messaggio, r: Rif | null) => {
+    setScegli(null);
+    const x = await collegaMessaggio(m.id, r);
+    if (x) setErr(x);
     commit();
   };
   const apriFile = async (id: string) => {
@@ -302,6 +318,7 @@ export function Squadra() {
         {squadra.err ? <div className="sqerr">{squadra.err}</div> : !mm.length && <div className="muted aihint">{stanza ? <>Stanza della commessa <b>{nomeStanza(stanza)}</b>: qui si parla solo di lei. Foto e file vanno anche nei suoi Documenti.</> : 'Qui scrivete tra colleghi: i messaggi arrivano subito a tutti, anche con foto, file (📎) e vocali (🎤).'}
           <ul><li><b>@nome</b> per chiamare un collega, <b>@assistente</b> per una domanda tecnica all'AI: risponde in chat.</li>
             <li><b>↩</b> su un messaggio per rispondere citandolo; <b>🔗</b> per spostarlo nella stanza di una commessa.</li>
+            <li><b>📌</b> per legare il messaggio a una nota o a una voce d'agenda (anche un allarme già fatto): si apre con un clic.</li>
             <li><b>📝 Crea nota</b>: l'AI scrive la nota con decisioni e cose da fare, che puoi mettere in agenda.</li></ul></div>}
         {mm.map((m, i) => {
           const mio = m.creato_da === me, ai = m.creato_da === ASSISTENTE, giorno = giornoChat(m.creato), nuovoGiorno = i === 0 || giornoChat(mm[i - 1].creato) !== giorno;
@@ -315,6 +332,7 @@ export function Squadra() {
               <div className="sqtxt">
                 {m.risposta_a && <div className="sqcit">{q ? <><b>{nomeDi(q.creato_da, cloud.colleghi)}</b> {(q.testo || (q.documento_id ? '📎 ' + (fileDi(q.documento_id)?.titolo || 'file') : '')).slice(0, 140)}</> : <i>messaggio eliminato</i>}</div>}
                 {m.testo && <span><ConTag t={m.testo} mie={mieTag} /></span>}
+                {rifDi(m) && <RifChip r={rifDi(m)!} onTogli={mio ? () => collega(m, null) : undefined} />}
                 {d && immagine(d) && link[d.percorso!] && <img className="sqimg" src={link[d.percorso!]} alt={d.titolo} onClick={e => { e.stopPropagation(); apriFile(d.id); }} />}
                 {d && audio(d) ? (link[d.percorso!] ? <audio className="sqaudio" controls preload="metadata" src={link[d.percorso!]} onClick={e => e.stopPropagation()} /> : <span className="muted small">🎤 vocale…</span>)
                 : m.documento_id && <button type="button" className="sqfile" onClick={e => { e.stopPropagation(); apriFile(m.documento_id!); }} disabled={!d}
@@ -322,6 +340,7 @@ export function Squadra() {
                 <span className="sqora">
                   {da === null && <>
                     <button type="button" className="sqact" onClick={() => { setRisposta(m); casella.current?.focus(); }} title="Rispondi citando questo messaggio">↩</button>
+                    <button type="button" className="sqact" onClick={() => setScegli(scegli === m.id ? null : m.id)} title="Lega a una nota o a una voce d'agenda">📌</button>
                     <button type="button" className="sqact" onClick={() => setSposta(sposta === m.id ? null : m.id)} title={stanza ? 'Sposta in un\'altra stanza' : 'Sposta nella stanza di una commessa'}>🔗</button>
                     {(mio || isAdmin()) && <button type="button" className="sqact del" onClick={() => elimina(m)} title="Elimina il messaggio">✕</button>}
                   </>}
@@ -332,6 +351,7 @@ export function Squadra() {
                   {stanza && <option value="-">Generale</option>}
                   <OpzioniPreventivi />
                 </select>}
+                {scegli === m.id && <div onClick={e => e.stopPropagation()}><ScegliRif stanza={stanza} onScegli={r => collega(m, r)} chiudi={() => setScegli(null)} /></div>}
               </div>
             </div>
             {nota && <div className="sqnota">📝 Diventata nota: «{nota.titolo}»</div>}
@@ -357,10 +377,13 @@ export function Squadra() {
       </div> : <div className="sqbasso">
         {risposta && <div className="sqrisp">↩ <b>{nomeDi(risposta.creato_da, cloud.colleghi)}</b> <span>{(risposta.testo || '📎 file').slice(0, 90)}</span>
           <button type="button" className="sqact" onClick={() => setRisposta(null)} title="Non rispondere a questo messaggio">✕</button></div>}
+        {rif && <div className="sqrisp">📌 Legato a <RifChip r={rif} onTogli={() => setRif(null)} /></div>}
+        {scegli === '' && <ScegliRif stanza={stanza} onScegli={r => { setRif(r); setScegli(null); casella.current?.focus(); }} chiudi={() => setScegli(null)} />}
         {suggeriti.length > 0 && <div className="sqsug">{suggeriti.map(p => <button key={p.tag} type="button" onClick={() => metti(p.tag)}><b>@{p.tag}</b> <span className="muted">{p.nome}</span></button>)}</div>}
         <form className="aiform" onSubmit={invia}>
           <button type="button" className="btn" disabled={busy} onClick={() => file.current?.click()} title="Allega foto o file (vanno anche nei Documenti)">📎</button>
           <input ref={file} type="file" multiple className="hide" onChange={e => allega(e.target.files)} />
+          <button type="button" className={`btn${rif || scegli === '' ? ' on' : ''}`} disabled={busy || !!squadra.err} onClick={() => setScegli(scegli === '' ? null : '')} title="Lega il messaggio a una nota o a una voce d'agenda">📌</button>
           <textarea ref={casella} rows={2} value={testo} placeholder={stanza ? `Scrivi in ${nomeStanza(stanza)}… (@ per chiamare qualcuno)` : 'Scrivi ai colleghi… (@ per chiamare qualcuno)'} disabled={!!squadra.err} onChange={e => setTesto(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Tab' && suggeriti.length) { e.preventDefault(); metti(suggeriti[0].tag); }

@@ -6,7 +6,7 @@ import { S, useStore } from '../store/state';
 import { apriPrev } from '../pages/Cerca';
 import { NotaScheda } from '../pages/Documenti';
 import { VoceScheda } from '../pages/Calendario';
-import { APRI_SCHEDA, type Aperta } from './pannelli';
+import { APRI_CHAT, APRI_SCHEDA, type Aperta } from './pannelli';
 
 export function SchedaAperta() {
   useStore();
@@ -14,8 +14,9 @@ export function SchedaAperta() {
   useEffect(() => {
     const f = (e: Event) => setA((e as CustomEvent<Aperta>).detail);
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setA(null); };
-    window.addEventListener(APRI_SCHEDA, f); window.addEventListener('keydown', esc);
-    return () => { window.removeEventListener(APRI_SCHEDA, f); window.removeEventListener('keydown', esc); };
+    const chiudi = () => setA(null);   // «💬 Discuti» apre la chat: la finestra non deve coprirla
+    window.addEventListener(APRI_SCHEDA, f); window.addEventListener('keydown', esc); window.addEventListener(APRI_CHAT, chiudi);
+    return () => { window.removeEventListener(APRI_SCHEDA, f); window.removeEventListener('keydown', esc); window.removeEventListener(APRI_CHAT, chiudi); };
   }, []);
   if (!a) return null;
 

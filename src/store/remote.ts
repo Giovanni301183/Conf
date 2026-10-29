@@ -4,7 +4,7 @@ import { linkType, supabase } from '../lib/supabase';
 import { perMe, type Scadenza } from '../domain/calendario';
 import { normListinoFisso } from '../domain/fissoCosti';
 import { LIMITE_MB, libero, percorsoPer, tecnico, type Documento } from '../domain/documenti';
-import type { Messaggio, PropostaNota } from '../domain/squadra';
+import type { Messaggio, PropostaNota, Rif } from '../domain/squadra';
 import { normVista, type Vista } from '../domain/vista';
 import { leggibile } from '../domain/esperto';
 import { KEY_ARCH, KEY_DRAFT, KEY_SCAD, S, commit, load, setSaveHook, store, unstore } from './state';
@@ -163,6 +163,14 @@ export async function chiediAssistente(body: unknown): Promise<{ messages: unkno
 // Bozza dell'email di aggiornamento scritta dall'AI a partire da un appunto.
 export async function bozzaEmail(body: { titolo: string; testo: string; contesto?: string; richiesta?: string }): Promise<{ oggetto: string; testo: string }> {
   const r = await fetch('/api/email', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({ error: `Risposta non valida dal server (${r.status})` }));
+  if (!r.ok) throw new Error(j.error || `Errore ${r.status}`);
+  return j;
+}
+
+/** Riassunto dell'email di risposta incollata su «Risposta arrivata» (lo scrive l'AI, vedi api/email.ts). */
+export async function riassumiRisposta(testo: string, oggetto = ''): Promise<{ titolo: string; riassunto: string }> {
+  const r = await fetch('/api/email', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify({ azione: 'risposta', testo, oggetto }) });
   const j = await r.json().catch(() => ({ error: `Risposta non valida dal server (${r.status})` }));
   if (!r.ok) throw new Error(j.error || `Errore ${r.status}`);
   return j;
@@ -379,7 +387,8 @@ function leaveDocumenti() { if (docCh) supabase!.removeChannel(docCh); docCh = n
 const SQ_MAX = 300;
 export const squadra = { mm: [] as Messaggio[], err: '', visto: '' };
 const KEY_VISTO = 'tracker_prev_squadra_visto_v1';
-const sqErr = (m: string) => (/preventivo_id|risposta_a|menzioni/.test(m) ? 'per stanze, risposte e @nomi manca la migrazione 20261029010000_squadra_stanze.sql (va eseguita nel SQL Editor di Supabase)'
+const sqErr = (m: string) => (/rif_nota|rif_voce/.test(m) ? 'per collegare i messaggi a note e voci in agenda manca la migrazione 20261030000000_squadra_collega.sql (va eseguita nel SQL Editor di Supabase)'
+  : /preventivo_id|risposta_a|menzioni/.test(m) ? 'per stanze, risposte e @nomi manca la migrazione 20261029010000_squadra_stanze.sql (va eseguita nel SQL Editor di Supabase)'
   : /messaggi/.test(m) ? 'manca la migrazione 20261029000000_squadra.sql (va eseguita nel SQL Editor di Supabase)' : m);
 async function loadMessaggi() {
   const { data, error } = await supabase!.from('messaggi').select('*').order('creato', { ascending: false }).limit(SQ_MAX);
@@ -393,14 +402,21 @@ export function chatVista() {
   squadra.visto = t; const v = load(KEY_VISTO) || {}; v[mioEmail()] = t; store(KEY_VISTO, v);
 }
 /** Nuovo messaggio. Stanza, risposta e menzioni si mandano solo se ci sono (così il Generale va anche senza la seconda migrazione). */
-export async function scriviMessaggio(testo: string, documento_id: string | null = null, extra: { preventivo_id?: string | null; risposta_a?: string | null; menzioni?: string[] } = {}): Promise<{ errore: string; id?: string }> {
+export async function scriviMessaggio(testo: string, documento_id: string | null = null, extra: { preventivo_id?: string | null; risposta_a?: string | null; menzioni?: string[]; rif?: Rif | null } = {}): Promise<{ errore: string; id?: string }> {
   const v: Record<string, unknown> = { testo: testo.trim() || null, documento_id };
   if (extra.preventivo_id) v.preventivo_id = extra.preventivo_id;
   if (extra.risposta_a) v.risposta_a = extra.risposta_a;
   if (extra.menzioni?.length) v.menzioni = extra.menzioni;
+  if (extra.rif) v[extra.rif.tipo === 'doc' ? 'rif_nota' : 'rif_voce'] = extra.rif.id;
   const { data, error } = await supabase!.from('messaggi').insert(v).select('id').single();
   if (error) return { errore: sqErr(error.message) };
   await loadMessaggi(); return { errore: '', id: data.id };
+}
+/** Lega un messaggio già scritto a una nota o a una voce d'agenda (null = toglie il collegamento). */
+export async function collegaMessaggio(id: string, r: Rif | null): Promise<string> {
+  const { error } = await supabase!.from('messaggi').update({ rif_nota: r?.tipo === 'doc' ? r.id : null, rif_voce: r?.tipo === 'voce' ? r.id : null }).eq('id', id);
+  if (error) return sqErr(error.message);
+  await loadMessaggi(); return '';
 }
 /** Sposta un messaggio nella stanza di una commessa (o di nuovo nel Generale). */
 export async function spostaMessaggio(id: string, preventivo_id: string | null): Promise<string> {

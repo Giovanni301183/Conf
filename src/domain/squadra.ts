@@ -6,7 +6,14 @@ export interface Messaggio {
   preventivo_id?: string | null;   // stanza della commessa (vuoto = Generale)
   risposta_a?: string | null;      // messaggio a cui risponde
   menzioni?: string[];             // email dei colleghi chiamati con @nome
+  rif_nota?: string | null;        // nota (o file) dei Documenti di cui parla il messaggio
+  rif_voce?: string | null;        // voce d'agenda di cui parla il messaggio
 }
+/** Cosa si lega a un messaggio: una nota dei Documenti o una voce d'agenda. */
+export type Rif = { tipo: 'doc' | 'voce'; id: string };
+export const rifDi = (m: Messaggio): Rif | null => (m.rif_nota ? { tipo: 'doc', id: m.rif_nota } : m.rif_voce ? { tipo: 'voce', id: m.rif_voce } : null);
+/** Messaggi legati a una nota o a una voce, i più vecchi prima. */
+export const messaggiDi = (mm: Messaggio[], r: Rif) => mm.filter(m => (r.tipo === 'doc' ? m.rif_nota : m.rif_voce) === r.id);
 type Collega = { email: string; nome: string | null };
 // I messaggi dell'assistente (chiamato con @assistente) li scrive il server con questo autore.
 export const ASSISTENTE = 'assistente';
@@ -81,13 +88,15 @@ export function testoNota(p: Pick<PropostaNota, 'testo' | 'da_fare'>, colleghi: 
 
 /** La chat come appunti per l'assistente: una voce per giorno e stanza (le più recenti prima), con le righe "ora Nome: testo".
  *  Di una giornata lunga resta la parte finale (al massimo n caratteri). */
-export function chatComeAppunti(mm: Messaggio[], colleghi: Collega[], commessa: (id: string) => string, n = 2000) {
+// rif = come si chiama la nota o la voce a cui il messaggio è legato (es. «nota: Pali Foggia»), vuoto se non c'è.
+export function chatComeAppunti(mm: Messaggio[], colleghi: Collega[], commessa: (id: string) => string, n = 2000, rif: (m: Messaggio) => string = () => '') {
   const gruppi = new Map<string, { quando: string; commessa: string; righe: string[] }>();
   for (const m of mm) {
     if (!m.testo?.trim()) continue;
     const d = new Date(m.creato), quando = d.toLocaleDateString('sv-SE'), k = quando + '|' + (m.preventivo_id || '');
     if (!gruppi.has(k)) gruppi.set(k, { quando, commessa: m.preventivo_id ? commessa(m.preventivo_id) : '', righe: [] });
-    gruppi.get(k)!.righe.push(`${d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} ${nomeDi(m.creato_da, colleghi)}: ${m.testo.trim()}`);
+    const su = rif(m);
+    gruppi.get(k)!.righe.push(`${d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} ${nomeDi(m.creato_da, colleghi)}${su ? ` [su ${su}]` : ''}: ${m.testo.trim()}`);
   }
   return [...gruppi.values()].sort((a, b) => b.quando.localeCompare(a.quando)).map(g => {
     const t = g.righe.join('\n');

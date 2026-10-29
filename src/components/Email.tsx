@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { ATTESA, traGiorniLavorativi } from '../domain/calendario';
 import { dFmt, dToday, isoDay } from '../domain/plan';
-import { linkPosta, telefono } from '../domain/posta';
+import { conCodice, linkPosta, telefono } from '../domain/posta';
 import { S, commit } from '../store/state';
 import { toast } from '../store/actions';
 import { bozzaEmail, cloud, salvaScadenza } from '../store/remote';
@@ -46,7 +46,8 @@ export function ModuloEmail({ titolo, testo: appunto, contesto, chiave, chiudi, 
   const [aperta, setAperta] = useState(false), [giorni, setGiorni] = useState(leggiGiorni);
   const scrivi = async () => {
     setBusy(true); setErr('');
-    try { const r = await bozzaEmail({ titolo, testo: appunto, contesto, richiesta }); setOggetto(r.oggetto); setTesto(r.testo); }
+    // Con la commessa, il codice [TN-numero] in fondo all'oggetto: la risposta del cliente si lega da sola (vedi posta.ts).
+    try { const r = await bozzaEmail({ titolo, testo: appunto, contesto, richiesta }); setOggetto(conCodice(r.oggetto, S.arch.find(e => e.id === preventivo)?.prev?.num)); setTesto(r.testo); }
     catch (e) { setErr((e as Error).message); }
     setBusy(false);
   };

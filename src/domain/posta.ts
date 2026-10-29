@@ -13,3 +13,25 @@ export function linkPosta(a: string, su: string, body: string, ua: string) {
     : t === 'ios' ? `googlegmail://co?to=${dest}&${q}` : mailto;
   return { gmail, mailto };
 }
+
+// Codice della commessa nell'oggetto delle email mandate dall'app ("Offerta tracker [TN-2026/014]"): le risposte lo tengono ("Re: …"),
+// così l'email inoltrata all'agenda si lega da sola alla commessa e alla voce «✉ Attesa risposta». Usato dall'app e da Telegram (api/agenda.ts).
+export const codice = (num: string) => `[TN-${num.trim()}]`;
+/** Oggetto con il codice in fondo, se la commessa ha un numero e il codice non c'è già. */
+export function conCodice(oggetto: string, num?: string | null) {
+  if (!num?.trim()) return oggetto;
+  const c = codice(num);
+  return oggetto.includes(c) ? oggetto : `${oggetto.trim()} ${c}`.trim();
+}
+/** Numero della commessa letto dal codice nell'oggetto; vuoto se non c'è. */
+export const numDaOggetto = (o: string) => /\[TN-([\w./-]+)\]/i.exec(o)?.[1] || '';
+/** Oggetto senza Re:/R:/I:/Fwd:, senza codice e in minuscolo: per riconoscere la risposta a un'email mandata. */
+export const oggettoBase = (o: string) => o.replace(/\[TN-[^\]]*\]/gi, '').replace(/^\s*((re|r|i|fw|fwd|inoltro|aw|tr)\s*:\s*)+/i, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** Voce «✉ Attesa risposta» ancora aperta a cui risponde l'email: prima quella con lo stesso oggetto, poi l'ultima della stessa commessa.
+ *  Il titolo della voce è «✉ Attesa risposta · destinatario — oggetto» (vedi components/Email). */
+export function attesaPer<V extends { titolo: string; preventivo_id: string | null }>(vv: V[], oggetto: string, pid: string): V | undefined {
+  const base = oggettoBase(oggetto);
+  return (base.length >= 4 ? vv.find(v => oggettoBase(v.titolo.split(' — ').slice(1).join(' — ')) === base) : undefined)
+    || (pid ? vv.find(v => v.preventivo_id === pid) : undefined);
+}

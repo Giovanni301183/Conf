@@ -9,6 +9,7 @@ import { persone } from '../domain/calendario';
 import { ModuloEmail, contestoEmail } from '../components/Email';
 import { aggiornaDoc, assegnaNota, caricaFile, ricaricaDocumenti, cloud, eliminaDoc, leggendo, leggiScheda, linkAnteprime, linkDoc, mioEmail, online, puoGestireDoc, salvaNota, type PatchDoc } from '../store/remote';
 import { apriChat } from '../components/pannelli';
+import { Discuti } from '../components/Collegamento';
 
 const nomeDi = (email: string) => cloud.colleghi.find(u => u.email === email)?.nome || email.split('@')[0];
 const quandoDoc = (iso: string) => new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -218,6 +219,7 @@ export function Voce({ d, thumb, onEdit, conVoce }: { d: Documento; thumb?: stri
           onClick={() => scegliFile(async ff => { setCarico(ff.length); const ok = await allega(d.id, ff, d.cartella); setCarico(0); if (ok) toast(ok === 1 ? 'Allegato aggiunto' : `${ok} allegati aggiunti`); commit(); })}>
           {carico ? `Carico… (${carico})` : '📎 Allega'}</button>}
         {d.tipo === 'nota' && online() && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la nota a un collega: diventa una voce «Da fare» nella sua agenda">👤 Assegna</button>}
+        {d.tipo === 'nota' && <Discuti r={{ tipo: 'doc', id: d.id }} stanza={d.preventivo_id || null} />}
         {d.tipo === 'nota' && !email && <button className="btn s" onClick={() => setEmail(true)} title="Scrivi un'email di aggiornamento da questo appunto">✉ Email</button>}
         {mio && <select className="dsel" value={d.cartella} onChange={e => sposta(d, e.target.value as Cartella)} title="Sposta in un'altra cartella">
           {CARTELLE.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}

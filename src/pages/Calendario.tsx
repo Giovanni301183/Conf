@@ -2,7 +2,7 @@
 // inserite a mano, dettaglio del giorno scelto. Si nasconde e si rimette con un pulsante (scelta ricordata in questo browser);
 // nascosto restano gli allarmi in breve.
 import { useState } from 'react';
-import { CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, fatte, inAttesa, mia, oraBreve, perGiorno, persone, voci, vociScadenze, type Genere, type Scadenza, type Voce } from '../domain/calendario';
+import { ATTESA, CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, fatte, inAttesa, mia, oraBreve, perGiorno, persone, voci, vociScadenze, type Genere, type Scadenza, type Voce } from '../domain/calendario';
 import { Fold } from '../components/ui';
 import { StatoSel } from './Cruscotto';
 import { eStato } from '../domain/kpi';
@@ -13,8 +13,8 @@ import { DocPanel, NoteHome, docNonDisponibili } from './Documenti';
 import { ModuloEmail, contestoEmail } from '../components/Email';
 import { PermessoAvvisi } from '../components/AvvisiRiunioni';
 import { linkRiunione } from '../domain/riunione';
-import { apriChat } from '../components/pannelli';
-import { cloud, coinvoltiDisponibili, eliminaScadenza, miaVista, mioEmail, online, puoModificare, puoSpuntare, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
+import { Discuti } from '../components/Collegamento';
+import { cloud, coinvoltiDisponibili, eliminaScadenza, miaVista, mioEmail, online, puoModificare, puoSpuntare, riassumiRisposta, salvaNota, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
 import { VISTA_TUTTO, filtraVista, normVista, vedeTutto, type Quanto, type Vista } from '../domain/vista';
 
 const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
@@ -37,12 +37,47 @@ const togli = async (s: Scadenza) => {
   if (!confirm(`Eliminare "${s.titolo}"?`)) return;
   const e = await eliminaScadenza(s.id); if (e) toast('Voce non eliminata: ' + e); commit();
 };
-// Risposta a un'email arrivata: la voce «Attesa risposta» diventa fatta, con la nota facoltativa su cosa hanno risposto.
-async function risposta(s: Scadenza) {
-  const n = prompt('Risposta arrivata. Cosa hanno risposto? (facoltativo)', '');
-  if (n === null) return;
-  const nota = [s.nota, n.trim() && `Risposta del ${dFmt(dToday())}: ${n.trim()}`].filter(Boolean).join('\n');
-  const e = await salvaScadenza({ ...s, nota, fatto: true }); if (e) toast('Voce non aggiornata: ' + e); commit();
+// Risposta a un'email arrivata: la voce «Attesa risposta» diventa fatta, con la nota su cosa hanno risposto.
+// Si può incollare l'email intera: l'AI scrive il riassunto per la voce e l'email resta come appunto legato alla voce.
+function RispostaArrivata({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
+  const [testo, setTesto] = useState(''), [riass, setRiass] = useState(''), [salvaEmail, setSalvaEmail] = useState(true), [busy, setBusy] = useState(''), [err, setErr] = useState('');
+  const lunga = testo.trim().length > 300;
+  const riassumi = async () => {
+    setBusy('riassumo'); setErr('');
+    try { const r = await riassumiRisposta(testo); setRiass(r.riassunto || r.titolo); } catch (e) { setErr((e as Error).message); }
+    setBusy('');
+  };
+  const conferma = async () => {
+    setBusy('salvo'); setErr('');
+    const cosa = (riass || (lunga ? '' : testo)).trim();
+    const nota = [s.nota, cosa && `Risposta del ${dFmt(dToday())}: ${cosa}`].filter(Boolean).join('\n');
+    const e = await salvaScadenza({ ...s, nota, fatto: true });
+    if (e) { setErr('Voce non aggiornata: ' + e); setBusy(''); return; }
+    if (lunga && salvaEmail) {
+      const r = await salvaNota({ titolo: 'Risposta: ' + s.titolo.replace(ATTESA, ''), testo: testo.trim(), cartella: s.preventivo_id ? 'cliente' : 'altro', etichette: [],
+        preventivo_id: s.preventivo_id || null, scadenza_id: s.id });
+      if (r.errore) toast('Voce fatta, ma email non salvata: ' + r.errore);
+    }
+    toast('✓ Risposta registrata'); commit(); chiudi();
+  };
+  return (
+    <div className="cform">
+      <label className="f wide">Cosa hanno risposto <span className="muted small">(facoltativo: due parole, oppure incolla qui l'email intera)</span>
+        <textarea rows={lunga ? 8 : 3} autoFocus value={testo} onChange={e => setTesto(e.target.value)} placeholder="es. Confermano l'ordine, consegna entro il 20" /></label>
+      {lunga && <>
+        <div className="wide" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn" disabled={!!busy} onClick={riassumi}>{busy === 'riassumo' ? 'Riassumo…' : '✦ Riassumi con AI'}</button>
+          <label className="chk"><input type="checkbox" checked={salvaEmail} onChange={e => setSalvaEmail(e.target.checked)} /> Salva l'email intera come appunto della voce</label>
+        </div>
+        <label className="f wide">Riassunto per la voce<textarea rows={4} value={riass} onChange={e => setRiass(e.target.value)} placeholder="Premi «✦ Riassumi con AI» o scrivilo tu" /></label>
+      </>}
+      {err && <div className="warn wide">{err}</div>}
+      <div className="wide" style={{ display: 'flex', gap: 8 }}>
+        <button className="btn p" disabled={!!busy} onClick={conferma}>{busy === 'salvo' ? 'Salvo…' : 'Segna fatta'}</button>
+        <button className="btn" disabled={!!busy} onClick={chiudi}>Annulla</button>
+      </div>
+    </div>
+  );
 }
 // Voci visibili: prima la scelta personale «Cosa vedo», poi con "Le mie" solo quelle create da me o assegnate a me.
 // Le fatte stanno nell'Archivio attività.
@@ -94,7 +129,7 @@ function Assegna({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
 function Riga({ v, oggi, onEdit, data = true, allarme = '', qui = false, aperta = false }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean; allarme?: '' | 'late' | 'soon'; qui?: boolean; aperta?: boolean }) {
   const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s), link = s && !s.fatto ? linkRiunione(s.nota) : '';
   // Allegati della voce (file e note): la graffetta mostra quanti sono e apre l'elenco sotto la voce.
-  const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [vedi, setVedi] = useState(aperta), [mod, setMod] = useState<Bozza | null>(null), [ass, setAss] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
+  const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [vedi, setVedi] = useState(aperta), [risp, setRisp] = useState(false), [mod, setMod] = useState<Bozza | null>(null), [ass, setAss] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
   return (<>
     <div className={`cvoce ${s?.fatto ? 'fatto' : ''} ${allarme ? 'blink ' + allarme : ''}`} style={{ '--vc': c } as React.CSSProperties}>
       {s ? <input type="checkbox" checked={s.fatto} disabled={!spunta} onChange={() => segna(s)} title={spunta ? 'Fatto' : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
@@ -108,15 +143,15 @@ function Riga({ v, oggi, onEdit, data = true, allarme = '', qui = false, aperta 
       {v.tipo === 'richiamo' && v.prevId && <StatoSel id={v.prevId} k="inviato" />}
       {link && <a className="btn s p" href={link} target="_blank" rel="noopener noreferrer" title={link}>🎥 Entra</a>}
       {v.prevId && <button className="btn s" onClick={() => apri(v.prevId!)} title={'Apre il preventivo nel configuratore: ' + (S.arch.find(e => e.id === v.prevId)?.nome || '')}>Apri preventivo</button>}
-      {s && online() && (s.preventivo_id || s.nota?.includes('(chat di squadra)')) && <button className="btn s" onClick={() => apriChat(s.preventivo_id || null)}
-        title={s.preventivo_id ? 'Apre la chat di squadra nella stanza della commessa' : 'Apre la chat di squadra da cui è nata la voce'}>💬</button>}
-      {attesa && spunta && <button className="btn s p" onClick={() => risposta(s!)} title="Segna la voce come fatta, con una nota su cosa hanno risposto">Risposta arrivata</button>}
+      {s && <Discuti r={{ tipo: 'voce', id: s.id }} stanza={s.preventivo_id || null} />}
+      {attesa && spunta && !risp && <button className="btn s p" onClick={() => setRisp(true)} title="Segna la voce come fatta, con una nota su cosa hanno risposto (anche incollando l'email)">Risposta arrivata</button>}
       {s && online() && !email && <button className="btn s" onClick={() => setEmail(attesa ? 'sollecito' : 'email')} title={attesa ? 'Scrivi un sollecito cortese' : "Scrivi un'email di aggiornamento da questa voce"}>{attesa ? '✉ Sollecita' : '✉ Email'}</button>}
       {s && <button className={`btn s${vedi ? ' on' : ''}`} onClick={() => setVedi(!vedi)} title="Vedi la voce per intero, con le note e i file allegati">👁 Vedi{nAll ? ' · 📎 ' + nAll : ''}</button>}
       {mio && !s.fatto && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la voce a un collega">👤 {s.assegnata_a ? 'Riassegna' : 'Assegna'}</button>}
       {mio && (qui || onEdit) && !mod && <><button className="btn s" onClick={() => qui ? setMod(bozzaDa(s)) : onEdit!(s)}>Modifica</button><button className="btn x" onClick={() => togli(s)} title="Elimina">✕</button></>}
     </div>
     {mod && <div className="callegati"><Modulo b={mod} set={setMod} chiudi={() => setMod(null)} /></div>}
+    {risp && s && <div className="callegati"><RispostaArrivata s={s} chiudi={() => setRisp(false)} /></div>}
     {ass && s && <div className="callegati"><Assegna s={s} chiudi={() => setAss(false)} /></div>}
     {email && s && <div className="callegati"><ModuloEmail titolo={s.titolo} testo={s.nota || ''} contesto={contestoEmail(s.preventivo_id, s.id)}
       chiave={s.preventivo_id || s.id} preventivo={s.preventivo_id} chiudi={() => setEmail('')}

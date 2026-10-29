@@ -646,6 +646,19 @@ label.chk small{margin-left:4px}
 .sqbasso{border-top:1px solid var(--line)}.sqbasso .aiform{border-top:0}
 .sqrisp{display:flex;gap:6px;align-items:center;padding:6px 12px 0;font-size:12.5px}.sqrisp span{flex:1;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sqrisp .sqact{opacity:.8}
 .sqsug{display:flex;flex-direction:column;padding:6px 10px 0}
+/* Messaggio legato a una nota o a una voce d'agenda (Collegamento.tsx): etichetta, scelta, messaggi sulla nota o sulla voce */
+.sqrif{display:inline-flex;align-items:center;gap:2px;max-width:100%;min-width:0}
+.sqrif>button:first-child{border:1px solid var(--line);background:var(--acc-soft);color:var(--acc);border-radius:999px;padding:2px 9px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;text-align:left}
+.sqrif>button:first-child:hover{border-color:var(--acc2)}
+.sqrif>button:first-child:disabled{cursor:default;color:var(--muted);background:var(--soft)}
+.sqscegli{margin:6px 10px 0;border:1px solid var(--line);border-radius:10px;background:var(--card);box-shadow:var(--sh)}
+.sqscegli-h{display:flex;gap:4px;align-items:center;padding:6px}
+.sqscegli-h input{flex:1}
+.sqscegli-l{max-height:260px;overflow-y:auto;padding:0 4px 6px}
+.sqscegli-l h4{margin:6px 8px 2px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.sqmsg .sqscegli{margin:6px 0 0;color:var(--ink)}
+.sqdisc{flex-basis:100%;order:99;display:flex;flex-direction:column;gap:6px;border-left:3px solid var(--acc2);background:var(--soft);border-radius:6px;padding:8px 10px;margin-top:4px}
+.sqdisc .btn{align-self:flex-start}
 .sqsug button{border:0;background:none;text-align:left;font:inherit;font-size:13px;padding:4px 6px;border-radius:6px;cursor:pointer;color:var(--ink)}.sqsug button:hover,.sqsug button:first-child{background:var(--soft2)}
 .sqfare{border-top:1px dashed var(--line);margin-top:6px;padding-top:6px;display:flex;flex-direction:column;gap:4px}
 .sqfr.off{opacity:.65}.sqfrx{display:flex;gap:6px;padding-left:20px}.sqfrx .aiin{margin:2px 0}

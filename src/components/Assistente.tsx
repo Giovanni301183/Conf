@@ -8,7 +8,7 @@ import { sostituisci } from '../domain/referenze';
 import { clone } from '../domain/model';
 import { S, commit, save } from '../store/state';
 import { aggiornaDoc, chiediAssistente, cloud, online, salvaNota, salvaScadenza, squadra } from '../store/remote';
-import { chatComeAppunti } from '../domain/squadra';
+import { chatComeAppunti, type Messaggio } from '../domain/squadra';
 import { apriGmail } from './Email';
 import { TabellaVarianti, scaricaOfferte } from './Varianti';
 import { archVarianti } from '../store/actions';
@@ -25,8 +25,13 @@ function appunti(): Appunto[] {
   const comm = (id?: string | null) => (id && S.arch.find(a => a.id === id)?.nome) || '';
   const note = S.docs.filter(d => d.tipo === 'nota').map(d => ({ quando: String(d.creato || '').slice(0, 10), commessa: comm(d.preventivo_id), titolo: d.titolo, testo: (d.testo || '').slice(0, 2000), id: d.id, etichette: d.etichette || [] }));
   const eventi = S.scad.filter(x => x.nota).map(x => ({ quando: x.giorno, commessa: comm(x.preventivo_id), titolo: 'Evento: ' + x.titolo, testo: String(x.nota).slice(0, 2000) }));
-  // Le discussioni della chat di squadra (una per giorno e stanza), così si può chiedere cosa si è deciso in chat.
-  const chat = chatComeAppunti(squadra.mm, cloud.colleghi, comm);
+  // Le discussioni della chat di squadra (una per giorno e stanza), così si può chiedere cosa si è deciso in chat;
+  // un messaggio legato a una nota o a una voce d'agenda lo dice («[su nota: …]»).
+  const su = (m: Messaggio) => {
+    const d = m.rif_nota ? S.docs.find(x => x.id === m.rif_nota) : null, v = m.rif_voce ? S.scad.find(x => x.id === m.rif_voce) : null;
+    return d ? `nota: ${d.titolo}` : v ? `voce d'agenda: ${v.titolo} del ${v.giorno}${v.fatto ? ', fatta' : ''}` : '';
+  };
+  const chat = chatComeAppunti(squadra.mm, cloud.colleghi, comm, 2000, su);
   return [...note, ...eventi, ...chat].sort((a, b) => b.quando.localeCompare(a.quando)).slice(0, 300);
 }
 
