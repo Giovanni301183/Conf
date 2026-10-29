@@ -28,6 +28,7 @@ import { AREE, PASSI as PASSI0, SETTORI, infoSettore, schedaPronta, settoreDi, t
 import { cloud, isAdmin, logout, setCloudToast } from './store/remote';
 import { AvvisiRiunioni } from './components/AvvisiRiunioni';
 import { CercaRapida } from './components/CercaRapida';
+import { SchedaAperta } from './components/SchedaAperta';
 
 const VIEWS: Record<Tab, () => React.ReactNode> = {
   archivio: Home, prev: Preventivi, fatte: ArchivioAttivita, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
@@ -188,6 +189,7 @@ export default function App() {
         <View />
       </main>
       <input type="file" ref={setFileInput} accept=".json,application/json" className="hide" onChange={e => { const f = e.target.files?.[0]; if (f) onFilePicked(f); }} />
+      <SchedaAperta />
       <AvvisiRiunioni />{node}
       </div>
       <Squadra />

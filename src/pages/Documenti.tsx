@@ -306,6 +306,13 @@ export function Documenti() {
 
 /** In Home, sotto il calendario: tutte le note (di preventivi e voci d'agenda), le più recenti prima, con ricerca.
  *  Una nota puo' essere libera (solo con le etichette) o legata a un preventivo, scelto qui o suggerito dal testo. */
+/** Una nota (o un file) aperta da sola, con tutti i suoi pulsanti e Modifica sul posto: la finestra della ricerca (components/SchedaAperta). */
+export function NotaScheda({ d }: { d: Documento }) {
+  const [nota, setNota] = useState<Nota | null>(null);
+  return nota ? <ModuloNota n={nota} set={setNota} chiudi={() => setNota(null)} dove={{}} />
+    : <Voce d={d} onEdit={x => setNota({ ...x, preventivo_id: d.preventivo_id || '' })} conVoce />;
+}
+
 export function NoteHome() {
   const [q, setQ] = useState(''), [nota, setNota] = useState<Nota | null>(null), [tutte, setTutte] = useState(false);
   const [temi, setTemi] = useState<string[]>([]), [cart, setCart] = useState<Cartella | ''>('');

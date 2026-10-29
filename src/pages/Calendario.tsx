@@ -2,7 +2,7 @@
 // inserite a mano, dettaglio del giorno scelto. Si nasconde e si rimette con un pulsante (scelta ricordata in questo browser);
 // nascosto restano gli allarmi in breve.
 import { useState } from 'react';
-import { CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, fatte, inAttesa, mia, oraBreve, perGiorno, persone, voci, type Genere, type Scadenza, type Voce } from '../domain/calendario';
+import { CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, fatte, inAttesa, mia, oraBreve, perGiorno, persone, voci, vociScadenze, type Genere, type Scadenza, type Voce } from '../domain/calendario';
 import { Fold } from '../components/ui';
 import { StatoSel } from './Cruscotto';
 import { eStato } from '../domain/kpi';
@@ -90,10 +90,11 @@ function Assegna({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
 }
 
 // qui = Modifica apre il modulo sotto la voce, al suo posto (Allarmi e Appuntamenti), invece che nella colonna del giorno.
-function Riga({ v, oggi, onEdit, data = true, allarme = '', qui = false }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean; allarme?: '' | 'late' | 'soon'; qui?: boolean }) {
+// aperta = la voce parte già aperta per intero (finestra della ricerca).
+function Riga({ v, oggi, onEdit, data = true, allarme = '', qui = false, aperta = false }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean; allarme?: '' | 'late' | 'soon'; qui?: boolean; aperta?: boolean }) {
   const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s), link = s && !s.fatto ? linkRiunione(s.nota) : '';
   // Allegati della voce (file e note): la graffetta mostra quanti sono e apre l'elenco sotto la voce.
-  const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [vedi, setVedi] = useState(false), [mod, setMod] = useState<Bozza | null>(null), [ass, setAss] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
+  const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [vedi, setVedi] = useState(aperta), [mod, setMod] = useState<Bozza | null>(null), [ass, setAss] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
   return (<>
     <div className={`cvoce ${s?.fatto ? 'fatto' : ''} ${allarme ? 'blink ' + allarme : ''}`} style={{ '--vc': c } as React.CSSProperties}>
       {s ? <input type="checkbox" checked={s.fatto} disabled={!spunta} onChange={() => segna(s)} title={spunta ? 'Fatto' : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
@@ -122,6 +123,12 @@ function Riga({ v, oggi, onEdit, data = true, allarme = '', qui = false }: { v: 
       richiesta0={email === 'sollecito' ? 'Sollecito cortese: non abbiamo ancora ricevuto risposta alla nostra email.' : ''} /></div>}
     {vedi && s && <div className="callegati"><Scheda s={s} />{docOk && <DocPanel scadenza={s.id} preventivo={s.preventivo_id} compatto />}</div>}
   </>);
+}
+
+/** Una voce d'agenda aperta per intero, con nota, allegati e Modifica sul posto: la finestra della ricerca (components/SchedaAperta). */
+export function VoceScheda({ s }: { s: Scadenza }) {
+  const v = vociScadenze([s], S.arch)[0];
+  return v ? <Riga v={v} oggi={dToday()} qui aperta /> : <p className="hint">La voce non ha una data valida.</p>;
 }
 
 /** La voce per intero, in sola lettura: per chi non la può modificare e per non dover entrare in Modifica. */

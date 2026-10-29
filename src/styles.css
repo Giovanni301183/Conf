@@ -64,6 +64,14 @@ header.home .qs{flex-basis:520px}
 .qsvuoto{padding:10px 8px;color:var(--muted)}
 .qsfoot{display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:6px;padding:8px 4px 2px}
 .qsfoot:empty{display:none}
+/* Nota o voce d'agenda aperta in primo piano (SchedaAperta); sul telefono a tutto schermo */
+.sapscrim{position:fixed;inset:0;background:rgba(20,28,33,.45);z-index:60;display:grid;place-items:start center;padding:6vh 16px;overflow-y:auto;animation:fade .15s ease}
+.sapwin{background:var(--card);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:min(760px,100%);max-height:88vh;display:flex;flex-direction:column}
+.saphead{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.saphead .sp{flex:1}
+.sapbody{padding:8px 18px 16px;overflow-y:auto}
+@keyframes fade{from{opacity:0}}
+@media (max-width:700px){.sapscrim{padding:0}.sapwin{width:100%;min-height:100vh;max-height:none;border-radius:0}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:22px 24px;margin-bottom:20px;box-shadow:var(--sh)}
 .card h2{font-size:15.5px;font-weight:650;margin:0 0 6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--ink)}
 .card h2 .sp{flex:1}

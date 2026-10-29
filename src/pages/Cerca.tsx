@@ -13,7 +13,7 @@ import { StatoSel } from './Cruscotto';
 import { apriFile } from './Documenti';
 import { nomeDi } from '../domain/squadra';
 import { cloud, squadra } from '../store/remote';
-import { apriChat } from '../components/pannelli';
+import { apriChat, apriScheda } from '../components/pannelli';
 
 const parole = (q: string) => q.toLowerCase().split(/\s+/).filter(Boolean);
 const tutte = (t: string, pp: string[]) => { const s = t.toLowerCase(); return pp.every(p => s.includes(p)); };
@@ -106,7 +106,8 @@ export function Cerca() {
                 <td className="small">{fDate(s.giorno)}{s.ora ? ' ' + s.ora.slice(0, 5) : ''}{s.fatto ? <div className="muted">✓ fatto</div> : null}</td>
                 <td><b><Hl t={s.titolo} pp={pp} /></b>{s.nota ? <div className="muted small"><Hl t={brano(s.nota, pp)} pp={pp} /></div> : null}</td>
                 <td className="small">{s.preventivo_id ? <Hl t={nomePrev(s.preventivo_id) || '–'} pp={pp} /> : '–'}</td>
-                <td className="acts">{s.preventivo_id && nomePrev(s.preventivo_id) ? <button className="btn s" onClick={() => apriPrev(s.preventivo_id!)}>Apri preventivo</button> : null}</td>
+                <td className="acts"><button className="btn s p" onClick={() => apriScheda({ tipo: 'voce', id: s.id })}>Apri</button>
+                  {s.preventivo_id && nomePrev(s.preventivo_id) ? <button className="btn s" onClick={() => apriPrev(s.preventivo_id!)}>Apri preventivo</button> : null}</td>
               </tr>
             ))}
           </tbody></table></div>
@@ -121,7 +122,8 @@ export function Cerca() {
                 <td className="small">{nomeCartella(d.cartella)}</td>
                 <td className="small">{d.preventivo_id ? <Hl t={nomePrev(d.preventivo_id) || '–'} pp={pp} /> : '–'}</td>
                 <td className="acts">
-                  {d.tipo === 'file' && <button className="btn s" onClick={() => apriFile(d)}>Apri file</button>}
+                  {d.tipo === 'file' ? <button className="btn s p" onClick={() => apriFile(d)}>Apri file</button>
+                    : <button className="btn s p" onClick={() => apriScheda({ tipo: 'doc', id: d.id })}>Apri</button>}
                   {d.preventivo_id && nomePrev(d.preventivo_id) ? <button className="btn s" onClick={() => apriPrev(d.preventivo_id!, 'docs')}>Vai ai documenti</button> : null}
                 </td>
               </tr>

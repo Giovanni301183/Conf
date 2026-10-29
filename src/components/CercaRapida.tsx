@@ -1,6 +1,6 @@
 // Casella 🔍 nella barra in alto, su ogni pagina (Ctrl+K): mentre si scrive mostra i primi risultati su tutto
 // (note e documenti, chat di squadra, agenda, preventivi, listino) con la stessa ricerca della scheda Cerca.
-// Invio o «Vedi tutti» apre la scheda Cerca con le stesse parole; «✦ Chiedi all'assistente» gli passa la domanda già scritta.
+// Note e voci d'agenda si aprono in primo piano (SchedaAperta), i file direttamente. Invio o «Vedi tutti» apre la scheda Cerca con le stesse parole; «✦ Chiedi all'assistente» gli passa la domanda già scritta.
 // Sugli schermi stretti è solo l'icona 🔍, che si apre sopra la barra.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { fDate } from '../domain/format';
@@ -9,7 +9,7 @@ import { S, commit } from '../store/state';
 import { cloud } from '../store/remote';
 import { Hl, apriArticolo, apriPrev, brano, risultati } from '../pages/Cerca';
 import { apriFile } from '../pages/Documenti';
-import { apriChat, chiediAI } from './pannelli';
+import { apriChat, apriScheda, chiediAI } from './pannelli';
 
 const N = 4;   // risultati per gruppo nella tendina
 const nomePrev = (id: string | null | undefined) => (id && S.arch.find(e => e.id === id)?.nome) || '';
@@ -53,13 +53,13 @@ export function CercaRapida() {
         {!n && <div className="qsvuoto">Nessun risultato per «{q.trim()}».</div>}
         <Gruppo titolo="Note e documenti" tot={r.docs.length}>{r.docs.slice(0, N).map(d => <Voce key={d.id} ic={d.tipo === 'nota' ? '✎' : '📎'} t={d.titolo}
           sub={<>{fDate(d.creato.slice(0, 10))}{nomePrev(d.preventivo_id) ? ` · ${nomePrev(d.preventivo_id)}` : ''}{d.testo ? <> · <Hl t={brano(d.testo, pp, 90)} pp={pp} /></> : null}</>}
-          onClick={d.preventivo_id && nomePrev(d.preventivo_id) ? vai(() => apriPrev(d.preventivo_id!, 'docs')) : d.tipo === 'file' ? vai(() => { apriFile(d); }) : tutti} />)}</Gruppo>
+          onClick={d.tipo === 'file' ? vai(() => { apriFile(d); }) : vai(() => apriScheda({ tipo: 'doc', id: d.id }))} />)}</Gruppo>
         <Gruppo titolo="Chat di squadra" tot={r.chat.length}>{r.chat.slice(0, N).map(m => <Voce key={m.id} ic="💬" t={nomeDi(m.creato_da, cloud.colleghi)}
           sub={<>{fDate(m.creato.slice(0, 10))} · {nomePrev(m.preventivo_id) || 'Generale'} · <Hl t={brano(m.testo || '', pp, 90)} pp={pp} /></>}
           onClick={vai(() => apriChat(m.preventivo_id || null))} />)}</Gruppo>
         <Gruppo titolo="Agenda" tot={r.scad.length}>{[...r.scad].sort((a, b) => b.giorno.localeCompare(a.giorno)).slice(0, N).map(s => <Voce key={s.id} ic="📅" t={s.titolo}
           sub={<>{fDate(s.giorno)}{s.fatto ? ' · ✓ fatto' : ''}{nomePrev(s.preventivo_id) ? ` · ${nomePrev(s.preventivo_id)}` : ''}</>}
-          onClick={s.preventivo_id && nomePrev(s.preventivo_id) ? vai(() => apriPrev(s.preventivo_id!)) : tutti} />)}</Gruppo>
+          onClick={vai(() => apriScheda({ tipo: 'voce', id: s.id }))} />)}</Gruppo>
         <Gruppo titolo="Preventivi" tot={r.prev.length}>{r.prev.slice(0, N).map(e => <Voce key={e.id} ic="📄" t={e.nome}
           sub={<>{e.prev?.num ? `N° ${e.prev.num} · ` : ''}<Hl t={e.cliente || '–'} pp={pp} />{e.rif ? <> · <Hl t={e.rif} pp={pp} /></> : null}</>}
           onClick={vai(() => apriPrev(e.id))} />)}</Gruppo>
