@@ -43,7 +43,27 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Inter","Segoe
 .kpi.main{background:var(--acc);border-color:var(--acc)}.kpi.main small{color:#cfe6e2}.kpi.main b{color:#fff;font-size:16px}
 .actions{display:flex;gap:6px;flex-wrap:wrap}
 main{padding:28px;max-width:1560px;margin:0 auto;width:100%;min-width:0}
-.btn.menu,.scrim,.mainc>header.home{display:none}
+.btn.menu,.scrim{display:none}
+/* Ricerca rapida in alto (CercaRapida, Ctrl+K): sugli schermi stretti solo l'icona, che si apre sopra la barra */
+.qs{position:relative;flex:0 1 300px;min-width:180px}
+header.home .qs{flex-basis:520px}
+.qsf{position:relative;display:flex;align-items:center}
+.qsf input{width:100%;padding-left:32px;padding-right:58px}
+.qsi{position:absolute;left:10px;font-size:13px;opacity:.55;pointer-events:none}
+.qsf kbd{position:absolute;right:8px;font:500 10.5px/1 inherit;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:3px 5px;background:var(--soft);pointer-events:none}
+.qsbtn,.qsx{display:none!important}
+.qsdrop{position:absolute;top:calc(100% + 6px);left:0;width:min(560px,calc(100vw - 24px));max-height:72vh;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px rgba(31,43,51,.18);z-index:30;padding:6px}
+.qsdrop h4{margin:8px 8px 2px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;display:flex;gap:6px}
+.qsdrop h4 span{font-weight:500;opacity:.8}
+.qsr{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;border:0;background:none;padding:7px 8px;border-radius:8px;cursor:pointer;font:inherit;color:var(--ink)}
+.qsr:hover,.qsr:focus-visible{background:var(--soft2);outline:0}
+.qsr>i{font-style:normal;flex:none;width:18px;text-align:center}
+.qsr>span{min-width:0;flex:1}
+.qsr b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qsr small{display:block;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qsvuoto{padding:10px 8px;color:var(--muted)}
+.qsfoot{display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:6px;padding:8px 4px 2px}
+.qsfoot:empty{display:none}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:22px 24px;margin-bottom:20px;box-shadow:var(--sh)}
 .card h2{font-size:15.5px;font-weight:650;margin:0 0 6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--ink)}
 .card h2 .sp{flex:1}
@@ -424,8 +444,17 @@ label.chk small{margin-left:4px}
   @keyframes fade{from{opacity:0}}
   .btn.menu{display:grid;place-items:center;padding:7px 9px;flex:none}
   .sidetog{display:none}
-  .mainc>header.home{display:block}
-  .top{display:grid;grid-template-columns:auto minmax(0,1fr) auto;row-gap:8px}
+  .top{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;row-gap:8px}
+  header.home .top{grid-template-columns:auto minmax(0,1fr)}
+  .qs{min-width:0}
+  .qsf kbd{display:none}
+  .qsf input{padding-right:9px}
+  header:not(.home) .qs:not(.on) .qsf{display:none}
+  header:not(.home) .qs:not(.on) .qsbtn{display:grid!important;place-items:center;padding:6px 9px}
+  header:not(.home) .qs.on{position:absolute;left:12px;right:12px;top:8px;z-index:31}
+  header:not(.home) .qs.on .qsf{background:var(--card);border-radius:10px;box-shadow:0 4px 18px rgba(31,43,51,.15)}
+  header:not(.home) .qs.on .qsx{display:block!important;position:absolute;right:4px}
+  header:not(.home) .qs.on .qsf input{padding-right:32px}
   .top .cur{min-width:0}
   .kpis{grid-column:1/-1;grid-row:2;flex-wrap:nowrap;justify-content:flex-start;overflow-x:auto;scrollbar-width:none;margin:0 -20px;padding:0 20px}
   .kpis::-webkit-scrollbar{display:none}

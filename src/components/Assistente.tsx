@@ -12,7 +12,7 @@ import { chatComeAppunti } from '../domain/squadra';
 import { apriGmail } from './Email';
 import { TabellaVarianti, scaricaOfferte } from './Varianti';
 import { archVarianti } from '../store/actions';
-import { PANNELLO, apriPannello } from './pannelli';
+import { CHIEDI_AI, PANNELLO, apriPannello } from './pannelli';
 
 type Voce = { ruolo: 'tu' | 'ai' | 'err'; testo: string; proposte?: Proposta[] };
 const cap = (g: string) => g.charAt(0) + g.slice(1).toLowerCase();
@@ -165,6 +165,10 @@ export function Assistente() {
   useEffect(() => () => rec.current?.abort(), []);
   useEffect(() => { if (!aperto) rec.current?.stop(); }, [aperto]);
   useEffect(() => { const f = (e: Event) => { if ((e as CustomEvent).detail !== 'assistente') setAperto(false); }; window.addEventListener(PANNELLO, f); return () => window.removeEventListener(PANNELLO, f); }, []);
+  useEffect(() => {
+    const f = (e: Event) => { apriPannello('assistente'); setAperto(true); setTesto((e as CustomEvent).detail); };
+    window.addEventListener(CHIEDI_AI, f); return () => window.removeEventListener(CHIEDI_AI, f);
+  }, []);
   if (!online()) return null;
 
   const detta = () => {

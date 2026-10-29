@@ -27,6 +27,7 @@ import { ConfiguraFisso, DistintaFisso } from './pages/Fisso';
 import { AREE, PASSI as PASSI0, SETTORI, infoSettore, schedaPronta, settoreDi, type Settore } from './domain/settori';
 import { cloud, isAdmin, logout, setCloudToast } from './store/remote';
 import { AvvisiRiunioni } from './components/AvvisiRiunioni';
+import { CercaRapida } from './components/CercaRapida';
 
 const VIEWS: Record<Tab, () => React.ReactNode> = {
   archivio: Home, prev: Preventivi, fatte: ArchivioAttivita, listino: Listino, distinte: Distinte, config: Configura, costi: Costi,
@@ -95,7 +96,7 @@ export default function App() {
   // Con aperto un preventivo di un altro settore, le schede del settore chiedono se tornare al suo o iniziarne uno nuovo.
   const set = infoSettore(S.ui.set), passo = PASSI.includes(S.ui.tab), pronta = schedaPronta(set, S.ui.tab), altro = passo && pronta && settoreDi(S.prev) !== set.k;
   const View = passo && !pronta ? InSviluppo : altro ? AltroSettore : (set.k === 'fisso' && VIEWS_FISSO[S.ui.tab]) || VIEWS[S.ui.tab];
-  // In Home, nell'archivio e nei settori in sviluppo la barra in alto non mostra preventivo e valori: resta solo il pulsante del menu sugli schermi stretti.
+  // In Home, nell'archivio e nei settori in sviluppo la barra in alto non mostra preventivo e valori: restano la ricerca e, sugli schermi stretti, il menu.
   const home = S.ui.tab === 'archivio' || S.ui.tab === 'prev' || (passo && !pronta);
   const mini = S.ui.mini && !menu;   // sul telefono il menu a scomparsa è sempre intero
   const dirty = isDirty(), nSc = cloud.fase === 'pronto' || cloud.fase === 'locale' ? nScadute() : 0;
@@ -159,14 +160,15 @@ export default function App() {
             <button className="btn menu noprint" onClick={() => setMenu(true)} aria-label="Apri il menu" title="Menu">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
-            {!home && <>
-            <div className="cur">
+            {!home && <div className="cur">
               <small>{passo ? `${set.nome} · ` : ''}{LABEL[S.ui.tab]}</small>
               <span className={`curname ${dirty ? 'dirty' : ''}`} title={dirty ? 'Modifiche non salvate' : 'Salvato'}>
                 {S.prev._id ? S.prev._nome : 'Nuovo preventivo'}
                 {isBlank(S.prev) ? null : dirty ? <i> ● non salvato</i> : <i className="ok"> ✓ salvato</i>}
               </span>
-            </div>
+            </div>}
+            <CercaRapida />
+            {!home && <>
             <div className="kpis">
               <Kpi label="Costo totale" value={eur(R.total)} cls="main" />
               <Kpi label="Prezzo di vendita" value={eur(R.prezzo)} />

@@ -191,13 +191,15 @@ function AddItem({ cat }: { cat: string }) {
   </>;
 }
 
+/** Filtra il listino (anche dalla ricerca in alto). La ricerca apre le tendine del listino; cancellarla non le richiude. */
+export function filtraListino(v: string) {
+  if (!S.ui.filter.trim() && v.trim()) for (const c of CATS) { S.ui.folds['li-' + c] = true; for (const t of ['barra', 'pezzo', 'comm']) S.ui.folds[`li-${c}-${t}`] = true; }
+  S.ui.filter = v; commit();
+}
+
 export function Listino() {
   const L = S.data.listino, mz = num(S.data.params.maggZinc);
-  const onFilter = (v: string) => {
-    // La ricerca apre le tendine del listino; cancellarla non le richiude.
-    if (!S.ui.filter.trim() && v.trim()) for (const c of CATS) { S.ui.folds['li-' + c] = true; for (const t of ['barra', 'pezzo', 'comm']) S.ui.folds[`li-${c}-${t}`] = true; }
-    S.ui.filter = v; commit();
-  };
+  const onFilter = filtraListino;
   return (
     <>
       <div className="card head"><div className="headrow">
