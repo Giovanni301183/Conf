@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
 import { compute } from '../domain/compute';
 import { defaultData, newPrev } from '../domain/model';
 import { normListinoFisso } from '../domain/fissoCosti';
-import { PASSI, infoSettore, type Settore } from '../domain/settori';
+import { infoSettore, type Settore } from '../domain/settori';
 
 export const KEY_DATA = 'tracker_prev_data_v1', KEY_PREV = 'tracker_prev_prev_v1', KEY_UI = 'tracker_prev_ui_v1';
 export const KEY_ARCH = 'tracker_prev_archivio_v1', KEY_DRAFT = 'tracker_prev_bozza_v1', KEY_SCAD = 'tracker_prev_scadenze_v1';
@@ -24,7 +24,7 @@ export const TABS = [['archivio', 'Home'], ['prev', 'Preventivi'], ['fatte', 'Ar
 export type Tab = (typeof TABS)[number][0];
 
 export interface Ui {
-  tab: Tab; view: string; av: 'elenco' | 'kpi' | 'mappa' | 'cerca'; cerca: { q: string; stato: string; anno: string }; cal: boolean; mini: boolean; calV: 'mese' | 'agenda'; calMie: boolean; kf: { anno: string; mese: string; stato: string; cliente: string }; folds: Record<string, boolean>; open: Set<string>; sizeSel: string; openSd: Set<number>; filter: string; aq: string; docCart: string;
+  tab: Tab; view: string; av: 'elenco' | 'kpi' | 'mappa' | 'cerca'; cerca: { q: string; stato: string; anno: string }; hb: Record<string, boolean>; mini: boolean; calV: 'mese' | 'agenda'; calMie: boolean; kf: { anno: string; mese: string; stato: string; cliente: string }; folds: Record<string, boolean>; open: Set<string>; sizeSel: string; openSd: Set<number>; filter: string; aq: string; docCart: string; rep: string;
   set: Settore; sopen: boolean; area: string; aset: Settore | '';   // menu: settore scelto (e se è aperto), macro area aperta ('' = tutte chiuse); filtro per settore dell'archivio
 }
 // scad = scadenze del calendario inserite a mano (dal server, o dal browser senza Supabase).
@@ -32,11 +32,10 @@ export interface Ui {
 export interface State { data: any; prev: any; ui: Ui; arch: any[]; scad: any[]; docs: any[] }
 
 const UI0 = load(KEY_UI) || {};
-const hashTab = TABS.find(t => t[0] === location.hash.slice(1))?.[0];
-// All'avvio si parte sempre da un preventivo nuovo, sulla schermata Preventivi (elenco dell'archivio).
+// All'avvio si parte sempre dalla Home (calendario e mappa dei reparti aperti, le altre barre chiuse) con un preventivo nuovo.
 export const S: State = {
   data: load(KEY_DATA) || defaultData(), prev: newPrev(), arch: load(KEY_ARCH) || [], scad: load(KEY_SCAD) || [], docs: [],
-  ui: { tab: hashTab || 'archivio', view: UI0.view || 'cat', av: ['elenco', 'kpi', 'mappa', 'cerca'].includes(UI0.av) ? UI0.av : 'elenco', cal: UI0.cal ?? true, mini: !!UI0.mini, calV: UI0.calV === 'agenda' ? 'agenda' : 'mese', calMie: !!UI0.calMie, kf: { anno: '', mese: '', stato: '', cliente: '' }, cerca: { q: '', stato: '', anno: '' }, folds: UI0.folds || {}, open: new Set(), sizeSel: '12', openSd: new Set(), filter: '', aq: '', docCart: '', set: infoSettore(UI0.set).k, sopen: true, area: (PASSI as readonly string[]).includes(hashTab || '') ? infoSettore(UI0.set).gruppo : '', aset: '' },
+  ui: { tab: 'archivio', view: UI0.view || 'cat', av: ['elenco', 'kpi', 'mappa', 'cerca'].includes(UI0.av) ? UI0.av : 'elenco', hb: {}, mini: !!UI0.mini, calV: UI0.calV === 'agenda' ? 'agenda' : 'mese', calMie: !!UI0.calMie, kf: { anno: '', mese: '', stato: '', cliente: '' }, cerca: { q: '', stato: '', anno: '' }, folds: UI0.folds || {}, open: new Set(), sizeSel: '12', openSd: new Set(), filter: '', aq: '', docCart: '', rep: '', set: infoSettore(UI0.set).k, sopen: true, area: '', aset: '' },
 };
 
 // Risultato del calcolo sul preventivo aperto: si aggiorna a ogni commit().
@@ -53,7 +52,7 @@ export function withPrev<T>(prev: any, f: () => T): T {
 let saveHook = () => {};
 export function setSaveHook(f: () => void) { saveHook = f; }
 export function save() { store(KEY_DATA, S.data); store(KEY_PREV, S.prev); saveHook(); }
-export function saveUi() { store(KEY_UI, { tab: S.ui.tab, view: S.ui.view, av: S.ui.av, cal: S.ui.cal, mini: S.ui.mini, calV: S.ui.calV, calMie: S.ui.calMie, folds: S.ui.folds, set: S.ui.set }); }
+export function saveUi() { store(KEY_UI, { tab: S.ui.tab, view: S.ui.view, av: S.ui.av, mini: S.ui.mini, calV: S.ui.calV, calMie: S.ui.calMie, folds: S.ui.folds, set: S.ui.set }); }
 
 let version = 0;
 const subs = new Set<() => void>();

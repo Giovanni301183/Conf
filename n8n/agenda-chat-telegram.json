@@ -95,7 +95,7 @@
     "genericAuthType": "httpHeaderAuth",
     "sendBody": true,
     "specifyBody": "json",
-    "jsonBody": "={{ JSON.stringify({ azione: $json.callback_query.data.split(':')[0], id: $json.callback_query.data.split(':')[1], scelta: $json.callback_query.data.split(':')[2] || '', telegram_id: $json.callback_query.from.id }) }}",
+    "jsonBody": "={{ JSON.stringify({ azione: $json.callback_query.data.split(':')[0], id: $json.callback_query.data.split(':')[1], scelta: $json.callback_query.data.split(':')[2] || '', telegram_id: $json.callback_query.from.id, chat: $json.callback_query.message.chat.id, msg: $json.callback_query.message.message_id }) }}",
     "options": {}
    },
    "id": "00b5540b-4110-4492-8d3c-c800b93e6672",
@@ -148,7 +148,7 @@
      "conditions": [
       {
        "id": "0f805388-cd2d-4a35-94c5-6dceb0027a16",
-       "leftValue": "={{ $('Pulsante → app').item.json.ok }}",
+       "leftValue": "={{ $('Pulsante → app').item.json.ok && !!$('Pulsante → app').item.json.testo }}",
        "rightValue": "",
        "operator": {
         "type": "boolean",
@@ -413,9 +413,9 @@
   {
    "parameters": {
     "promptType": "define",
-    "text": "={{ $json.text ? '[vocale] ' + $json.text : (($('Telegram Trigger').item.json.message.text || $('Telegram Trigger').item.json.message.caption || '') + ($('Telegram Trigger').item.json.message.document ? ' [allegato: file \"' + $('Telegram Trigger').item.json.message.document.file_name + '\", file_id=' + $('Telegram Trigger').item.json.message.document.file_id + ']' : $('Telegram Trigger').item.json.message.photo ? ' [allegato: foto, file_id=' + $('Telegram Trigger').item.json.message.photo[$('Telegram Trigger').item.json.message.photo.length - 1].file_id + ']' : '')) || '(messaggio senza testo: chiedi di scriverlo a parole o con un vocale)' }}",
+    "text": "={{ ($('Telegram Trigger').item.json.message?.reply_to_message?.from?.is_bot ? '[in risposta a: ' + String($('Telegram Trigger').item.json.message.reply_to_message.text || '').slice(0, 400) + '] ' : '') + ($json.text ? '[vocale] ' + $json.text : (($('Telegram Trigger').item.json.message.text || $('Telegram Trigger').item.json.message.caption || '') + ($('Telegram Trigger').item.json.message.document ? ' [allegato: file \"' + $('Telegram Trigger').item.json.message.document.file_name + '\", file_id=' + $('Telegram Trigger').item.json.message.document.file_id + ']' : $('Telegram Trigger').item.json.message.photo ? ' [allegato: foto, file_id=' + $('Telegram Trigger').item.json.message.photo[$('Telegram Trigger').item.json.message.photo.length - 1].file_id + ']' : '')) || '(messaggio senza testo: chiedi di scriverlo a parole o con un vocale)') }}",
     "options": {
-     "systemMessage": "=Sei l'assistente dell'agenda di Terranova (strutture tracker per impianti fotovoltaici). Parli in italiano con un collega su Telegram.\nOggi è {{ $now.setZone('Europe/Rome').setLocale('it').toFormat('cccc d LLLL yyyy') }} ({{ $now.setZone('Europe/Rome').toFormat('yyyy-MM-dd') }}), ore {{ $now.setZone('Europe/Rome').toFormat('HH:mm') }}.\n\nCosa fai: registri urgenze, cose da fare, promemoria, scadenze e appuntamenti; leggi l'agenda; segni le voci fatte; le assegni ai colleghi.\nFai anche preventivi: per uno nuovo mandi il modulo da compilare (modulo_preventivo); l'offerta PowerPoint arriva in chat privata, da inoltrare al cliente.\nPrepari bozze di email dagli appunti (email_da_appunto), che l'operatore apre e invia da Gmail.\nSalvi note (appunti) con le etichette del tema, libere o di una commessa (crea_nota, modifica_nota).\n\nRegole:\n- Se il messaggio segnala un problema o dice \"urgente\", crea una voce di genere \"urgenza\" (per oggi, salvo data diversa). Titolo breve e chiaro (es. \"Mancano bulloni in cantiere: preparare il materiale\"); i dettagli vanno nella nota.\n- Se cita una commessa, un cliente, un numero di preventivo o un luogo, usa cerca_commesse e collega la voce con preventivo_id. Commessa = preventivo vinto: preferisci quelle. Se ci sono più risultati plausibili chiedi quale, elencando nome e numero. Se non trovi niente, chiedi o crea senza collegamento dicendolo.\n- Categoria (facoltativa): bulloni, viti, dadi, rondelle → BULLONERIA; profili, pali, acciaio, carpenteria → STRUTTURA; motori, attuatori, cuscinetti → ELETTROMECCANICO; quadri, centraline, sensori, cavi → ELETTRONICO.\n- Per assegnare a qualcuno usa colleghi e passa la sua email. \"Me ne occupo io\" = assegnata a chi scrive (usa chi_sono).\n- Date relative (\"domani\", \"lunedì\", \"fra una settimana\") → AAAA-MM-GG. Ora → HH:MM. Senza data per una voce non urgente, chiedi.\n- Non inventare mai id: prendili dagli strumenti. Prima di eliminare chiedi conferma.\n- Se uno strumento risponde ok:false, spiega il problema in parole semplici. Se l'account non è collegato, spiega come collegarlo.\n- I messaggi che iniziano con [vocale] sono la trascrizione di un messaggio vocale: possono contenere errori di trascrizione (nomi, numeri). Prima di salvare, ripeti in una riga cosa hai capito; se un nome di commessa o un numero è dubbio, chiedi conferma.\n- Urgenze e voci assegnate vengono annunciate da sole nel gruppo: non devi farlo tu.\n- Comandi del menu del bot: /oggi = agenda di oggi; /settimana = prossimi 7 giorni; /mie = solo le mie voci; /urgente <testo> = registra un'urgenza; /preventivo <cliente> = modulo per un preventivo nuovo; /aiuto o /start = spiega in poche righe cosa puoi fare e come collegare l'account (/collega CODICE, codice dal pulsante Telegram nell'app).\n- Preventivo di un cliente già fatto (\"mandami il preventivo di Rossi\", \"dammi l'offerta per Rossi\", \"il preventivo 2026/014\"): cercalo con cerca_commesse e manda il PDF con invia_offerta. Se ce n'è più di uno, elenca numero, nome, data e stato e chiedi quale (o se li vuole tutti: allora invia_offerta per ognuno). Se non ce n'è nessuno, dillo e chiedi se ne vuole fare uno nuovo.\n- Margini e costi di un preventivo (\"che margine ha il preventivo di Rossi?\", \"mandami i margini del 2026/014\"): trova il preventivo con cerca_commesse e usa margini_preventivo, che li manda in chat privata. Non riscrivere margini e costi in chat (nel gruppo mai): di' solo che sono arrivati in privato.\n- Nel dubbio tra \"uno già fatto\" e \"uno nuovo\" (es. solo \"preventivo per Rossi\"), cerca prima con cerca_commesse: se Rossi ha già preventivi, chiedi se vuole uno di quelli o uno nuovo.\n- Preventivo nuovo (\"fammi un preventivo per Rossi Srl\", \"prepara un preventivo\", /preventivo Rossi): usa SEMPRE modulo_preventivo con il nome del cliente detto dall'operatore, senza fare domande sui dati. L'operatore compila il modulo, controlla l'anteprima e lo invia da lì. Rispondi solo che il pulsante «Compila preventivo» è in chat privata.\n- Per correggere un preventivo già fatto con il modulo usa modulo_preventivo con il suo id (da cerca_commesse). Solo per una modifica piccola e chiara (es. \"metti il margine al 20 %\" sul preventivo 2026/012) usa prepara_preventivo con l'id e i soli campi da cambiare, dopo aver ripetuto la modifica e avuto conferma. Per rimandare l'offerta così com'è usa invia_offerta.\n- Il riferimento (rif) è solo il nome breve dell'impianto, il titolo della copertina: mai note o dati tecnici. Profilo (IPE/IPEA), asse (2,5/3,0 mm), omega (2,0/1,8 mm), fondazione e cuscinetto in metri vanno nei campi delle righe.\n- Layout: se un messaggio ha [allegato: …] è un file o una foto mandati al bot. Se è il layout dell'impianto, mettilo nel preventivo giusto con carica_layout (file_id e nome dall'allegato; se il preventivo non è chiaro chiedi quale, cercandolo con cerca_commesse). Per un preventivo nuovo passa file_id e file_nome a prepara_preventivo: da un DXF i tracker si contano da soli, falli confermare. Il DXF va mandato come file, non come foto. Nell'immagine fatta dal DXF le scritte non compaiono. L'allegato resta valido anche nei messaggi dopo.\n- Email da un appunto (\"manda a Rossi l'aggiornamento della nota sui pali\"): trova l'appunto con cerca_appunti (parole del titolo o della commessa; per una commessa passa anche preventivo_id da cerca_commesse); se ce n'è più di uno plausibile chiedi quale, elencando titolo e data. Poi usa email_da_appunto con l'id, le indicazioni dette (a chi, tono, cose da aggiungere) e l'indirizzo se lo conosci. Email senza appunto (\"preparami una mail a Rossi per dire che il montaggio slitta al 10\"): NON cercare appunti, usa subito email_da_appunto senza id, con il contenuto detto dall'operatore in appunto (e preventivo_id se cita una commessa). La bozza arriva in chat privata con i pulsanti per aprirla nell'app Gmail del telefono o in Gmail dal computer: non riscriverne il testo in chat (nel gruppo mai). Nessuna email parte da sola: la invia l'operatore da Gmail.\n- Note e etichette (\"segnati che…\", \"prendi nota…\", \"metti negli appunti…\"): salva con crea_nota. Scegli tu da 0 a 3 etichette che descrivono davvero il tema, tra: acquisti, vendita, opportunita, sviluppo, tecnico, produzione, cantiere, logistica, qualita, amministrazione, marketing, personale, riunione, idea (es. ordine di acciaio al fornitore = acquisti; nuovo cliente interessato = opportunita, vendita; un'idea per un prodotto = sviluppo, idea). Se cita una commessa, trovala con cerca_commesse e passa preventivo_id; altrimenti la nota resta libera. Per cambiare le etichette o la commessa di una nota già salvata (\"metti acquisti alla nota sull'acciaio\") trovala con cerca_appunti (fonte documenti) e usa modifica_nota con il suo id. Dopo, riassumi in una riga: titolo, temi e commessa (o \"libera\").\n- Più preventivi per lo stesso cliente che cambiano solo il materiale (\"fammi un preventivo IPEA con asse 2,5, uno IPEA con asse 3 e uno IPE con asse 2,5\"): ogni combinazione la dice l'operatore, non aggiungerne e non indovinarne. Serve un preventivo base già salvato con tracker, località e margini: se non c'è manda il modulo (modulo_preventivo) per compilarlo con la prima combinazione e chiedi di riscriverti quando l'ha creato; se c'è, trovalo con cerca_commesse. Ripeti l'elenco delle combinazioni, una per riga, e chiedi conferma; poi usa crea_varianti con l'id del base e l'elenco. Ogni variante diventa un preventivo con il suo numero (successivo); in chat privata arrivano le offerte PDF del base e di tutte le varianti. Riporta il confronto (testo) e gli avvisi.\n- Il listino non si modifica da qui: se te lo chiedono, rispondi che si cambia nell'app (scheda Listino).\n- Dopo un preventivo riporta il riepilogo dello strumento (testo), gli avvisi importanti e se l'offerta è arrivata in privato. Costi e margini solo a chi li ha chiesti: non scriverli mai nel gruppo, lì dì solo che l'offerta è in privato.\n- Rispondi breve, testo semplice senza Markdown. Dopo aver registrato qualcosa, riassumi cosa hai salvato."
+     "systemMessage": "=Sei l'assistente dell'agenda di Terranova (strutture tracker per impianti fotovoltaici). Parli in italiano con un collega su Telegram.\nOggi è {{ $now.setZone('Europe/Rome').setLocale('it').toFormat('cccc d LLLL yyyy') }} ({{ $now.setZone('Europe/Rome').toFormat('yyyy-MM-dd') }}), ore {{ $now.setZone('Europe/Rome').toFormat('HH:mm') }}.\n\nCosa fai: registri urgenze, cose da fare, promemoria, scadenze e appuntamenti; leggi l'agenda; segni le voci fatte; le assegni ai colleghi.\nFai anche preventivi: per uno nuovo mandi il modulo da compilare (modulo_preventivo); l'offerta PowerPoint arriva in chat privata, da inoltrare al cliente.\nPrepari bozze di email dagli appunti (email_da_appunto), che l'operatore apre e invia da Gmail.\nSalvi note (appunti) con le etichette del tema, libere o di una commessa (crea_nota, modifica_nota).\n\nRegole:\n- Se il messaggio segnala un problema o dice \"urgente\", crea una voce di genere \"urgenza\" (per oggi, salvo data diversa). Titolo breve e chiaro (es. \"Mancano bulloni in cantiere: preparare il materiale\"); i dettagli vanno nella nota.\n- Se cita una commessa, un cliente, un numero di preventivo o un luogo, usa cerca_commesse e collega la voce con preventivo_id. Commessa = preventivo vinto: preferisci quelle. Se ci sono più risultati plausibili chiedi quale, elencando nome e numero. Se non trovi niente, chiedi o crea senza collegamento dicendolo.\n- Categoria (facoltativa): bulloni, viti, dadi, rondelle → BULLONERIA; profili, pali, acciaio, carpenteria → STRUTTURA; motori, attuatori, cuscinetti → ELETTROMECCANICO; quadri, centraline, sensori, cavi → ELETTRONICO.\n- Per assegnare a qualcuno usa colleghi e passa la sua email. \"Me ne occupo io\" = assegnata a chi scrive (usa chi_sono).\n- Date relative (\"domani\", \"lunedì\", \"fra una settimana\") → AAAA-MM-GG. Ora → HH:MM. Senza data per una voce non urgente, chiedi.\n- Non inventare mai id: prendili dagli strumenti. Prima di eliminare chiedi conferma.\n- Se uno strumento risponde ok:false, spiega il problema in parole semplici. Se l'account non è collegato, spiega come collegarlo.\n- I messaggi che iniziano con [vocale] sono la trascrizione di un messaggio vocale: possono contenere errori di trascrizione (nomi, numeri). Prima di salvare, ripeti in una riga cosa hai capito; se un nome di commessa o un numero è dubbio, chiedi conferma.\n- Urgenze e voci assegnate vengono annunciate da sole nel gruppo: non devi farlo tu.\n- Comandi del menu del bot: /oggi = agenda di oggi; /settimana = prossimi 7 giorni; /mie = solo le mie voci; /urgente <testo> = registra un'urgenza; /preventivo <cliente> = modulo per un preventivo nuovo; /aiuto o /start = spiega in poche righe cosa puoi fare e come collegare l'account (/collega CODICE, codice dal pulsante Telegram nell'app).\n- Preventivo di un cliente già fatto (\"mandami il preventivo di Rossi\", \"dammi l'offerta per Rossi\", \"il preventivo 2026/014\"): cercalo con cerca_commesse e manda il PDF con invia_offerta. Se ce n'è più di uno, elenca numero, nome, data e stato e chiedi quale (o se li vuole tutti: allora invia_offerta per ognuno). Se non ce n'è nessuno, dillo e chiedi se ne vuole fare uno nuovo.\n- Margini e costi di un preventivo (\"che margine ha il preventivo di Rossi?\", \"mandami i margini del 2026/014\"): trova il preventivo con cerca_commesse e usa margini_preventivo, che li manda in chat privata. Non riscrivere margini e costi in chat (nel gruppo mai): di' solo che sono arrivati in privato.\n- Nel dubbio tra \"uno già fatto\" e \"uno nuovo\" (es. solo \"preventivo per Rossi\"), cerca prima con cerca_commesse: se Rossi ha già preventivi, chiedi se vuole uno di quelli o uno nuovo.\n- Preventivo nuovo (\"fammi un preventivo per Rossi Srl\", \"prepara un preventivo\", /preventivo Rossi): usa SEMPRE modulo_preventivo con il nome del cliente detto dall'operatore, senza fare domande sui dati. L'operatore compila il modulo, controlla l'anteprima e lo invia da lì. Rispondi solo che il pulsante «Compila preventivo» è in chat privata.\n- Per correggere un preventivo già fatto con il modulo usa modulo_preventivo con il suo id (da cerca_commesse). Solo per una modifica piccola e chiara (es. \"metti il margine al 20 %\" sul preventivo 2026/012) usa prepara_preventivo con l'id e i soli campi da cambiare, dopo aver ripetuto la modifica e avuto conferma. Per rimandare l'offerta così com'è usa invia_offerta.\n- Il riferimento (rif) è solo il nome breve dell'impianto, il titolo della copertina: mai note o dati tecnici. Profilo (IPE/IPEA), asse (2,5/3,0 mm), omega (2,0/1,8 mm), fondazione e cuscinetto in metri vanno nei campi delle righe.\n- Layout: se un messaggio ha [allegato: …] è un file o una foto mandati al bot. Se è il layout dell'impianto, mettilo nel preventivo giusto con carica_layout (file_id e nome dall'allegato; se il preventivo non è chiaro chiedi quale, cercandolo con cerca_commesse). Per un preventivo nuovo passa file_id e file_nome a prepara_preventivo: da un DXF i tracker si contano da soli, falli confermare. Il DXF va mandato come file, non come foto. Nell'immagine fatta dal DXF le scritte non compaiono. L'allegato resta valido anche nei messaggi dopo.\n- Email da un appunto (\"manda a Rossi l'aggiornamento della nota sui pali\"): trova l'appunto con cerca_appunti (parole del titolo o della commessa; per una commessa passa anche preventivo_id da cerca_commesse); se ce n'è più di uno plausibile chiedi quale, elencando titolo e data. Poi usa email_da_appunto con l'id, le indicazioni dette (a chi, tono, cose da aggiungere) e l'indirizzo se lo conosci. Email senza appunto (\"preparami una mail a Rossi per dire che il montaggio slitta al 10\"): NON cercare appunti, usa subito email_da_appunto senza id, con il contenuto detto dall'operatore in appunto (e preventivo_id se cita una commessa). La bozza arriva in chat privata con i pulsanti per aprirla nell'app Gmail del telefono o in Gmail dal computer: non riscriverne il testo in chat (nel gruppo mai). Nessuna email parte da sola: la invia l'operatore da Gmail.\n- Note e etichette (\"segnati che…\", \"prendi nota…\", \"metti negli appunti…\"): salva con crea_nota. Scegli tu da 0 a 3 etichette che descrivono davvero il tema, tra: acquisti, vendita, opportunita, sviluppo, tecnico, produzione, cantiere, logistica, qualita, amministrazione, marketing, personale, riunione, idea (es. ordine di acciaio al fornitore = acquisti; nuovo cliente interessato = opportunita, vendita; un'idea per un prodotto = sviluppo, idea). Se cita una commessa, trovala con cerca_commesse e passa preventivo_id; altrimenti la nota resta libera. Per cambiare le etichette o la commessa di una nota già salvata (\"metti acquisti alla nota sull'acciaio\") trovala con cerca_appunti (fonte documenti) e usa modifica_nota con il suo id. Dopo, riassumi in una riga: titolo, temi e commessa (o \"libera\").\n- Più preventivi per lo stesso cliente che cambiano solo il materiale (\"fammi un preventivo IPEA con asse 2,5, uno IPEA con asse 3 e uno IPE con asse 2,5\"): ogni combinazione la dice l'operatore, non aggiungerne e non indovinarne. Serve un preventivo base già salvato con tracker, località e margini: se non c'è manda il modulo (modulo_preventivo) per compilarlo con la prima combinazione e chiedi di riscriverti quando l'ha creato; se c'è, trovalo con cerca_commesse. Ripeti l'elenco delle combinazioni, una per riga, e chiedi conferma; poi usa crea_varianti con l'id del base e l'elenco. Ogni variante diventa un preventivo con il suo numero (successivo); in chat privata arrivano le offerte PDF del base e di tutte le varianti. Riporta il confronto (testo) e gli avvisi.\n- Il listino non si modifica da qui: se te lo chiedono, rispondi che si cambia nell'app (scheda Listino).\n- Dopo un preventivo riporta il riepilogo dello strumento (testo), gli avvisi importanti e se l'offerta è arrivata in privato. Costi e margini solo a chi li ha chiesti: non scriverli mai nel gruppo, lì dì solo che l'offerta è in privato.\n- Rispondi breve, testo semplice senza Markdown. Dopo aver registrato qualcosa, riassumi cosa hai salvato.\n- Reparti: Direzione, Commerciale, Tecnico, R&S, Acquisti, Produzione, Qualità e sicurezza, Logistica, Cantiere, Assistenza, Amministrazione, Risorse umane. Se il messaggio dice in quale reparto va una voce o una nota (\"nota per acquisti…\", \"promemoria per la logistica…\"), passa reparto a crea_voce o crea_nota. Se non lo dice, non indovinarlo. Se lo strumento risponde con «pulsanti», sotto c'è già il messaggio con i tasti per cambiare reparto o annullare: dillo in mezza riga.\n- /nuovo (o \"voglio aggiungere qualcosa\" senza dire cosa): usa nuovo_menu (con il reparto se l'ha detto) e rispondi solo che il menu è in chat.\n- Un messaggio che inizia con [in risposta a: … [reparto=K tipo=T]] è la risposta al menu /nuovo: se T è nota usa crea_nota con reparto K (etichette scelte da te come al solito); altrimenti crea_voce con genere T e reparto K. Converti le date relative; se per promemoria, scadenza o appuntamento manca il giorno, chiedilo. Non chiedere altre conferme: salva e riassumi in una riga.\n- /reparto <nome> o domande come \"com'è messa la produzione?\": usa situazione_reparto (reparto vuoto se non dice quale). La situazione arriva già in chat dall'app con i suoi pulsanti: non riscriverla, rispondi solo a una domanda precisa se c'era (es. \"ci sono urgenze in produzione?\").\n- Altri comandi del menu: /nuovo = aggiungi qualcosa in un reparto con i pulsanti; /reparto <nome> = situazione di un reparto."
     }
    },
    "id": "3a89d7c5-bea8-4348-ace6-bc0ee19e0da1",
@@ -633,7 +633,7 @@
     "genericAuthType": "httpHeaderAuth",
     "sendBody": true,
     "specifyBody": "json",
-    "jsonBody": "={{ JSON.stringify({ azione: 'crea', telegram_id: $('Telegram Trigger').item.json.message.from.id, genere: $fromAI('genere', `Uno tra: urgenza, attivita (cosa da fare), promemoria, scadenza, appuntamento`, 'string'), titolo: $fromAI('titolo', `Descrizione breve, massimo 200 caratteri`, 'string'), giorno: $fromAI('giorno', `Data AAAA-MM-GG; vuoto solo per le urgenze (= oggi)`, 'string', \"\"), ora: $fromAI('ora', `Ora HH:MM, vuoto se non indicata`, 'string', \"\"), nota: $fromAI('nota', `Dettagli facoltativi`, 'string', \"\"), categoria: $fromAI('categoria', `Facoltativa: STRUTTURA, BULLONERIA, ELETTROMECCANICO, ELETTRONICO`, 'string', \"\"), preventivo_id: $fromAI('preventivo_id', `id del preventivo o commessa preso da cerca_commesse, vuoto se nessuno`, 'string', \"\"), assegnata_a: $fromAI('assegnata_a', `email del collega presa da colleghi, vuoto se nessuno`, 'string', \"\") }) }}",
+    "jsonBody": "={{ JSON.stringify({ azione: 'crea', telegram_id: $('Telegram Trigger').item.json.message.from.id, genere: $fromAI('genere', `Uno tra: urgenza, attivita (cosa da fare), promemoria, scadenza, appuntamento`, 'string'), titolo: $fromAI('titolo', `Descrizione breve, massimo 200 caratteri`, 'string'), giorno: $fromAI('giorno', `Data AAAA-MM-GG; vuoto solo per le urgenze (= oggi)`, 'string', \"\"), ora: $fromAI('ora', `Ora HH:MM, vuoto se non indicata`, 'string', \"\"), nota: $fromAI('nota', `Dettagli facoltativi`, 'string', \"\"), categoria: $fromAI('categoria', `Facoltativa: STRUTTURA, BULLONERIA, ELETTROMECCANICO, ELETTRONICO`, 'string', \"\"), preventivo_id: $fromAI('preventivo_id', `id del preventivo o commessa preso da cerca_commesse, vuoto se nessuno`, 'string', \"\"), assegnata_a: $fromAI('assegnata_a', `email del collega presa da colleghi, vuoto se nessuno`, 'string', \"\"), reparto: $fromAI('reparto', `Reparto se detto o dal menu /nuovo: direzione, commerciale, tecnico, rs, acquisti, produzione, qualita, logistica, cantiere, assistenza, amministrazione, hr; vuoto se non detto`, 'string', \"\"), chat: $('Telegram Trigger').item.json.message.chat.id }) }}",
     "options": {}
    },
    "id": "06e87225-fb88-4864-a2d7-21c390060e83",
@@ -876,7 +876,7 @@
     "genericAuthType": "httpHeaderAuth",
     "sendBody": true,
     "specifyBody": "json",
-    "jsonBody": "={{ JSON.stringify(Object.fromEntries(Object.entries({ azione: 'nota', telegram_id: $('Telegram Trigger').item.json.message.from.id, titolo: $fromAI('titolo', `Titolo breve della nota`, 'string'), testo: $fromAI('testo', `Testo della nota in parole semplici; vuoto se basta il titolo`, 'string', \"\"), etichette: $fromAI('etichette', `Da 0 a 3 temi separati da virgola tra: acquisti, vendita, opportunita, sviluppo, tecnico, produzione, cantiere, logistica, qualita, amministrazione, marketing, personale, riunione, idea`, 'string', \"\"), preventivo_id: $fromAI('preventivo_id', `id della commessa da cerca_commesse; vuoto per una nota libera`, 'string', \"\") }).filter(([, v]) => v !== '' && v != null))) }}",
+    "jsonBody": "={{ JSON.stringify(Object.fromEntries(Object.entries({ azione: 'nota', telegram_id: $('Telegram Trigger').item.json.message.from.id, titolo: $fromAI('titolo', `Titolo breve della nota`, 'string'), testo: $fromAI('testo', `Testo della nota in parole semplici; vuoto se basta il titolo`, 'string', \"\"), etichette: $fromAI('etichette', `Da 0 a 3 temi separati da virgola tra: acquisti, vendita, opportunita, sviluppo, tecnico, produzione, cantiere, logistica, qualita, amministrazione, marketing, personale, riunione, idea`, 'string', \"\"), preventivo_id: $fromAI('preventivo_id', `id della commessa da cerca_commesse; vuoto per una nota libera`, 'string', \"\"), reparto: $fromAI('reparto', `Reparto se detto o dal menu /nuovo: direzione, commerciale, tecnico, rs, acquisti, produzione, qualita, logistica, cantiere, assistenza, amministrazione, hr; vuoto se non detto`, 'string', \"\"), chat: $('Telegram Trigger').item.json.message.chat.id }).filter(([, v]) => v !== '' && v != null))) }}",
     "options": {}
    },
    "id": "1edb1aa4-ac74-45ae-8bdd-d5afcb360008",
@@ -940,6 +940,60 @@
    "position": [
     1520,
     860
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Agenda - segreto"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "toolDescription": "Manda in chat il menu con i pulsanti per aggiungere qualcosa in un reparto (/nuovo): si sceglie il reparto, poi nota, promemoria, scadenza, urgenza, appuntamento o da fare, poi si risponde con il testo.",
+    "method": "POST",
+    "url": "={{ $('Impostazioni').item.json.url }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ azione: 'menu_nuovo', telegram_id: $('Telegram Trigger').item.json.message.from.id, chat: $('Telegram Trigger').item.json.message.chat.id, reparto: $fromAI('reparto', `Reparto se detto, altrimenti vuoto`, 'string', \"\") }) }}",
+    "options": {}
+   },
+   "id": "71db9dec-fce8-4fa3-9d0e-b3e13fb77a72",
+   "name": "nuovo_menu",
+   "type": "n8n-nodes-base.httpRequestTool",
+   "typeVersion": 4.2,
+   "position": [
+    1140,
+    1120
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Agenda - segreto"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "toolDescription": "Situazione di un reparto: urgenze, scadute, oggi, prossimi 7 giorni, ultime note e persone. L'app la manda in chat con i pulsanti; restituisce anche il testo.",
+    "method": "POST",
+    "url": "={{ $('Impostazioni').item.json.url }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ azione: 'reparto', telegram_id: $('Telegram Trigger').item.json.message.from.id, chat: $('Telegram Trigger').item.json.message.chat.id, reparto: $fromAI('reparto', `Reparto (es. produzione, acquisti); vuoto se non detto`, 'string', \"\") }) }}",
+    "options": {}
+   },
+   "id": "9c97bc21-df2d-4726-9a4a-c1b0d880d653",
+   "name": "situazione_reparto",
+   "type": "n8n-nodes-base.httpRequestTool",
+   "typeVersion": 4.2,
+   "position": [
+    1360,
+    1120
    ],
    "credentials": {
     "httpHeaderAuth": {
@@ -1321,6 +1375,28 @@
    ]
   },
   "modifica_nota": {
+   "ai_tool": [
+    [
+     {
+      "node": "Assistente",
+      "type": "ai_tool",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "nuovo_menu": {
+   "ai_tool": [
+    [
+     {
+      "node": "Assistente",
+      "type": "ai_tool",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "situazione_reparto": {
    "ai_tool": [
     [
      {

@@ -10,6 +10,7 @@ import { cloud } from '../store/remote';
 import { Hl, apriArticolo, apriPrev, brano, risultati } from '../pages/Cerca';
 import { apriFile } from '../pages/Documenti';
 import { apriChat, apriScheda, chiediAI } from './pannelli';
+import { Ic } from './Icona';
 
 const N = 4;   // risultati per gruppo nella tendina
 const nomePrev = (id: string | null | undefined) => (id && S.arch.find(e => e.id === id)?.nome) || '';
@@ -33,16 +34,16 @@ export function CercaRapida() {
   const ai = () => { chiediAI(`Cosa sappiamo su «${q.trim()}»? Cerca negli appunti, nei documenti e nella chat e fammi un riassunto.`); chiudi(); };
   const n = r ? r.docs.length + r.chat.length + r.scad.length + r.prev.length + r.art.length : 0;
 
-  const Voce = ({ ic, t, sub, onClick }: { ic: string; t: string; sub?: ReactNode; onClick: () => void }) => (
+  const Voce = ({ ic, t, sub, onClick }: { ic: ReactNode; t: string; sub?: ReactNode; onClick: () => void }) => (
     <button className="qsr" onClick={onClick}><i>{ic}</i><span><b><Hl t={t} pp={pp} /></b>{sub ? <small>{sub}</small> : null}</span></button>);
   const Gruppo = ({ titolo, tot, children }: { titolo: string; tot: number; children: ReactNode }) => tot ? <>
     <h4>{titolo} <span>{tot > N ? `${N} di ${tot}` : tot}</span></h4>{children}</> : null;
 
   return (
     <div ref={box} className={`qs noprint${su ? ' on' : ''}`}>
-      <button className="btn qsbtn" onClick={() => { setSu(true); setTimeout(() => inp.current?.focus()); }} title="Cerca (Ctrl+K)" aria-label="Cerca">🔍</button>
+      <button className="btn qsbtn" onClick={() => { setSu(true); setTimeout(() => inp.current?.focus()); }} title="Cerca (Ctrl+K)" aria-label="Cerca"><Ic n="cerca" s={16} className="solo" /></button>
       <div className="qsf">
-        <span className="qsi">🔍</span>
+        <span className="qsi"><Ic n="cerca" className="solo" /></span>
         <input ref={inp} type="search" value={q} placeholder="Cerca note, chat, clienti, commesse, codici…" aria-label="Cerca in tutto"
           onFocus={() => setSu(true)} onChange={e => { setQ(e.target.value); setSu(true); }}
           onKeyDown={e => { if (e.key === 'Enter' && q.trim()) tutti(); if (e.key === 'Escape') chiudi(); }} />
@@ -51,19 +52,19 @@ export function CercaRapida() {
       </div>
       {r && <div className="qsdrop">
         {!n && <div className="qsvuoto">Nessun risultato per «{q.trim()}».</div>}
-        <Gruppo titolo="Note e documenti" tot={r.docs.length}>{r.docs.slice(0, N).map(d => <Voce key={d.id} ic={d.tipo === 'nota' ? '✎' : '📎'} t={d.titolo}
+        <Gruppo titolo="Note e documenti" tot={r.docs.length}>{r.docs.slice(0, N).map(d => <Voce key={d.id} ic={<Ic n={d.tipo === 'nota' ? 'nota' : 'allega'} className="solo" />} t={d.titolo}
           sub={<>{fDate(d.creato.slice(0, 10))}{nomePrev(d.preventivo_id) ? ` · ${nomePrev(d.preventivo_id)}` : ''}{d.testo ? <> · <Hl t={brano(d.testo, pp, 90)} pp={pp} /></> : null}</>}
           onClick={d.tipo === 'file' ? vai(() => { apriFile(d); }) : vai(() => apriScheda({ tipo: 'doc', id: d.id }))} />)}</Gruppo>
-        <Gruppo titolo="Chat di squadra" tot={r.chat.length}>{r.chat.slice(0, N).map(m => <Voce key={m.id} ic="💬" t={nomeDi(m.creato_da, cloud.colleghi)}
+        <Gruppo titolo="Chat di squadra" tot={r.chat.length}>{r.chat.slice(0, N).map(m => <Voce key={m.id} ic={<Ic n="chat" className="solo" />} t={nomeDi(m.creato_da, cloud.colleghi)}
           sub={<>{fDate(m.creato.slice(0, 10))} · {nomePrev(m.preventivo_id) || 'Generale'} · <Hl t={brano(m.testo || '', pp, 90)} pp={pp} /></>}
           onClick={vai(() => apriChat(m.preventivo_id || null))} />)}</Gruppo>
-        <Gruppo titolo="Agenda" tot={r.scad.length}>{[...r.scad].sort((a, b) => b.giorno.localeCompare(a.giorno)).slice(0, N).map(s => <Voce key={s.id} ic="📅" t={s.titolo}
+        <Gruppo titolo="Agenda" tot={r.scad.length}>{[...r.scad].sort((a, b) => b.giorno.localeCompare(a.giorno)).slice(0, N).map(s => <Voce key={s.id} ic={<Ic n="giorno" className="solo" />} t={s.titolo}
           sub={<>{fDate(s.giorno)}{s.fatto ? ' · ✓ fatto' : ''}{nomePrev(s.preventivo_id) ? ` · ${nomePrev(s.preventivo_id)}` : ''}</>}
           onClick={vai(() => apriScheda({ tipo: 'voce', id: s.id }))} />)}</Gruppo>
-        <Gruppo titolo="Preventivi" tot={r.prev.length}>{r.prev.slice(0, N).map(e => <Voce key={e.id} ic="📄" t={e.nome}
+        <Gruppo titolo="Preventivi" tot={r.prev.length}>{r.prev.slice(0, N).map(e => <Voce key={e.id} ic={<Ic n="preventivo" className="solo" />} t={e.nome}
           sub={<>{e.prev?.num ? `N° ${e.prev.num} · ` : ''}<Hl t={e.cliente || '–'} pp={pp} />{e.rif ? <> · <Hl t={e.rif} pp={pp} /></> : null}</>}
           onClick={vai(() => apriPrev(e.id))} />)}</Gruppo>
-        <Gruppo titolo="Listino" tot={r.art.length}>{r.art.slice(0, N).map((it: any) => <Voce key={it.c} ic="🔩" t={it.c}
+        <Gruppo titolo="Listino" tot={r.art.length}>{r.art.slice(0, N).map((it: any) => <Voce key={it.c} ic={<Ic n="articolo" className="solo" />} t={it.c}
           sub={<Hl t={it.d || ''} pp={pp} />} onClick={vai(() => apriArticolo(it.c))} />)}</Gruppo>
         <div className="qsfoot">
           {n > 0 && <button className="btn s" onClick={tutti}>Vedi tutti i risultati ({n}) ↵</button>}

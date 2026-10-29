@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { commit } from '../store/state';
 import { cloud, codiceTelegram, ricaricaMe, scollegaTelegram } from '../store/remote';
+import { Ic } from './Icona';
 
 export function Telegram() {
   const [codice, setCodice] = useState(''), [err, setErr] = useState('');
@@ -13,8 +14,8 @@ export function Telegram() {
   const togli = async () => { if (!confirm('Scollegare il tuo account Telegram dalla chat dell\'agenda?')) return; const e = await scollegaTelegram(); setErr(e); commit(); };
   return (
     <div className="tgbox">
-      {collegato && !codice ? <div className="tgrow"><span>✈ Telegram collegato</span><button className="btn s" onClick={togli}>Scollega</button></div>
-        : !codice ? <div className="tgrow"><span>✈ Telegram</span><button className="btn s" onClick={nuovo}>Collega</button></div>
+      {collegato && !codice ? <div className="tgrow"><span><Ic n="telegram" />Telegram collegato</span><button className="btn s" onClick={togli}>Scollega</button></div>
+        : !codice ? <div className="tgrow"><span><Ic n="telegram" />Telegram</span><button className="btn s" onClick={nuovo}>Collega</button></div>
         : <>
           <div>Scrivi al bot su Telegram, entro 10 minuti:</div>
           <code className="tgcode">/collega {codice}</code>

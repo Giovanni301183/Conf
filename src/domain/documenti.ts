@@ -26,6 +26,7 @@ export const ETICHETTE: [string, string, string][] = [
   ['cantiere', 'Cantiere e montaggio', '#6f7d3a'], ['logistica', 'Logistica', '#4f8a8b'], ['qualita', 'Qualità e reclami', '#b8483e'],
   ['amministrazione', 'Amministrazione', '#7a6a55'], ['marketing', 'Marketing e fiere', '#c0577f'], ['personale', 'Personale', '#5b6b9a'],
   ['riunione', 'Riunione', '#2f8a6a'], ['idea', 'Idea', '#b39a2a'],
+  ['direzione', 'Direzione', '#3d4a52'], ['sicurezza', 'Sicurezza', '#c4572a'], ['assistenza', 'Assistenza e post-vendita', '#4a7f9a'],
 ];
 // Etichette dell'archivio tecnico: un documento con una di queste (o allegato a una nota che ne ha una) lo legge l'esperto.
 export const TECNICHE = ['tecnico', 'geologia', 'pullout', 'normativa'];

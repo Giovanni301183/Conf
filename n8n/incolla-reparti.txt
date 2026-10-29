@@ -1,0 +1,37 @@
+REPARTI SU TELEGRAM — modifiche a mano in n8n (flusso «Agenda - chat Telegram»), senza reimportare.
+Prima: in Supabase, SQL Editor, esegui supabase/migrations/20261030010000_reparti.sql (se non l'hai già fatto) e 20261030020000_avvisi_reparto.sql.
+Poi pubblica l'app su Vercel (il server deve avere le azioni nuove prima che n8n le chiami).
+
+1) Nodo «Pulsante → app» — campo JSON (Body), sostituisci tutto con:
+={{ JSON.stringify({ azione: $json.callback_query.data.split(':')[0], id: $json.callback_query.data.split(':')[1], scelta: $json.callback_query.data.split(':')[2] || '', telegram_id: $json.callback_query.from.id, chat: $json.callback_query.message.chat.id, msg: $json.callback_query.message.message_id }) }}
+
+2) Nodo «Andato a buon fine?» — la condizione (campo a sinistra), sostituisci con:
+={{ $('Pulsante → app').item.json.ok && !!$('Pulsante → app').item.json.testo }}
+
+3) Nodo «Assistente» — campo «Text» (Prompt), sostituisci tutto con:
+={{ ($('Telegram Trigger').item.json.message?.reply_to_message?.from?.is_bot ? '[in risposta a: ' + String($('Telegram Trigger').item.json.message.reply_to_message.text || '').slice(0, 400) + '] ' : '') + ($json.text ? '[vocale] ' + $json.text : (($('Telegram Trigger').item.json.message.text || $('Telegram Trigger').item.json.message.caption || '') + ($('Telegram Trigger').item.json.message.document ? ' [allegato: file "' + $('Telegram Trigger').item.json.message.document.file_name + '", file_id=' + $('Telegram Trigger').item.json.message.document.file_id + ']' : $('Telegram Trigger').item.json.message.photo ? ' [allegato: foto, file_id=' + $('Telegram Trigger').item.json.message.photo[$('Telegram Trigger').item.json.message.photo.length - 1].file_id + ']' : '')) || '(messaggio senza testo: chiedi di scriverlo a parole o con un vocale)') }}
+
+4) Nodo «Assistente» — Options › System Message: in fondo, dopo l'ultima regola, incolla:
+- Reparti: Direzione, Commerciale, Tecnico, R&S, Acquisti, Produzione, Qualità e sicurezza, Logistica, Cantiere, Assistenza, Amministrazione, Risorse umane. Se il messaggio dice in quale reparto va una voce o una nota ("nota per acquisti…", "promemoria per la logistica…"), passa reparto a crea_voce o crea_nota. Se non lo dice, non indovinarlo. Se lo strumento risponde con «pulsanti», sotto c'è già il messaggio con i tasti per cambiare reparto o annullare: dillo in mezza riga.
+- /nuovo (o "voglio aggiungere qualcosa" senza dire cosa): usa nuovo_menu (con il reparto se l'ha detto) e rispondi solo che il menu è in chat.
+- Un messaggio che inizia con [in risposta a: … [reparto=K tipo=T]] è la risposta al menu /nuovo: se T è nota usa crea_nota con reparto K (etichette scelte da te come al solito); altrimenti crea_voce con genere T e reparto K. Converti le date relative; se per promemoria, scadenza o appuntamento manca il giorno, chiedilo. Non chiedere altre conferme: salva e riassumi in una riga.
+- /reparto <nome> o domande come "com'è messa la produzione?": usa situazione_reparto (reparto vuoto se non dice quale). La situazione arriva già in chat dall'app con i suoi pulsanti: non riscriverla, rispondi solo a una domanda precisa se c'era (es. "ci sono urgenze in produzione?").
+- Altri comandi del menu: /nuovo = aggiungi qualcosa in un reparto con i pulsanti; /reparto <nome> = situazione di un reparto.
+
+5) Nodo «crea_voce» — campo JSON, sostituisci tutto con:
+={{ JSON.stringify({ azione: 'crea', telegram_id: $('Telegram Trigger').item.json.message.from.id, genere: $fromAI('genere', `Uno tra: urgenza, attivita (cosa da fare), promemoria, scadenza, appuntamento`, 'string'), titolo: $fromAI('titolo', `Descrizione breve, massimo 200 caratteri`, 'string'), giorno: $fromAI('giorno', `Data AAAA-MM-GG; vuoto solo per le urgenze (= oggi)`, 'string', ""), ora: $fromAI('ora', `Ora HH:MM, vuoto se non indicata`, 'string', ""), nota: $fromAI('nota', `Dettagli facoltativi`, 'string', ""), categoria: $fromAI('categoria', `Facoltativa: STRUTTURA, BULLONERIA, ELETTROMECCANICO, ELETTRONICO`, 'string', ""), preventivo_id: $fromAI('preventivo_id', `id del preventivo o commessa preso da cerca_commesse, vuoto se nessuno`, 'string', ""), assegnata_a: $fromAI('assegnata_a', `email del collega presa da colleghi, vuoto se nessuno`, 'string', ""), reparto: $fromAI('reparto', `Reparto se detto o dal menu /nuovo: direzione, commerciale, tecnico, rs, acquisti, produzione, qualita, logistica, cantiere, assistenza, amministrazione, hr; vuoto se non detto`, 'string', ""), chat: $('Telegram Trigger').item.json.message.chat.id }) }}
+
+6) Nodo «crea_nota» — campo JSON, sostituisci tutto con:
+={{ JSON.stringify(Object.fromEntries(Object.entries({ azione: 'nota', telegram_id: $('Telegram Trigger').item.json.message.from.id, titolo: $fromAI('titolo', `Titolo breve della nota`, 'string'), testo: $fromAI('testo', `Testo della nota in parole semplici; vuoto se basta il titolo`, 'string', ""), etichette: $fromAI('etichette', `Da 0 a 3 temi separati da virgola tra: acquisti, vendita, opportunita, sviluppo, tecnico, produzione, cantiere, logistica, qualita, amministrazione, marketing, personale, riunione, idea`, 'string', ""), preventivo_id: $fromAI('preventivo_id', `id della commessa da cerca_commesse; vuoto per una nota libera`, 'string', ""), reparto: $fromAI('reparto', `Reparto se detto o dal menu /nuovo: direzione, commerciale, tecnico, rs, acquisti, produzione, qualita, logistica, cantiere, assistenza, amministrazione, hr; vuoto se non detto`, 'string', ""), chat: $('Telegram Trigger').item.json.message.chat.id }).filter(([, v]) => v !== '' && v != null))) }}
+
+7) Due strumenti nuovi: duplica il nodo «chi_sono» due volte (clic destro › Duplicate), collega ognuno all'Assistente come gli altri strumenti.
+   a) Rinominalo  nuovo_menu
+      Description: Manda in chat il menu con i pulsanti per aggiungere qualcosa in un reparto (/nuovo): si sceglie il reparto, poi nota, promemoria, scadenza, urgenza, appuntamento o da fare, poi si risponde con il testo.
+      JSON: ={{ JSON.stringify({ azione: 'menu_nuovo', telegram_id: $('Telegram Trigger').item.json.message.from.id, chat: $('Telegram Trigger').item.json.message.chat.id, reparto: $fromAI('reparto', `Reparto se detto, altrimenti vuoto`, 'string', "") }) }}
+   b) Rinominalo  situazione_reparto
+      Description: Situazione di un reparto: urgenze, scadute, oggi, prossimi 7 giorni, ultime note e persone. L'app la manda in chat con i pulsanti; restituisce anche il testo.
+      JSON: ={{ JSON.stringify({ azione: 'reparto', telegram_id: $('Telegram Trigger').item.json.message.from.id, chat: $('Telegram Trigger').item.json.message.chat.id, reparto: $fromAI('reparto', `Reparto (es. produzione, acquisti); vuoto se non detto`, 'string', "") }) }}
+
+8) In @BotFather: /setcommands, scegli il bot e incolla l'elenco aggiornato di n8n/comandi-botfather.txt.
+
+Il flusso «avvisi e riepilogo» non cambia: gli avvisi per reparto partono dall'app quando arriva l'annuncio di una voce nuova.

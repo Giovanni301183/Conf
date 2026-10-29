@@ -66,8 +66,8 @@ describe('archivio: cruscotto e mappa', () => {
     if (av === 'kpi') expect(container.querySelector('.ktiles')!.textContent).toContain('Tasso di successo');
     act(() => { S.ui.av = 'elenco'; S.arch = []; commit(); });
   });
-  it('calendario in cima alla Home: una scadenza aggiunta va negli allarmi; si nasconde e si rimette', async () => {
-    act(() => { S.scad = []; S.ui.tab = 'archivio'; S.ui.av = 'elenco'; S.ui.cal = true; commit(); });
+  it('calendario in cima alla Home: una scadenza aggiunta va negli allarmi; le barre si chiudono e si riaprono', async () => {
+    act(() => { S.scad = []; S.ui.tab = 'archivio'; S.ui.av = 'elenco'; S.ui.hb = {}; commit(); });
     const { container } = render(<App />);
     expect(container.querySelectorAll('.cday').length).toBeGreaterThanOrEqual(28);
     expect(container.textContent).not.toContain('Archivio preventivi');   // l'archivio sta nella scheda Preventivi
@@ -75,17 +75,31 @@ describe('archivio: cruscotto e mappa', () => {
     fireEvent.change(screen.getByPlaceholderText(/computo/), { target: { value: 'Collaudo quadri' } });
     await act(async () => { fireEvent.click(screen.getByText('Aggiungi')); });
     expect(S.scad.map(s => s.titolo)).toEqual(['Collaudo quadri']);
+    expect(container.querySelector('.calarm')!.textContent).not.toContain('Collaudo quadri');   // all'avvio aperti solo calendario e mappa
+    fireEvent.click(container.querySelector('.calarm .hbchev')!);
     expect(container.querySelector('.calarm')!.textContent).toContain('Collaudo quadri');
-    fireEvent.click(screen.getByText('Nascondi calendario'));
+    fireEvent.click(container.querySelector('.calhead .hbchev')!);
     expect(container.querySelector('.cday')).toBeNull();
-    expect(container.querySelector('.calarm')!.textContent).toContain('Collaudo quadri');   // nascosto restano gli allarmi
-    fireEvent.click(screen.getByText('Mostra calendario'));
+    expect(container.querySelector('.calarm')!.textContent).toContain('Collaudo quadri');   // chiuso il calendario restano gli allarmi
+    fireEvent.click(container.querySelector('.card.chiusa .hbchev')!);   // la prima barra chiusa è il calendario
     expect(container.querySelector('.cday')).not.toBeNull();
+    act(() => { S.ui.hb = {}; commit(); });
+    act(() => { S.scad = []; commit(); });
+  });
+  it('il + di un reparto apre «Nuovo in…» e la voce nasce già in quel reparto', async () => {
+    act(() => { S.scad = []; S.ui.tab = 'archivio'; S.ui.hb = {}; commit(); });
+    const { container } = render(<App />);
+    fireEvent.click(container.querySelector('[aria-label="Aggiungi in Acquisti"]')!);
+    expect(screen.getByRole('dialog').textContent).toContain('Nuovo in Acquisti');
+    fireEvent.change(screen.getByPlaceholderText(/Richiamare il cliente/), { target: { value: 'Ordine acciaio' } });
+    await act(async () => { fireEvent.click(screen.getByText('Aggiungi')); });
+    expect(S.scad.map(s => [s.titolo, s.genere, s.reparti])).toEqual([['Ordine acciaio', 'promemoria', ['acquisti']]]);
+    expect(screen.queryByRole('dialog')).toBeNull();
     act(() => { S.scad = []; commit(); });
   });
   it('richiamo di un preventivo inviato: numerino sul menu e agenda nel preventivo', () => {
     act(() => {
-      S.scad = []; S.ui.cal = true; S.ui.tab = 'config'; S.ui.folds['cf-agenda'] = true;
+      S.scad = []; S.ui.hb = {}; S.ui.tab = 'config'; S.ui.folds['cf-agenda'] = true;
       S.arch = [{ id: 'r1', nome: 'Offerta Beta', cliente: 'Beta', rif: '', data: '2026-01-10', salvato: '2026-01-10T10:00:00Z', totale: 1, prezzo: 1, kwp: 1, nTracker: 1, righe: '',
         prev: { stato: 'inviato', offerta: { inviata: '2026-01-10' } } }];
       S.prev._id = 'r1'; commit();

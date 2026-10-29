@@ -10,7 +10,7 @@ import { leggibile } from '../domain/esperto';
 import { KEY_ARCH, KEY_DRAFT, KEY_SCAD, S, commit, load, setSaveHook, store, unstore } from './state';
 
 type Fase = 'locale' | 'avvio' | 'login' | 'password' | 'carico' | 'pronto' | 'negato' | 'errore';
-export interface Utente { email: string; nome: string | null; ruolo: 'admin' | 'utente'; attivo: boolean; creato?: string; invitato_da?: string | null; telegram_id?: number | null; vista?: Partial<Vista> | null }
+export interface Utente { email: string; nome: string | null; ruolo: 'admin' | 'utente'; attivo: boolean; creato?: string; invitato_da?: string | null; telegram_id?: number | null; vista?: Partial<Vista> | null; reparti?: string[] | null }
 export const cloud = {
   fase: (supabase ? 'avvio' : 'locale') as Fase,
   session: null as Session | null,
@@ -201,6 +201,11 @@ const SCAD_COLS = 'id, giorno, ora, genere, categoria, titolo, nota, preventivo_
 // I coinvolti arrivano con la migrazione 20261028010000_coinvolti.sql: finché manca, l'agenda funziona senza.
 let conCoinvolti = true;
 export const coinvoltiDisponibili = () => !supabase || conCoinvolti;
+// I reparti delle voci arrivano con la migrazione 20261030010000_reparti.sql: finché manca, le voci prendono i reparti di chi le deve fare.
+let conReparti = true;
+export const repartiVociDisponibili = () => !supabase || conReparti;
+/** Reparti di un collega (li assegna l'amministratore dalla pagina Utenti). */
+export const repartiDi = (email: string) => (email === mioEmail() ? cloud.me?.reparti : cloud.colleghi.find(u => u.email === email)?.reparti) || [];
 export const mioEmail = () => cloud.session?.user.email?.toLowerCase() ?? '';
 /** Cosa vedo nel calendario (scelta personale). Senza server resta in questo browser. */
 const KEY_VISTA = 'tracker_prev_vista_v1';
@@ -219,8 +224,9 @@ export const puoModificare = (s: Scadenza) => isAdmin() || s.creato_da === mioEm
 export const puoSpuntare = (s: Scadenza) => puoModificare(s) || perMe(s, mioEmail());
 async function loadScadenze() {
   listUtenti().then(u => { cloud.colleghi = u.filter(x => x.attivo); }, () => {});
-  const leggi = () => supabase!.from('scadenze').select(conCoinvolti ? SCAD_COLS + ', coinvolti' : SCAD_COLS).order('giorno');
+  const leggi = () => supabase!.from('scadenze').select(SCAD_COLS + (conCoinvolti ? ', coinvolti' : '') + (conReparti ? ', reparti' : '')).order('giorno');
   let { data, error } = await leggi();
+  if (error && conReparti && /reparti/.test(error.message)) { conReparti = false; ({ data, error } = await leggi()); }
   if (error && conCoinvolti && /coinvolti/.test(error.message)) { conCoinvolti = false; ({ data, error } = await leggi()); }
   if (error) { cloud.scadErr = error.message; S.scad = []; return; }
   cloud.scadErr = ''; S.scad = data as unknown as Scadenza[];
@@ -228,7 +234,8 @@ async function loadScadenze() {
 export async function salvaScadenza(s: Partial<Scadenza>): Promise<string> {
   const v = { giorno: s.giorno, ora: s.ora || null, genere: s.genere || 'attivita', categoria: s.categoria || null, titolo: (s.titolo || '').trim(), nota: s.nota?.trim() || null,
     preventivo_id: s.preventivo_id || null, assegnata_a: s.assegnata_a || null, fatto: !!s.fatto,
-    ...(coinvoltiDisponibili() ? { coinvolti: (s.coinvolti || []).filter(e => e && e !== s.assegnata_a) } : {}) };
+    ...(coinvoltiDisponibili() ? { coinvolti: (s.coinvolti || []).filter(e => e && e !== s.assegnata_a) } : {}),
+    ...(repartiVociDisponibili() && s.reparti !== undefined ? { reparti: s.reparti || [] } : {}) };
   if (!v.titolo || !v.giorno) return 'Servono titolo e data.';
   if (!coinvoltiDisponibili() && s.coinvolti?.length) return 'per coinvolgere più persone manca la migrazione 20261028010000_coinvolti.sql nel database';
   if (!supabase) {

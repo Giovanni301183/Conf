@@ -13,6 +13,7 @@ import { apriGmail } from './Email';
 import { TabellaVarianti, scaricaOfferte } from './Varianti';
 import { archVarianti } from '../store/actions';
 import { CHIEDI_AI, PANNELLO, apriPannello } from './pannelli';
+import { Ic } from './Icona';
 
 type Voce = { ruolo: 'tu' | 'ai' | 'err'; testo: string; proposte?: Proposta[] };
 const cap = (g: string) => g.charAt(0) + g.slice(1).toLowerCase();
@@ -236,7 +237,7 @@ export function Assistente() {
         <textarea rows={2} value={testo} placeholder={ascolto ? 'Ti ascolto… parla pure' : 'Scrivi qui…'} onChange={e => setTesto(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); invia(); } }} />
         <button type="button" className={'btn aimic' + (ascolto ? ' on' : '')} onClick={detta}
-          title={ascolto ? 'Ferma la dettatura' : 'Detta a voce'}>{ascolto ? '■' : '🎤'}</button>
+          title={ascolto ? 'Ferma la dettatura' : 'Detta a voce'}>{ascolto ? '■' : <Ic n="vocale" s={16} className="solo" />}</button>
         <button className="btn p" disabled={busy || !testo.trim()}>Invia</button>
       </form>
     </aside>}

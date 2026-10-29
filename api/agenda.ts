@@ -10,7 +10,10 @@
 //         riepilogo, annuncio (del sistema: riepilogo del mattino e avviso nel gruppo di una voce nuova);
 //         promemoria_email (del sistema, ogni mattina: a ogni collega le sue voci assegnate scadute o in scadenza, da mandare con Gmail);
 //         avvisi_riunioni (del sistema, ogni 10 minuti: appuntamenti che iniziano tra poco, in privato a chi li ha creati e a chi sono assegnati);
-//         posta (del sistema: email inoltrata all'indirizzo dell'agenda, letta dall'AI e proposta in chat privata a chi l'ha inoltrata: vedi _posta.ts).
+//         posta (del sistema: email inoltrata all'indirizzo dell'agenda, letta dall'AI e proposta in chat privata a chi l'ha inoltrata: vedi _posta.ts);
+//         menu_nuovo, reparto (menu «/nuovo» con i pulsanti dei reparti e situazione di un reparto, mandati in chat dall'app: vedi _reparti.ts);
+//         nv, sr, rv, rn, xv, xn, ar (pulsanti di quei messaggi). crea e nota accettano reparto; l'annuncio di una voce nuova la manda anche
+//         in privato a chi è nei suoi reparti e ha chiesto gli avvisi.
 // Regole come nell'app: crea chiunque; modifica ed elimina l'autore o un amministratore; chi ha la voce assegnata la segna fatta;
 // un'urgenza o una voce senza assegnatario la puo' prendere chiunque.
 // Gli errori "di dialogo" tornano con status 200 e { ok: false, errore }: cosi' l'assistente li legge e li spiega.
@@ -21,6 +24,8 @@ import { allegatiDaCaricare, indirizzo, leggiEmail, type Commessa, type Lettura 
 import { chiaveAvviso, daAvvisare, linkRiunione, minutiA } from '../src/domain/riunione.js';
 import { attesaPer, conCodice, numDaOggetto } from '../src/domain/posta.js';
 import { ETICHETTE, cartellaPer, nomeSicuro, nomiEtichette, pulisciEtichette } from '../src/domain/documenti.js';
+import { REPARTI, SMISTARE, nomeReparto } from '../src/domain/reparti.js';
+import { MANCA_N8N, cambia, etichetta, fatto, msgReparti, msgSalvato, msgTipi, pulsanteNuovo, repartiDiVoce, repartoDa, senzaMessaggio, tastiReparti, temiPerReparto, tg } from './_reparti.js';
 
 export const GENERI = ['attivita', 'promemoria', 'scadenza', 'appuntamento', 'urgenza'] as const;
 export const CATEGORIE = ['STRUTTURA', 'BULLONERIA', 'ELETTROMECCANICO', 'ELETTRONICO'] as const;
@@ -251,15 +256,19 @@ async function emailDaAppunto(db: Db, b: any, io: Me, chat: number, origine: str
 /* ---------- Note (Documenti) ---------- */
 const temiTesto = (kk: string[]) => (kk.length ? ` · temi: ${nomiEtichette(kk)}` : '');
 /** Nota nuova nei Documenti, scritta da Telegram: libera o legata a una commessa, con le etichette del tema. */
-async function creaNota(db: Db, b: any, io: Me) {
+async function creaNota(db: Db, b: any, io: Me, tid: number) {
   const titolo = String(b.titolo ?? '').trim().slice(0, 200), testo = String(b.testo ?? '').trim().slice(0, 20_000) || null;
   if (!titolo) return fail('Serve un titolo breve per la nota.');
-  const pid = String(b.preventivo_id ?? '').trim() || null, etichette = pulisciEtichette(b.etichette);
+  // Con un reparto i temi di altri reparti lasciano il posto al suo primo tema (in Da smistare: nessun tema di reparto).
+  const k = repartoDa(b.reparto), pid = String(b.preventivo_id ?? '').trim() || null;
+  const etichette = pulisciEtichette(k ? temiPerReparto(pulisciEtichette(b.etichette), k) : b.etichette);
   const p = pid ? (await db.from('preventivi').select('id, nome').eq('id', pid).maybeSingle()).data : null;
   if (pid && !p) return fail("Preventivo non trovato: cercalo prima con l'azione commesse e usa il suo id, oppure salva la nota libera.");
   const { data, error } = await db.from('documenti').insert({ tipo: 'nota', cartella: 'altro', titolo, testo, etichette, preventivo_id: pid, creato_da: io.email }).select('id').single();
   if (error) return fail(error.message);
-  return { ok: true, id: data.id, testo: `📝 Nota salvata${p ? ' in ' + p.nome : ' (libera)'}: ${titolo}${temiTesto(etichette)}` };
+  const tasti = k ? await tg('sendMessage', { chat_id: Number(b.chat) || tid, ...msgSalvato('n', data.id, titolo, k) }) : false;
+  return { ok: true, id: data.id, testo: `📝 Nota salvata${p ? ' in ' + p.nome : ' (libera)'}: ${titolo}${temiTesto(etichette)}${k ? ' · reparto ' + nomeReparto(k) : ''}`,
+    ...(tasti ? { pulsanti: 'Sotto la nota ci sono già i pulsanti per cambiare reparto o annullare.' } : {}) };
 }
 /** Cambia etichette (aggiunge/toglie) e, se detta, la commessa di una nota. Come nell'app: solo l'autore o un amministratore. */
 async function modificaNota(db: Db, b: any, io: Me) {
@@ -279,6 +288,72 @@ async function modificaNota(db: Db, b: any, io: Me) {
   const { error } = await db.from('documenti').update(patch).eq('id', d.id);
   if (error) return fail(error.message);
   return { ok: true, testo: `🏷 Nota aggiornata: ${d.titolo}${temiTesto(etichette) || ' · nessuna etichetta'}` };
+}
+
+/* ---------- Reparti (menu e pulsanti: _reparti.ts) ---------- */
+/** Situazione di un reparto: urgenze, scadute, oggi, prossimi 7 giorni, ultime note e chi ne fa parte; tasti per un altro reparto e per gli avvisi. */
+async function situazioneReparto(db: Db, k: string, oggi: string, io: Me) {
+  const [{ data: vv, error }, { data: uu }, { data: dd }, ctx] = await Promise.all([
+    db.from('scadenze').select(COLS + ', reparti').eq('fatto', false).or(`giorno.lte.${isoDi(giornoNum(oggi) + 7)},genere.eq.urgenza`).order('giorno').order('ora', { nullsFirst: true }),
+    db.from('utenti').select('*').eq('attivo', true),
+    db.from('documenti').select('titolo, creato, etichette').eq('tipo', 'nota').order('creato', { ascending: false }).limit(300),
+    contesto(db)]);
+  if (error) return fail(error.message);
+  const tutti = (uu || []) as any[], rep = new Map(tutti.map(u => [u.email as string, (u.reparti || []) as string[]]));
+  const qui = ((vv || []) as unknown as (Voce & { reparti: string[] })[]).filter(v => repartiDiVoce(v, e => rep.get(e) || []).includes(k));
+  const urg = qui.filter(v => v.genere === 'urgenza'), resto = qui.filter(v => v.genere !== 'urgenza');
+  const temi = REPARTI.find(r => r.k === k)?.temi || [], diReparto = REPARTI.flatMap(r => r.temi);
+  const note = (dd || []).filter((d: any) => k === SMISTARE ? !(d.etichette || []).some((t: string) => diReparto.includes(t)) : (d.etichette || []).some((t: string) => temi.includes(t))).slice(0, 5);
+  const persone = tutti.filter(u => (u.reparti || []).includes(k)).map(u => u.nome || u.email.split('@')[0]);
+  const blocco = (t: string, l: string[]) => (l.length ? [t, ...l, ''] : []);
+  const corpo = [...blocco('🔴 Urgenze aperte', urg.map(v => riga(v, ctx))), ...blocco('⚠️ Scadute', resto.filter(v => v.giorno < oggi).map(v => riga(v, ctx))),
+    ...blocco('📅 Oggi', resto.filter(v => v.giorno === oggi).map(v => riga(v, ctx, false))), ...blocco('🔜 Prossimi 7 giorni', resto.filter(v => v.giorno > oggi).map(v => riga(v, ctx))),
+    ...blocco('📝 Ultime note', note.map((d: any) => `• ${dataIt(String(d.creato).slice(0, 10))} ${d.titolo}`))];
+  const testo = [`${etichetta(k)} · ${giornoIt(oggi)}`, '', ...(corpo.length ? corpo : ['Niente di aperto in agenda e nessuna nota.', '']),
+    persone.length ? `👥 Nel reparto: ${persone.join(', ')}` : ''].join('\n').trim().slice(0, 4000);
+  const me = tutti.find(u => u.email === io.email), avvisi = !!me?.avvisi_reparto;
+  return { ok: true as const, testo, reply_markup: { inline_keyboard: [[{ text: '🔁 Altro reparto', callback_data: 'sr::' }],
+    ...(me && 'avvisi_reparto' in me ? [[{ text: avvisi ? '🔕 Spegni gli avvisi dei miei reparti' : '🔔 Avvisami delle voci nuove dei miei reparti', callback_data: 'ar::' }]] : [])] } };
+}
+const SCEGLI_SITUAZIONE = { text: '📊 Di quale reparto vuoi la situazione?', reply_markup: { inline_keyboard: tastiReparti(k => `sr:${k}:`, true) } };
+
+/** Pulsante «Cambia reparto» sotto una voce (q = 'v') o una nota (q = 'n') appena salvata: senza reparto mostra la scelta. */
+async function cambiaReparto(db: Db, b: any, io: Me, q: 'v' | 'n') {
+  if (senzaMessaggio(b)) return fail(MANCA_N8N);
+  const id = String(b.id ?? ''), k = repartoDa(b.scelta), tab = q === 'v' ? 'scadenze' : 'documenti';
+  const { data: x } = await db.from(tab).select(q === 'v' ? 'id, titolo, creato_da' : 'id, titolo, creato_da, etichette').eq('id', id).maybeSingle() as { data: any };
+  if (!x) return fail('Non la trovo più: forse è stata eliminata.');
+  if (x.creato_da !== io.email && io.ruolo !== 'admin') return fail("Può cambiarla solo chi l'ha creata o un amministratore.");
+  if (!k) { await cambia(b, { text: `🏷 ${x.titolo}\nIn quale reparto la sposto?`, reply_markup: { inline_keyboard: tastiReparti(r => `r${q}:${id}:${r}`, true) } }); return fatto; }
+  const { error } = await db.from(tab).update(q === 'v' ? { reparti: k === SMISTARE ? [] : [k] } : { etichette: pulisciEtichette(temiPerReparto(x.etichette, k)) }).eq('id', id);
+  if (error) return fail(error.message);
+  await cambia(b, msgSalvato(q, id, x.titolo, k, ' ✓'));
+  return fatto;
+}
+/** Pulsante «Annulla» sotto quello che si è appena salvato: lo elimina (solo chi l'ha creato o un amministratore). */
+async function annullaSalvato(db: Db, b: any, io: Me, q: 'v' | 'n') {
+  const id = String(b.id ?? ''), tab = q === 'v' ? 'scadenze' : 'documenti';
+  const { data: x } = await db.from(tab).select('id, titolo, creato_da').eq('id', id).maybeSingle();
+  if (!x) return fail("Non c'è più: già annullata o eliminata.");
+  if (x.creato_da !== io.email && io.ruolo !== 'admin') return fail("Può annullarla solo chi l'ha creata o un amministratore.");
+  const { error } = await db.from(tab).delete().eq('id', id);
+  if (error) return fail(error.message);
+  if (!senzaMessaggio(b)) await cambia(b, { text: `↩ Annullata: ${x.titolo}` });
+  return fatto;
+}
+/** Voce nuova: in privato a chi è nei suoi reparti e ha chiesto gli avvisi (non a chi l'ha creata). */
+async function avvisiReparto(db: Db, v: Voce) {
+  const [{ data: r }, { data: uu }] = await Promise.all([db.from('scadenze').select('reparti').eq('id', v.id).maybeSingle(), db.from('utenti').select('*').eq('attivo', true)]);
+  const tutti = (uu || []) as any[], rep = new Map(tutti.map(u => [u.email as string, (u.reparti || []) as string[]]));
+  const kk = repartiDiVoce({ ...v, reparti: r?.reparti }, e => rep.get(e) || []).filter(k => k !== SMISTARE);
+  const dest = tutti.filter(u => u.avvisi_reparto && u.telegram_id && u.email !== v.creato_da && (u.reparti || []).some((k: string) => kk.includes(k)));
+  if (!dest.length) return 0;
+  const ctx = await contesto(db);
+  const text = [`${kk.map(etichetta).join(' · ')}: novità in agenda`, riga(v, ctx), v.nota ? v.nota.slice(0, 300) : '', `Da ${chi(ctx, v.creato_da)}${v.origine === 'telegram' ? ' (Telegram)' : ''}`]
+    .filter(Boolean).join('\n');
+  let n = 0;
+  for (const u of dest) if (await tg('sendMessage', { chat_id: u.telegram_id, text })) n++;
+  return n;
 }
 
 /* ---------- Email in arrivo ---------- */
@@ -459,6 +534,7 @@ export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''):
   if (az === 'annuncio') {
     // Voce appena creata (dall'app o da Telegram): si annunciano nel gruppo le urgenze e le voci assegnate a qualcuno.
     const { data: v } = await db.from('scadenze').select(COLS).eq('id', b.id).maybeSingle();
+    if (v && !v.fatto) await avvisiReparto(db, v as Voce).catch(() => 0);   // gli avvisi per reparto non devono fermare l'annuncio
     if (!v || v.fatto || (v.genere !== 'urgenza' && !v.assegnata_a)) return { ok: true, invia: false };
     const ctx = await contesto(db), urg = v.genere === 'urgenza';
     const testo = [urg ? '🔴 URGENTE' : `🆕 ${NOME_GENERE[v.genere] || 'Voce'} per ${chi(ctx, v.assegnata_a)}`,
@@ -498,9 +574,47 @@ export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''):
   if (az === 'appunti') return cercaAppunti(db, b);
   if (az === 'email') return emailDaAppunto(db, b, io, tid, origine);
   if (az === 'pe') return sceltaPosta(db, b, io, oggi);
-  if (az === 'nota') return creaNota(db, b, io);
+  if (az === 'nota') return creaNota(db, b, io, tid);
   if (az === 'nota_modifica') return modificaNota(db, b, io);
   if (az === 'etichette') return { ok: true, etichette: ETICHETTE.map(([k, l]) => ({ chiave: k, nome: l })) };
+
+  // --- Reparti: menu «/nuovo», situazione, pulsanti ---
+  if (az === 'menu_nuovo') {
+    const k = repartoDa(b.reparto);
+    return await tg('sendMessage', { chat_id: Number(b.chat) || tid, ...(k ? msgTipi(k) : msgReparti()) })
+      ? { ok: true, inviato: true, testo: 'Menu mandato in chat: si sceglie reparto e cosa aggiungere, poi si risponde con il testo.' }
+      : fail('Telegram non ha accettato il menu (sul server manca TELEGRAM_BOT_TOKEN?).');
+  }
+  if (az === 'reparto') {
+    const k = repartoDa(b.reparto), chat = Number(b.chat) || tid;
+    if (!k) return { ok: true, inviato: await tg('sendMessage', { chat_id: chat, ...SCEGLI_SITUAZIONE }), testo: 'Mandati i pulsanti dei reparti: scegline uno.' };
+    const s = await situazioneReparto(db, k, oggi, io);
+    if ('errore' in s) return s;
+    return { ok: true, inviato: await tg('sendMessage', { chat_id: chat, text: s.testo, reply_markup: s.reply_markup }), testo: s.testo };
+  }
+  if (az === 'nv') return pulsanteNuovo(b);
+  if (az === 'sr') {
+    if (senzaMessaggio(b)) return fail(MANCA_N8N);
+    const k = repartoDa(b.id);
+    if (!k) { await cambia(b, SCEGLI_SITUAZIONE); return fatto; }
+    const s = await situazioneReparto(db, k, oggi, io);
+    if ('errore' in s) return s;
+    await cambia(b, { text: s.testo, reply_markup: s.reply_markup });
+    return fatto;
+  }
+  if (az === 'ar') {
+    const { data: u, error } = await db.from('utenti').select('avvisi_reparto, reparti').eq('email', io.email).maybeSingle();
+    if (error) return fail('In Supabase manca la migrazione 20261030020000_avvisi_reparto.sql.');
+    const on = !u?.avvisi_reparto;
+    const { error: e2 } = await db.from('utenti').update({ avvisi_reparto: on }).eq('email', io.email);
+    if (e2) return fail(e2.message);
+    if (!senzaMessaggio(b)) await tg('editMessageReplyMarkup', { chat_id: Number(b.chat), message_id: Number(b.msg), reply_markup: { inline_keyboard: [[{ text: '🔁 Altro reparto', callback_data: 'sr::' }],
+      [{ text: on ? '🔕 Spegni gli avvisi dei miei reparti' : '🔔 Avvisami delle voci nuove dei miei reparti', callback_data: 'ar::' }]] } });
+    if (on && !(u?.reparti || []).length) return fail('Avvisi accesi, ma non sei in nessun reparto: chiedi a un amministratore di assegnarteli (pagina Utenti).');
+    return fatto;
+  }
+  if (az === 'rv' || az === 'rn') return cambiaReparto(db, b, io, az === 'rv' ? 'v' : 'n');
+  if (az === 'xv' || az === 'xn') return annullaSalvato(db, b, io, az === 'xv' ? 'v' : 'n');
 
   if (az === 'colleghi') {
     const { data } = await db.from('utenti').select('email, nome').eq('attivo', true).order('nome');
@@ -539,9 +653,12 @@ export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''):
       const { data: u } = await db.from('utenti').select('email').eq('email', v!.assegnata_a).eq('attivo', true).maybeSingle();
       if (!u) return fail('Collega non trovato: usa l\'email presa dall\'azione colleghi.');
     }
-    const { data, error } = await db.from('scadenze').insert({ ...v, creato_da: io.email, origine: 'telegram' }).select(COLS).single();
+    const k = repartoDa(b.reparto);
+    const { data, error } = await db.from('scadenze').insert({ ...v, ...(k && k !== SMISTARE ? { reparti: [k] } : {}), creato_da: io.email, origine: 'telegram' }).select(COLS).single();
     if (error) return fail(error.message);
-    return { ok: true, voce: data, testo: `Aggiunto: ${riga(data as Voce, await contesto(db))}` };
+    const tasti = k ? await tg('sendMessage', { chat_id: Number(b.chat) || tid, ...msgSalvato('v', data.id, data.titolo, k) }) : false;
+    return { ok: true, voce: data, testo: `Aggiunto: ${riga(data as Voce, await contesto(db))}${k ? ' · reparto ' + nomeReparto(k) : ''}`,
+      ...(tasti ? { pulsanti: 'Sotto la voce ci sono già i pulsanti per cambiare reparto o annullare.' } : {}) };
   }
 
   // --- Azioni su una voce esistente ---

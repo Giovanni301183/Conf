@@ -11,6 +11,7 @@ export type Genere = 'attivita' | 'promemoria' | 'scadenza' | 'appuntamento' | '
 export interface Scadenza {
   id: string; giorno: string; ora: string | null; genere: Genere; categoria?: string | null; titolo: string; nota: string | null; preventivo_id: string | null;
   assegnata_a: string | null; coinvolti?: string[] | null; fatto: boolean; origine: 'app' | 'telegram'; creato_da: string; creato: string;
+  reparti?: string[] | null;   // reparti della mappa nella Home (vedi reparti.ts); vuoto = quelli di chi la deve fare
 }
 export type Tipo = 'prod' | 'prodFine' | 'mont' | 'richiamo' | 'man';
 export interface Voce { key: string; giorno: number; tipo: Tipo; titolo: string; sotto: string; prevId?: string; s?: Scadenza }

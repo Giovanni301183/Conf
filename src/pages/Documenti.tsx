@@ -10,6 +10,9 @@ import { ModuloEmail, contestoEmail } from '../components/Email';
 import { aggiornaDoc, assegnaNota, caricaFile, ricaricaDocumenti, cloud, eliminaDoc, leggendo, leggiScheda, linkAnteprime, linkDoc, mioEmail, online, puoGestireDoc, salvaNota, type PatchDoc } from '../store/remote';
 import { apriChat } from '../components/pannelli';
 import { Discuti } from '../components/Collegamento';
+import { SMISTARE, nomeReparto, repartiNota } from '../domain/reparti';
+import { Ic } from '../components/Icona';
+import { ChevBarra, barraAperta, clicBarra } from '../components/ui';
 
 const nomeDi = (email: string) => cloud.colleghi.find(u => u.email === email)?.nome || email.split('@')[0];
 const quandoDoc = (iso: string) => new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -54,7 +57,7 @@ function Allegati({ nota }: { nota: Documento }) {
   const aa = allegatiDi(S.docs, nota.id);
   if (!aa.length) return null;
   return <div className="dall">{aa.map(a => <span key={a.id} className="dallf">
-    <a href="#" onClick={e => { e.preventDefault(); apriFile(a); }} title={`${a.titolo} · ${fByte(a.dimensione)} · da ${nomeDi(a.creato_da)}`}>📎 {a.titolo}</a>
+    <a href="#" onClick={e => { e.preventDefault(); apriFile(a); }} title={`${a.titolo} · ${fByte(a.dimensione)} · da ${nomeDi(a.creato_da)}`}><Ic n="allega" />{a.titolo}</a>
     {puoGestireDoc(a) && <button type="button" className="link" title="Togli l'allegato" onClick={() => togli(a)}>✕</button>}</span>)}</div>;
 }
 
@@ -107,11 +110,11 @@ export function ModuloNota({ n, set, chiudi, dove }: { n: Nota; set: (n: Nota) =
       <label className="f wide">Testo<textarea rows={4} value={n.testo} onChange={e => set({ ...n, testo: e.target.value })} /></label>
       {n.privato !== undefined && <label className="f wide small"><span><input type="checkbox" checked={n.privato} onChange={e => set({ ...n, privato: e.target.checked })} /> Privata: la vedi solo tu, con i suoi allegati (l'esperto la usa solo nelle tue domande)</span></label>}
       <div className="f wide">Allegati (documenti, foto, PDF… massimo {LIMITE_MB} MB ciascuno)<div className="etqs">
-        {file.map((f, i) => <span key={i} className="etq on">📎 {f.name}<button type="button" className="link" onClick={() => setFile(file.filter((_, j) => j !== i))}>✕</button></span>)}
+        {file.map((f, i) => <span key={i} className="etq on"><Ic n="allega" s={12} />{f.name}<button type="button" className="link" onClick={() => setFile(file.filter((_, j) => j !== i))}>✕</button></span>)}
         <button type="button" className="etq" onClick={() => scegliFile(ff => setFile([...file, ...ff]))}>+ Allega file</button></div></div>
       {(sugE.length > 0 || sugP.length > 0) && <div className="wide etqs sug"><span className="muted small">Sembra:</span>
         {sugE.map(k => <button key={k} type="button" className="etq" style={{ '--ec': coloreEtichetta(k) } as CSSProperties} onClick={() => set({ ...n, etichette: [...n.etichette, k] })}>+ {nomeEtichetta(k)}</button>)}
-        {sugP.map(e => <button key={e.id} type="button" className="etq" onClick={() => set({ ...n, preventivo_id: e.id })}>🔗 {e.nome}{e.cliente ? ' · ' + e.cliente : ''}</button>)}</div>}
+        {sugP.map(e => <button key={e.id} type="button" className="etq" onClick={() => set({ ...n, preventivo_id: e.id })}><Ic n="collega" s={12} />{e.nome}{e.cliente ? ' · ' + e.cliente : ''}</button>)}</div>}
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
         <button className="btn p" disabled={busy || !n.titolo.trim()} onClick={salva}>{busy ? 'Salvo…' : n.id ? 'Salva modifiche' : 'Aggiungi nota'}</button>
         <button className="btn" onClick={chiudi}>Annulla</button>
@@ -171,7 +174,7 @@ function Collega({ d, chiudi }: { d: Documento; chiudi: () => void }) {
         {ETICHETTE.map(([k]) => <Etq key={k} k={k} on={et.includes(k)} onClick={() => setEt(scambia(et, k))} />)}</div></div>
       {(sugE.length > 0 || sugP.length > 0) && <div className="wide etqs sug"><span className="muted small">Sembra:</span>
         {sugE.map(k => <button key={k} type="button" className="etq" style={{ '--ec': coloreEtichetta(k) } as CSSProperties} onClick={() => setEt([...et, k])}>+ {nomeEtichetta(k)}</button>)}
-        {sugP.map(e => <button key={e.id} type="button" className="etq" onClick={() => setP(e.id)}>🔗 {e.nome}{e.cliente ? ' · ' + e.cliente : ''}</button>)}</div>}
+        {sugP.map(e => <button key={e.id} type="button" className="etq" onClick={() => setP(e.id)}><Ic n="collega" s={12} />{e.nome}{e.cliente ? ' · ' + e.cliente : ''}</button>)}</div>}
       {mio && <label className="f wide small"><span><input type="checkbox" checked={priv} onChange={e => setPriv(e.target.checked)} /> Privato: lo vedi solo tu{d.tipo === 'nota' ? ', con i suoi allegati' : ''} (l'esperto lo usa solo nelle tue domande)</span></label>}
       <p className="hint wide" style={{ margin: 0 }}>Tutto facoltativo. Un file senza preventivo, voce d'agenda né nota resta libero: lo ritrovi in Home sotto Note e, con un'etichetta tecnica, nell'Archivio tecnico.</p>
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
@@ -188,9 +191,10 @@ export function Voce({ d, thumb, onEdit, conVoce }: { d: Documento; thumb?: stri
   // Voci assegnate nate da questa nota: quella a cui è allegata, o con lo stesso titolo e la stessa commessa.
   const per = d.tipo !== 'nota' ? [] : S.scad.filter(s => persone(s).length && (s.id === d.scadenza_id || (s.titolo === d.titolo.trim() && (s.preventivo_id || null) === (d.preventivo_id || null))));
   const tec = d.tipo === 'file' && tecnico(d, S.docs), legge = leggendo.has(d.id);
-  const sugE = mio && d.tipo === 'file' && !etichetteDi(d).length ? suggerisciEtichette(d.titolo) : [];
+  // Temi proposti: per i file senza temi e, in «Da smistare» della mappa dei reparti, anche per le note.
+  const sugE = mio && (d.tipo === 'file' || S.ui.rep === SMISTARE) && !etichetteDi(d).length ? suggerisciEtichette(d.tipo === 'file' ? d.titolo : `${d.titolo} ${d.testo || ''}`) : [];
   const nota = d.nota_id ? S.docs.find(x => x.id === d.nota_id) : null;
-  const meta = [d.privato ? '🔒 privato' : '', nomeCartella(d.cartella), d.tipo === 'file' ? fByte(d.dimensione) : '', nota ? 'allegato a: ' + nota.titolo : '', 'da ' + nomeDi(d.creato_da), quandoDoc(d.creato), d.modificato ? 'modificata' : '',
+  const meta = [d.privato ? 'privato' : '', nomeCartella(d.cartella), d.tipo === 'file' ? fByte(d.dimensione) : '', nota ? 'allegato a: ' + nota.titolo : '', 'da ' + nomeDi(d.creato_da), quandoDoc(d.creato), d.modificato ? 'modificata' : '',
     voce ? 'voce d\'agenda: ' + voce.titolo : '', ...per.map(s => `assegnata a ${persone(s).map(nomeDi).join(', ')}${s.fatto ? ' ✓ fatto' : ''}`)].filter(Boolean).join(' · ');
   return (<>
     <div className="ditem">
@@ -199,7 +203,7 @@ export function Voce({ d, thumb, onEdit, conVoce }: { d: Documento; thumb?: stri
         : <span className="dico">{estensione(d.titolo) || 'FILE'}</span>}
       <div className="dt">
         {d.tipo === 'file' ? <a href="#" onClick={e => { e.preventDefault(); apriFile(d); }}><b>{d.titolo}</b></a> : <b>{d.titolo}</b>}
-        <small>{meta}</small>
+        <small>{d.privato && <Ic n="privato" s={12} />}{meta}</small>
         {etichetteDi(d).length > 0 && <div className="etqs">{etichetteDi(d).map(k => <Etq key={k} k={k} />)}</div>}
         {sugE.length > 0 && <div className="etqs sug"><span className="muted small">Sembra:</span>
           {sugE.map(k => <button key={k} type="button" className="etq" style={{ '--ec': coloreEtichetta(k) } as CSSProperties}
@@ -214,13 +218,13 @@ export function Voce({ d, thumb, onEdit, conVoce }: { d: Documento; thumb?: stri
         {tec && d.scheda && <button className="btn s" onClick={() => setScheda(!scheda)} title="Riassunto con valori e pagine scritto dall'AI">{scheda ? 'Chiudi scheda' : 'Scheda'}</button>}
         {tec && leggibile(d.mime, d.titolo) && <button className="btn s" disabled={legge} title="L'AI legge il file e scrive la scheda per l'esperto"
           onClick={async () => { const e = await leggiScheda(d.id); toast(e ? 'Scheda non scritta: ' + e : 'Scheda scritta'); }}>{legge ? 'Leggo…' : d.scheda ? 'Rileggi' : 'Leggi con AI'}</button>}
-        {mio && !col && <button className="btn s" onClick={() => setCol(true)} title="Collega a un preventivo, a una nota, cambia etichette o privato">🔗 Collega</button>}
+        {mio && !col && <button className="btn s" onClick={() => setCol(true)} title="Collega a un preventivo, a una nota, cambia etichette o privato"><Ic n="collega" />Collega</button>}
         {d.tipo === 'nota' && <button className="btn s" disabled={carico > 0} title="Allega un documento, una foto o un PDF a questa nota"
           onClick={() => scegliFile(async ff => { setCarico(ff.length); const ok = await allega(d.id, ff, d.cartella); setCarico(0); if (ok) toast(ok === 1 ? 'Allegato aggiunto' : `${ok} allegati aggiunti`); commit(); })}>
-          {carico ? `Carico… (${carico})` : '📎 Allega'}</button>}
-        {d.tipo === 'nota' && online() && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la nota a un collega: diventa una voce «Da fare» nella sua agenda">👤 Assegna</button>}
+          {carico ? `Carico… (${carico})` : <><Ic n="allega" />Allega</>}</button>}
+        {d.tipo === 'nota' && online() && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la nota a un collega: diventa una voce «Da fare» nella sua agenda"><Ic n="persona" />Assegna</button>}
         {d.tipo === 'nota' && <Discuti r={{ tipo: 'doc', id: d.id }} stanza={d.preventivo_id || null} />}
-        {d.tipo === 'nota' && !email && <button className="btn s" onClick={() => setEmail(true)} title="Scrivi un'email di aggiornamento da questo appunto">✉ Email</button>}
+        {d.tipo === 'nota' && !email && <button className="btn s" onClick={() => setEmail(true)} title="Scrivi un'email di aggiornamento da questo appunto"><Ic n="email" />Email</button>}
         {mio && <select className="dsel" value={d.cartella} onChange={e => sposta(d, e.target.value as Cartella)} title="Sposta in un'altra cartella">
           {CARTELLE.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
         {mio && (d.tipo === 'nota'
@@ -299,7 +303,7 @@ export function Documenti() {
       </nav>
       <section className="card">
         <h2 style={{ marginTop: 0, display: 'flex', alignItems: 'baseline', gap: 6 }}>{cart ? nomeCartella(cart) : 'Tutti i documenti'} <span className="muted small" style={{ flex: 1 }}>· {S.prev._nome}</span>
-          <button className="btn s" onClick={() => apriChat(id)} title="Apre la chat di squadra nella stanza di questa commessa">💬 Discussione</button></h2>
+          <button className="btn s" onClick={() => apriChat(id)} title="Apre la chat di squadra nella stanza di questa commessa"><Ic n="chat" />Discussione</button></h2>
         <DocPanel preventivo={id} cartella={cart} />
       </section>
     </div>
@@ -320,15 +324,17 @@ export function NoteHome() {
   const [temi, setTemi] = useState<string[]>([]), [cart, setCart] = useState<Cartella | ''>('');
   const no = docNonDisponibili();
   if (no) return null;
-  const tutteNote = S.docs.filter(d => d.tipo === 'nota' || libero(d)), nC = perCartella(tutteNote), inCartella = cart ? tutteNote.filter(d => d.cartella === cart) : tutteNote;
+  // Con un reparto scelto nella mappa della Home, solo le note dei suoi temi (o senza temi, in «Da smistare»).
+  const tutteNote = S.docs.filter(d => (d.tipo === 'nota' || libero(d)) && (!S.ui.rep || repartiNota(d).includes(S.ui.rep))), nC = perCartella(tutteNote), inCartella = cart ? tutteNote.filter(d => d.cartella === cart) : tutteNote;
   const filtro = !!q || temi.length > 0 || !!cart;
   const note = conEtichette(cerca(inCartella, q), temi).sort((a, b) => (b.modificato || b.creato).localeCompare(a.modificato || a.creato));
   const viste = tutte || filtro ? note : note.slice(0, 10);
-  const nomeP = (id: string | null) => (id && S.arch.find(e => e.id === id)?.nome) || '';
+  const nomeP = (id: string | null) => (id && S.arch.find(e => e.id === id)?.nome) || '', ap = barraAperta('note');
   return (
-    <section className="card">
-      <h2 style={{ marginTop: 0 }}>Note<span className="sp" />
-        {!nota && <button className="btn s p" onClick={() => setNota({ ...notaVuota(), preventivo_id: S.prev._id || '' })}>+ Nota</button>}</h2>
+    <section className={`card${ap ? '' : ' chiusa'}`}>
+      <h2 className="hbh" style={{ marginTop: 0 }} onClick={clicBarra('note')}>Note<span className="tag">{tutteNote.length}</span>{S.ui.rep && <span className="tag on">{nomeReparto(S.ui.rep)}</span>}<span className="sp" />
+        {ap && !nota && <button className="btn s p" onClick={() => setNota({ ...notaVuota(), preventivo_id: S.prev._id || '' })}>+ Nota</button>}<ChevBarra k="note" /></h2>
+      {ap && <>
       <div className="dbar"><input className="dq" value={q} placeholder="Cerca nelle note…" onChange={e => setQ(e.target.value)} />
         <select className="dsel" value={cart} onChange={e => setCart(e.target.value as Cartella | '')} title="Mostra solo le note di una cartella">
           <option value="">Tutte le cartelle</option>
@@ -342,6 +348,7 @@ export function NoteHome() {
       </Fragment>)
         : <p className="hint" style={{ margin: '8px 0 0' }}>{filtro ? 'Nessuna nota corrisponde alla ricerca.' : 'Nessuna nota. Una nota può essere libera o legata a un preventivo: si aggiungono qui, nella scheda Documenti del preventivo o sulle voci d\'agenda. Qui compaiono anche i file liberi (senza preventivo, voce o nota).'}</p>}
       {!filtro && note.length > 10 && <button className="btn s" style={{ marginTop: 8 }} onClick={() => setTutte(!tutte)}>{tutte ? 'Mostra solo le ultime 10' : `Mostra tutte (${note.length})`}</button>}
+      </>}
     </section>
   );
 }

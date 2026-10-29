@@ -7,6 +7,7 @@ import { S } from '../store/state';
 import { toast } from '../store/actions';
 import { mioEmail } from '../store/remote';
 import { perMe } from '../domain/calendario';
+import { Ic } from './Icona';
 
 const due = (n: number) => String(n).padStart(2, '0');
 const giaAvvisata = (k: string) => { try { return !!localStorage.getItem('avviso:' + k); } catch { return false; } };
@@ -22,7 +23,7 @@ function controlla() {
     if (giaAvvisata(k)) continue;
     segnaAvvisata(k);
     const link = linkRiunione(s.nota), testo = `Tra ${minutiA(s.ora!, adesso)} minuti: ${s.titolo} (ore ${s.ora!.slice(0, 5)})`;
-    toast('⏰ ' + testo + (link ? ' · entra dal calendario con «🎥 Entra»' : ''));
+    toast(testo + (link ? ' · entra dal calendario con «Entra»' : ''));
     if (notifiche() && Notification.permission === 'granted') {
       // Sul telefono senza service worker il costruttore puo' non esistere: resta il messaggio nell'app (e Telegram).
       try {
@@ -44,5 +45,5 @@ export function PermessoAvvisi() {
   const [stato, setStato] = useState(() => (notifiche() ? Notification.permission : 'denied'));
   if (stato !== 'default') return null;
   return <button className="btn s" title={`Notifica del computer ${ANTICIPO} minuti prima delle tue riunioni, con l'app aperta`}
-    onClick={async () => setStato(await Notification.requestPermission())}>🔔 Avvisi riunioni</button>;
+    onClick={async () => setStato(await Notification.requestPermission())}><Ic n="avvisi" />Avvisi riunioni</button>;
 }

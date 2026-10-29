@@ -8,7 +8,7 @@
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Inter","Segoe UI",system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Inter Variable","Inter","Segoe UI",system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
 /* ---- Struttura: barra laterale a sinistra + colonna principale ---- */
 .app{display:grid;grid-template-columns:196px minmax(0,1fr);min-height:100vh}
 .side{background:var(--side);color:#dbe1e4;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding:14px 8px;overflow-y:auto;z-index:10}
@@ -49,7 +49,7 @@ main{padding:28px;max-width:1560px;margin:0 auto;width:100%;min-width:0}
 header.home .qs{flex-basis:520px}
 .qsf{position:relative;display:flex;align-items:center}
 .qsf input{width:100%;padding-left:32px;padding-right:58px}
-.qsi{position:absolute;left:10px;font-size:13px;opacity:.55;pointer-events:none}
+.qsi{position:absolute;left:10px;opacity:.55;pointer-events:none;display:flex}
 .qsf kbd{position:absolute;right:8px;font:500 10.5px/1 inherit;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:3px 5px;background:var(--soft);pointer-events:none}
 .qsbtn,.qsx{display:none!important}
 .qsdrop{position:absolute;top:calc(100% + 6px);left:0;width:min(560px,calc(100vw - 24px));max-height:72vh;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px rgba(31,43,51,.18);z-index:30;padding:6px}
@@ -76,6 +76,8 @@ header.home .qs{flex-basis:520px}
 .card h2{font-size:15.5px;font-weight:650;margin:0 0 6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--ink)}
 .card h2 .sp{flex:1}
 .card h3{font-size:11.5px;margin:22px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+/* Icone (components/Icona.tsx): in riga con il testo che segue; .solo quando sono l'unico contenuto del pulsante */
+.ic{display:inline-block;flex:none;vertical-align:-2px;margin-right:.35em}.ic.solo{margin-right:0}
 .hint{color:var(--muted);font-size:13px;margin:0 0 16px;max-width:920px}
 code{background:var(--soft2);padding:1px 5px;border-radius:4px;font-size:12px;color:var(--ink2)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px 20px}
@@ -546,6 +548,62 @@ label.chk small{margin-left:4px}
 .cvoce.fatto b{text-decoration:line-through;color:var(--muted)}
 .calarm .tag.alate{background:#f6e3e1;color:var(--bad);font-weight:600}
 .calarm .tag.asoon{background:#fbf3e4;color:var(--warn)}
+/* Mappa dei reparti nella Home (MappaReparti): lampeggio con i tempi degli Allarmi; sotto i 640px diventa una griglia di riquadri */
+.mrep .tag.alate{background:#f6e3e1;color:var(--bad);font-weight:600}.mrep .tag.asoon{background:#fbf3e4;color:var(--warn)}.mrep .tag.anew{background:#e3eef9;color:#2f6fb0;font-weight:600}
+.mrep.chiusa h2{margin:0}
+.mleg{display:flex;gap:6px 12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:4px}
+.mleg span{display:inline-flex;align-items:center;gap:5px}
+.mleg i{width:9px;height:9px;border-radius:50%}.mleg i.late{background:var(--bad)}.mleg i.soon{background:var(--warn)}.mleg i.new{background:#2f6fb0}
+.msvg svg{display:block;width:100%;height:auto;max-height:540px}
+.mlink{stroke:var(--line);stroke-width:2}.mlink.on{stroke:var(--acc2);stroke-width:3}
+.mhub{cursor:pointer;outline:none}.mhub circle{fill:var(--side)}.mhub text{fill:#fff;font-weight:700;font-size:17px;letter-spacing:.08em}.mhub rect{fill:var(--yel)}
+.mhub:focus-visible circle{stroke:var(--acc2);stroke-width:4}
+.mnodo{cursor:pointer;outline:none}
+.mnodo .disco{fill:#fff;stroke:var(--line);stroke-width:2;transition:stroke .15s,fill .15s}
+.mnodo:hover .disco,.mnodo:focus-visible .disco{stroke:var(--acc2)}
+.mnodo.sel .disco{fill:var(--acc-soft);stroke:var(--acc);stroke-width:3}
+.mnodo.smi .disco{stroke-dasharray:5 4}
+.mnodo.dim{opacity:.35}
+.mnodo .ic{color:var(--ink2)}
+.mnodo .num{fill:var(--ink);font-weight:650;font-size:19px}.mnodo .num.zero{fill:var(--muted);font-weight:500}
+.mnodo .nome{fill:var(--ink);font-weight:650;font-size:13.5px}
+.mnodo .anello{fill:none;stroke-width:4;opacity:0}
+.mnodo.late .anello{stroke:var(--bad);animation:manello 1.2s ease-in-out infinite}
+.mnodo.soon .anello{stroke:var(--warn);animation:manello 2s ease-in-out infinite}
+@keyframes manello{0%,100%{opacity:.15}50%{opacity:.9}}
+.mpiu{cursor:pointer;opacity:0;transition:opacity .15s}.mpiu circle{fill:var(--acc);stroke:#fff;stroke-width:2}.mpiu path{stroke:#fff;stroke-width:2.2;stroke-linecap:round}
+.mnodo:hover .mpiu,.mnodo:focus-within .mpiu,.mpiu:focus{opacity:1;outline:none}.mpiu:hover circle{fill:var(--acc2)}
+@media (hover:none){.mpiu{opacity:1}}
+.mtw{position:relative;min-width:0;display:flex}.mtw .mtile{flex:1}
+.mtpiu{position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;border:0;background:var(--acc);color:#fff;font:600 17px/1 inherit;cursor:pointer;display:grid;place-items:center;padding:0}
+.mnodo .nuove circle{fill:#2f6fb0}.mnodo .nuove text{fill:#fff;font-weight:700;font-size:11px}
+/* Persone intorno ai cerchi: piene = nel reparto, vuote = coinvolte */
+.mpers circle{fill:#fff;stroke:var(--muted);stroke-width:1.5}.mpers text{fill:var(--ink2);font-weight:600;font-size:9.5px}
+.mpers.nel circle{fill:var(--acc);stroke:#fff}.mpers.nel text{fill:#fff}
+.mpers.piu circle{fill:var(--soft2);stroke:var(--line)}.mpers.piu text{fill:var(--muted)}
+.mleg i.pnel{background:var(--acc)}.mleg i.pcoi{background:#fff;border:1.5px solid var(--muted);box-sizing:border-box}
+.mtile .mnomi{color:var(--muted);font-size:11.5px;line-height:1.3}
+.mpsel{font-size:12px;padding:3px 6px}
+.mtiles{display:none;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+.mtile{border:1px solid var(--line);border-radius:10px;background:var(--soft);padding:9px 10px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:5px;min-width:0;font:inherit;color:var(--ink)}
+.mtile b{font-size:13px;font-weight:650;line-height:1.25}
+.mtile .mcnt{display:flex;gap:4px;flex-wrap:wrap}
+.mtile.sel{border-color:var(--acc2);background:var(--acc-soft)}
+.mtile.dim{opacity:.4}
+.mtile.late{--bl:var(--bad);animation:lampeggia 1.2s ease-in-out infinite}
+.mtile.soon{--bl:var(--warn);animation:lampeggia 2s ease-in-out infinite}
+@media (max-width:640px){.msvg{display:none}.mtiles{display:grid}}
+/* Smistamento (📥 Da smistare): ogni riga con i reparti da cliccare; ✦ = proposto */
+.smist h3{margin:14px 0 4px}
+.smriga{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line)}
+.smriga:first-of-type{border-top:0}
+.smt{display:flex;flex-direction:column;min-width:0}
+.smtit{border:0;background:none;padding:0;font:inherit;font-weight:600;color:var(--ink);text-align:left;cursor:pointer}
+.smtit:hover{color:var(--acc)}
+.smt small{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.smriga .etq{cursor:pointer}.smriga .etq:hover{border-color:var(--acc2);color:var(--acc)}
+.smriga .etq.on{--ec:var(--acc2)}
+@media (prefers-reduced-motion:reduce){.mnodo .anello,.mtile{animation:none!important}.mnodo.late .anello,.mnodo.soon .anello{opacity:.9}}
 /* Allarmi: le voci scadute (rosso) e in scadenza (arancio) lampeggiano piano; i giorni del calendario con voci scadute pure */
 .cvoce.blink{border-radius:8px;padding-left:8px;padding-right:8px;margin:2px 0}
 .cvoce.blink.late{--bl:var(--bad);animation:lampeggia 1.2s ease-in-out infinite}
@@ -564,11 +622,24 @@ label.chk small{margin-left:4px}
   .cform{grid-template-columns:minmax(0,1fr)}
 }
 .calsep{height:20px}
+/* Barre della Home (barraAperta in components/ui.tsx): clic sull'intestazione per aprire o chiudere; chiuse resta solo l'intestazione */
+.hbh{cursor:pointer;user-select:none}
+.card.chiusa{padding-top:13px;padding-bottom:13px}.card.chiusa>h2{margin:0!important}
+.hbchev{flex:none;width:28px;height:28px;padding:0;border:0;border-radius:50%;background:var(--soft2);color:var(--acc);display:grid;place-items:center;cursor:pointer;transition:transform .25s ease,background .2s}
+.hbchev.on{transform:rotate(90deg);background:var(--acc);color:#fff}
+.hbh:hover .hbchev:not(.on){background:var(--acc-soft)}.hbh:hover .hbchev.on{background:var(--acc2)}
 .calgrid .klegend{margin-top:12px;gap:10px 14px}
 /* Home: calendario e, sotto, allarmi/appuntamenti/note a sinistra; colonna del giorno a destra, ferma mentre si scorre */
 .calhome{grid-template-areas:"main day" "sotto day";grid-template-rows:auto 1fr}
 .calhome>.calmain{grid-area:main}
 .calhome>.calday{grid-area:day;position:sticky;top:90px;max-height:calc(100vh - 110px);overflow:auto}
+/* Home: colonna del giorno stretta (metà), più spazio a calendario e mappa; torna larga mentre si aggiunge o modifica una voce */
+@media (min-width:1001px){.calgrid.calhome{grid-template-columns:minmax(0,1fr) 190px}
+.calgrid.calhome:has(>.calday .cform){grid-template-columns:minmax(0,1fr) 360px}}
+.calhome>.calday{padding:14px 12px}
+.calhome>.calday h2{font-size:14px}
+.calhome>.calday .cvoce{gap:4px 6px}
+.calhome>.calday .cvoce .btn.s{padding:2px 7px;font-size:11.5px}
 .calsotto{grid-area:sotto;display:flex;flex-direction:column;gap:20px;min-width:0}
 .calsotto>.card{margin-bottom:0}
 @media (max-width:1000px){.calhome{grid-template-areas:"main" "day" "sotto";grid-template-rows:auto}.calhome>.calday{position:static;max-height:none}}

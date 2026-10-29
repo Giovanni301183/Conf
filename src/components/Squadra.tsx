@@ -12,6 +12,7 @@ import { Etq, OpzioniPreventivi } from '../pages/Documenti';
 import { APRI_CHAT, PANNELLO, apriChat, apriPannello, type ApriChat } from './pannelli';
 import { RifChip, ScegliRif } from './Collegamento';
 import { toast } from '../store/actions';
+import { Ic } from './Icona';
 
 // Avvisi dei messaggi nuovi (scelta di questo browser): notifica del computer se l'app è in un'altra finestra, altrimenti il messaggio in basso.
 const KEY_AVVISI = 'tracker_prev_squadra_avvisi_v1';
@@ -97,7 +98,7 @@ function CardNota({ p, onFatto }: { p: PropostaNota & { ids: string[] }; onFatto
   };
   return (
     <div className="aicard sqcard">
-      <b>📝 Nota da {p.ids.length} messaggi{prev ? ' · ' + (S.arch.find(a => a.id === prev)?.nome || '') : ' · libera'}</b>
+      <b><Ic n="nota" />Nota da {p.ids.length} messaggi{prev ? ' · ' + (S.arch.find(a => a.id === prev)?.nome || '') : ' · libera'}</b>
       <input className="aiin" value={titolo} placeholder="Titolo" onChange={e => setTitolo(e.target.value)} />
       <textarea className="aiin" rows={10} value={testo} onChange={e => setTesto(e.target.value)} />
       <select className="aiin" value={prev} onChange={e => setPrev(e.target.value)} title="Commessa o preventivo della nota">
@@ -189,7 +190,7 @@ export function Squadra() {
           const n = new Notification(titolo, { body: cosa.slice(0, 200), icon: '/logo-terranova.png', tag: 'chat-' + m.id });
           n.onclick = () => { window.focus(); apriChat(m.preventivo_id || null); n.close(); };
         } catch { /* niente notifica di sistema */ }
-      } else if (!document.hidden) toast(`💬 ${titolo}: ${cosa.slice(0, 90)}`);
+      } else if (!document.hidden) toast(`Chat · ${titolo}: ${cosa.slice(0, 90)}`);
     }
   }, [ultimo, cloud.fase]);
   useEffect(() => { fondo.current?.scrollIntoView({ block: 'end' }); }, [aperto, ultimo, prop, pensa, stanza, aiPensa]);
@@ -291,17 +292,17 @@ export function Squadra() {
 
   return <>
     {!aperto && <button className="aifab sqfab noprint" onClick={apri} title={perMe ? `Ti hanno chiamato con @ in ${perMe} messaggi` : 'Chat di squadra: scrivi ai colleghi'}>
-      💬 Squadra{nuovi > 0 && <em className={`sqbadge${perMe ? ' me' : ''}`}>{perMe ? '@' : ''}{nuovi}</em>}</button>}
+      <Ic n="chat" />Squadra{nuovi > 0 && <em className={`sqbadge${perMe ? ' me' : ''}`}>{perMe ? '@' : ''}{nuovi}</em>}</button>}
     {aperto && <aside className="aipanel sqpanel noprint">
-      <div className="aihead"><b>💬</b>
+      <div className="aihead"><b><Ic n="chat" s={16} className="solo" /></b>
         <select className="sqstanza" value={stanza || ''} onChange={e => cambiaStanza(e.target.value || null)} title="Stanza: Generale o una commessa">
           <option value="">Generale{nuoviIn(null) ? ` (${nuoviIn(null)})` : ''}</option>
           {stanze.length > 0 && <optgroup label="Commesse">{stanze.map(id => <option key={id} value={id}>{nomeStanza(id)}{nuoviIn(id) ? ` (${nuoviIn(id)})` : ''}</option>)}</optgroup>}
         </select>
         <span className="muted small" title={cloud.presenti.map(p => p.nome || p.email).join(', ')}>{cloud.presenti.length > 1 ? `${cloud.presenti.length} collegati` : ''}</span>
         <span style={{ flex: 1 }} />
-        {mm.length > 0 && da === null && !prop && <button className="btn s" onClick={() => { setEsito(''); setDa(inizioProposto(mm, oggiIso())); }} title="Fai scrivere all'AI una nota da una parte della conversazione">📝 Crea nota</button>}
-        <button className="btn s" onClick={() => setMenuAvvisi(!menuAvvisi)} title={`Avvisi: ${AVVISI.find(a => a[0] === avvisi)![1].toLowerCase()}`}>{avvisi === 'no' ? '🔕' : '🔔'}</button>
+        {mm.length > 0 && da === null && !prop && <button className="btn s" onClick={() => { setEsito(''); setDa(inizioProposto(mm, oggiIso())); }} title="Fai scrivere all'AI una nota da una parte della conversazione"><Ic n="nota" />Crea nota</button>}
+        <button className="btn s" onClick={() => setMenuAvvisi(!menuAvvisi)} title={`Avvisi: ${AVVISI.find(a => a[0] === avvisi)![1].toLowerCase()}`}><Ic n={avvisi === 'no' ? 'muto' : 'avvisi'} className="solo" /></button>
         <button className="btn x" onClick={() => setAperto(false)} title="Chiudi">✕</button></div>
       {menuAvvisi && <div className="sqavv">
         <b className="small">Avvisami con la notifica del computer</b>
@@ -310,16 +311,16 @@ export function Squadra() {
         <div className="muted small">Arrivano con l'app aperta, anche se stai lavorando in un'altra finestra. La scelta vale per questo computer.</div>
       </div>}
       {avvisi !== 'no' && permesso === 'default' && <div className="sqavv riga">
-        <span className="small" style={{ flex: 1 }}>🔔 Vuoi la notifica del computer quando arriva un messaggio?</span>
+        <span className="small" style={{ flex: 1 }}><Ic n="avvisi" />Vuoi la notifica del computer quando arriva un messaggio?</span>
         <button className="btn p s" onClick={async () => setPermesso(await Notification.requestPermission())}>Sì</button>
         <button className="btn s" onClick={() => { scegliAvvisi('no'); }}>No</button>
       </div>}
       <div className="aibody">
-        {squadra.err ? <div className="sqerr">{squadra.err}</div> : !mm.length && <div className="muted aihint">{stanza ? <>Stanza della commessa <b>{nomeStanza(stanza)}</b>: qui si parla solo di lei. Foto e file vanno anche nei suoi Documenti.</> : 'Qui scrivete tra colleghi: i messaggi arrivano subito a tutti, anche con foto, file (📎) e vocali (🎤).'}
+        {squadra.err ? <div className="sqerr">{squadra.err}</div> : !mm.length && <div className="muted aihint">{stanza ? <>Stanza della commessa <b>{nomeStanza(stanza)}</b>: qui si parla solo di lei. Foto e file vanno anche nei suoi Documenti.</> : <>Qui scrivete tra colleghi: i messaggi arrivano subito a tutti, anche con foto, file (<Ic n="allega" className="solo" />) e vocali (<Ic n="vocale" className="solo" />).</>}
           <ul><li><b>@nome</b> per chiamare un collega, <b>@assistente</b> per una domanda tecnica all'AI: risponde in chat.</li>
-            <li><b>↩</b> su un messaggio per rispondere citandolo; <b>🔗</b> per spostarlo nella stanza di una commessa.</li>
-            <li><b>📌</b> per legare il messaggio a una nota o a una voce d'agenda (anche un allarme già fatto): si apre con un clic.</li>
-            <li><b>📝 Crea nota</b>: l'AI scrive la nota con decisioni e cose da fare, che puoi mettere in agenda.</li></ul></div>}
+            <li><b>↩</b> su un messaggio per rispondere citandolo; <b><Ic n="collega" className="solo" /></b> per spostarlo nella stanza di una commessa.</li>
+            <li><b><Ic n="lega" className="solo" /></b> per legare il messaggio a una nota o a una voce d'agenda (anche un allarme già fatto): si apre con un clic.</li>
+            <li><b><Ic n="nota" />Crea nota</b>: l'AI scrive la nota con decisioni e cose da fare, che puoi mettere in agenda.</li></ul></div>}
         {mm.map((m, i) => {
           const mio = m.creato_da === me, ai = m.creato_da === ASSISTENTE, giorno = giornoChat(m.creato), nuovoGiorno = i === 0 || giornoChat(mm[i - 1].creato) !== giorno;
           const stesso = !nuovoGiorno && mm[i - 1].creato_da === m.creato_da && !m.risposta_a, d = m.documento_id ? fileDi(m.documento_id) : undefined, nota = fineNota(i);
@@ -330,18 +331,18 @@ export function Squadra() {
               title={da !== null ? 'La nota parte da qui' : undefined}>
               {!stesso && !mio && <small className="sqchi">{nomeDi(m.creato_da, cloud.colleghi)}</small>}
               <div className="sqtxt">
-                {m.risposta_a && <div className="sqcit">{q ? <><b>{nomeDi(q.creato_da, cloud.colleghi)}</b> {(q.testo || (q.documento_id ? '📎 ' + (fileDi(q.documento_id)?.titolo || 'file') : '')).slice(0, 140)}</> : <i>messaggio eliminato</i>}</div>}
+                {m.risposta_a && <div className="sqcit">{q ? <><b>{nomeDi(q.creato_da, cloud.colleghi)}</b> {q.testo ? q.testo.slice(0, 140) : q.documento_id ? <><Ic n="allega" />{(fileDi(q.documento_id)?.titolo || 'file').slice(0, 140)}</> : ''}</> : <i>messaggio eliminato</i>}</div>}
                 {m.testo && <span><ConTag t={m.testo} mie={mieTag} /></span>}
                 {rifDi(m) && <RifChip r={rifDi(m)!} onTogli={mio ? () => collega(m, null) : undefined} />}
                 {d && immagine(d) && link[d.percorso!] && <img className="sqimg" src={link[d.percorso!]} alt={d.titolo} onClick={e => { e.stopPropagation(); apriFile(d.id); }} />}
-                {d && audio(d) ? (link[d.percorso!] ? <audio className="sqaudio" controls preload="metadata" src={link[d.percorso!]} onClick={e => e.stopPropagation()} /> : <span className="muted small">🎤 vocale…</span>)
+                {d && audio(d) ? (link[d.percorso!] ? <audio className="sqaudio" controls preload="metadata" src={link[d.percorso!]} onClick={e => e.stopPropagation()} /> : <span className="muted small"><Ic n="vocale" />vocale…</span>)
                 : m.documento_id && <button type="button" className="sqfile" onClick={e => { e.stopPropagation(); apriFile(m.documento_id!); }} disabled={!d}
-                  title={d ? 'Apri il file' : 'File non più disponibile'}>📎 {d?.titolo || 'file eliminato'}</button>}
+                  title={d ? 'Apri il file' : 'File non più disponibile'}><Ic n="allega" />{d?.titolo || 'file eliminato'}</button>}
                 <span className="sqora">
                   {da === null && <>
                     <button type="button" className="sqact" onClick={() => { setRisposta(m); casella.current?.focus(); }} title="Rispondi citando questo messaggio">↩</button>
-                    <button type="button" className="sqact" onClick={() => setScegli(scegli === m.id ? null : m.id)} title="Lega a una nota o a una voce d'agenda">📌</button>
-                    <button type="button" className="sqact" onClick={() => setSposta(sposta === m.id ? null : m.id)} title={stanza ? 'Sposta in un\'altra stanza' : 'Sposta nella stanza di una commessa'}>🔗</button>
+                    <button type="button" className="sqact" onClick={() => setScegli(scegli === m.id ? null : m.id)} title="Lega a una nota o a una voce d'agenda"><Ic n="lega" className="solo" /></button>
+                    <button type="button" className="sqact" onClick={() => setSposta(sposta === m.id ? null : m.id)} title={stanza ? 'Sposta in un\'altra stanza' : 'Sposta nella stanza di una commessa'}><Ic n="collega" className="solo" /></button>
                     {(mio || isAdmin()) && <button type="button" className="sqact del" onClick={() => elimina(m)} title="Elimina il messaggio">✕</button>}
                   </>}
                   {ora(m.creato)}
@@ -354,7 +355,7 @@ export function Squadra() {
                 {scegli === m.id && <div onClick={e => e.stopPropagation()}><ScegliRif stanza={stanza} onScegli={r => collega(m, r)} chiudi={() => setScegli(null)} /></div>}
               </div>
             </div>
-            {nota && <div className="sqnota">📝 Diventata nota: «{nota.titolo}»</div>}
+            {nota && <div className="sqnota"><Ic n="nota" />Diventata nota: «{nota.titolo}»</div>}
           </div>;
         })}
         {aiPensa && <div className="sqmsg ai"><small className="sqchi">✦ Assistente</small><div className="sqtxt muted">Sto scrivendo…</div></div>}
@@ -375,22 +376,22 @@ export function Squadra() {
         <button className="btn p" onClick={() => vocale.ferma()}>■ Invia</button>
         <button className="btn" onClick={() => vocale.ferma(true)} title="Butta via la registrazione">✕</button>
       </div> : <div className="sqbasso">
-        {risposta && <div className="sqrisp">↩ <b>{nomeDi(risposta.creato_da, cloud.colleghi)}</b> <span>{(risposta.testo || '📎 file').slice(0, 90)}</span>
+        {risposta && <div className="sqrisp">↩ <b>{nomeDi(risposta.creato_da, cloud.colleghi)}</b> <span>{risposta.testo ? risposta.testo.slice(0, 90) : <><Ic n="allega" />file</>}</span>
           <button type="button" className="sqact" onClick={() => setRisposta(null)} title="Non rispondere a questo messaggio">✕</button></div>}
-        {rif && <div className="sqrisp">📌 Legato a <RifChip r={rif} onTogli={() => setRif(null)} /></div>}
+        {rif && <div className="sqrisp"><Ic n="lega" />Legato a <RifChip r={rif} onTogli={() => setRif(null)} /></div>}
         {scegli === '' && <ScegliRif stanza={stanza} onScegli={r => { setRif(r); setScegli(null); casella.current?.focus(); }} chiudi={() => setScegli(null)} />}
         {suggeriti.length > 0 && <div className="sqsug">{suggeriti.map(p => <button key={p.tag} type="button" onClick={() => metti(p.tag)}><b>@{p.tag}</b> <span className="muted">{p.nome}</span></button>)}</div>}
         <form className="aiform" onSubmit={invia}>
-          <button type="button" className="btn" disabled={busy} onClick={() => file.current?.click()} title="Allega foto o file (vanno anche nei Documenti)">📎</button>
+          <button type="button" className="btn" disabled={busy} onClick={() => file.current?.click()} title="Allega foto o file (vanno anche nei Documenti)"><Ic n="allega" s={16} className="solo" /></button>
           <input ref={file} type="file" multiple className="hide" onChange={e => allega(e.target.files)} />
-          <button type="button" className={`btn${rif || scegli === '' ? ' on' : ''}`} disabled={busy || !!squadra.err} onClick={() => setScegli(scegli === '' ? null : '')} title="Lega il messaggio a una nota o a una voce d'agenda">📌</button>
+          <button type="button" className={`btn${rif || scegli === '' ? ' on' : ''}`} disabled={busy || !!squadra.err} onClick={() => setScegli(scegli === '' ? null : '')} title="Lega il messaggio a una nota o a una voce d'agenda"><Ic n="lega" s={16} className="solo" /></button>
           <textarea ref={casella} rows={2} value={testo} placeholder={stanza ? `Scrivi in ${nomeStanza(stanza)}… (@ per chiamare qualcuno)` : 'Scrivi ai colleghi… (@ per chiamare qualcuno)'} disabled={!!squadra.err} onChange={e => setTesto(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Tab' && suggeriti.length) { e.preventDefault(); metti(suggeriti[0].tag); }
               else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (suggeriti.length && inCorso) metti(suggeriti[0].tag); else invia(); }
             }} />
           {testo.trim() ? <button className="btn p" disabled={busy}>Invia</button>
-            : <button type="button" className="btn p" disabled={busy || !!squadra.err} onClick={vocale.avvia} title="Registra un vocale">🎤</button>}
+            : <button type="button" className="btn p" disabled={busy || !!squadra.err} onClick={vocale.avvia} title="Registra un vocale"><Ic n="vocale" s={16} className="solo" /></button>}
         </form>
       </div>}
     </aside>}

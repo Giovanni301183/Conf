@@ -12,6 +12,7 @@ import { SETTORI, infoSettore, settoreDi } from '../domain/settori';
 import { KEY_DRAFT, S, commit, load } from '../store/state';
 import { cloud, isAdmin, uploadLocali } from '../store/remote';
 import { archDel, archDl, archDup, archExp, archOpen, archRename, archSave, draftDel, draftOpen, isDirty, newPreventivo, pickFile, prevName, righeTxt } from '../store/actions';
+import { Ic } from '../components/Icona';
 
 const fd = (iso: string) => { const d = new Date(iso); return isNaN(+d) ? '–' : d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }); };
 // Quanti documenti e note ha un preventivo (compresi quelli delle sue voci d'agenda).
@@ -69,7 +70,7 @@ export function Preventivi() {
               return (
                 <Fragment key={e.id}>
                 <tr className={cur ? 'cur' : ''}>
-                  <td><b>{e.nome}</b>{nDoc(e.id) ? <span className="muted small" title="Documenti e note"> · 📎 {nDoc(e.id)}</span> : null}{cur && <> <span className="tag on">aperto{isDirty() ? ' · modificato' : ''}</span></>}<div className="muted small">{!S.ui.aset ? <>{infoSettore(settoreDi(e.prev)).nome} · </> : null}{e.prev?.num ? <>N° {e.prev.num} · </> : null}{e.cliente || '–'}{e.prev?.variante?.num ? <> · variante di N° {e.prev.variante.num}</> : null}</div></td>
+                  <td><b>{e.nome}</b>{nDoc(e.id) ? <span className="muted small" title="Documenti e note"> · <Ic n="allega" s={12} />{nDoc(e.id)}</span> : null}{cur && <> <span className="tag on">aperto{isDirty() ? ' · modificato' : ''}</span></>}<div className="muted small">{!S.ui.aset ? <>{infoSettore(settoreDi(e.prev)).nome} · </> : null}{e.prev?.num ? <>N° {e.prev.num} · </> : null}{e.cliente || '–'}{e.prev?.variante?.num ? <> · variante di N° {e.prev.variante.num}</> : null}</div></td>
                   <td>{e.rif || '–'}<div className="muted small">{fDate(e.data)}</div></td>
                   <td><StatoSel id={e.id} k={eStato(e)} /></td><td className="small">{e.righe}</td><td className="n">{fN(e.kwp, 2)}</td><td className="n">{eur(e.totale)}</td><td className="n"><b>{e.prezzo != null ? eur(e.prezzo) : '–'}</b>{e.totale > 0 && e.prezzo != null && e.prezzo - e.totale < 0.5 ? <div className="small" style={{ color: 'var(--warn)' }}>margine 0 %</div> : null}</td>
                   <td className="small muted">{fd(e.salvato)}{e.autore ? <div>{e.autore.split('@')[0]}</div> : null}</td>

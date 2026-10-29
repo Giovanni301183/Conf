@@ -12,6 +12,7 @@ import { R, S, commit, save } from '../store/state';
 import { archPatch, archSave, isDirty, toast, vaiA } from '../store/actions';
 import { online, pdfOfferta, propostaSito } from '../store/remote';
 import { StatoTag } from './Cruscotto';
+import { Ic } from '../components/Icona';
 
 // Categoria di esposizione, corrosivita' e altitudine proposte dalla localita' di Configura, come "Proponi dalla località" su Telegram.
 function ProponiSito() {
@@ -30,7 +31,7 @@ function ProponiSito() {
     setBusy(false);
   };
   return <div style={{ marginBottom: 12 }}>
-    <button className="btn s" disabled={busy} onClick={proponi}>{busy ? 'Cerco…' : '📍 Proponi dalla località'}</button>
+    <button className="btn s" disabled={busy} onClick={proponi}>{busy ? 'Cerco…' : <><Ic n="luogo" />Proponi dalla località</>}</button>
     <span className="muted small"> Compila categoria di esposizione, corrosività e altitudine; il vento lo inserisci tu.</span>
     {motivo ? <p className="hint" style={{ margin: '6px 0 0' }}>{motivo}</p> : null}
   </div>;

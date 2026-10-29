@@ -1,21 +1,25 @@
 // Calendario e agenda in cima alla Home: allarmi, mese (o elenco dei prossimi giorni) con le date delle commesse e le voci
 // inserite a mano, dettaglio del giorno scelto. Si nasconde e si rimette con un pulsante (scelta ricordata in questo browser);
 // nascosto restano gli allarmi in breve.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ATTESA, CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, fatte, inAttesa, mia, oraBreve, perGiorno, persone, voci, vociScadenze, type Genere, type Scadenza, type Voce } from '../domain/calendario';
-import { Fold } from '../components/ui';
+import { ChevBarra, Fold, barraAperta, clicBarra } from '../components/ui';
 import { StatoSel } from './Cruscotto';
 import { eStato } from '../domain/kpi';
 import { DAY, dDate, dFmt, dToday, isWork, isoDay, monday } from '../domain/plan';
 import { S, commit } from '../store/state';
 import { archOpen, toast } from '../store/actions';
-import { DocPanel, NoteHome, docNonDisponibili } from './Documenti';
+import { DocPanel, ModuloNota, NoteHome, docNonDisponibili, notaVuota, type Nota } from './Documenti';
 import { ModuloEmail, contestoEmail } from '../components/Email';
 import { PermessoAvvisi } from '../components/AvvisiRiunioni';
 import { linkRiunione } from '../domain/riunione';
 import { Discuti } from '../components/Collegamento';
-import { cloud, coinvoltiDisponibili, eliminaScadenza, miaVista, mioEmail, online, puoModificare, puoSpuntare, riassumiRisposta, salvaNota, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
+import { MappaReparti } from '../components/MappaReparti';
+import { Smistamento } from '../components/Smistamento';
+import { REPARTI, SMISTARE, nomeReparto, repartiVoce } from '../domain/reparti';
+import { cloud, coinvoltiDisponibili, eliminaScadenza, repartiDi, repartiVociDisponibili, miaVista, mioEmail, online, puoModificare, puoSpuntare, riassumiRisposta, salvaNota, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
 import { VISTA_TUTTO, filtraVista, normVista, vedeTutto, type Quanto, type Vista } from '../domain/vista';
+import { Ic, IcReparto } from '../components/Icona';
 
 const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 const meseNome = (y: number, m: number) => new Date(Date.UTC(y, m, 1)).toLocaleDateString('it-IT', { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -28,7 +32,6 @@ const quando = (g: number, oggi: number, man: boolean) => {
 };
 const nomeDi = (email: string) => cloud.colleghi.find(u => u.email === email)?.nome || email.split('@')[0];
 const apri = (id: string) => { archOpen(id); commit(); };
-const mostra = (v: boolean) => { S.ui.cal = v; commit(); };
 const segna = async (s: Scadenza) => {
   const e = await spuntaScadenza(s);
   toast(e ? 'Voce non aggiornata: ' + e : s.fatto ? 'Rimessa in agenda' : 'Fatta: la ritrovi in Archivio attività'); commit();
@@ -82,7 +85,9 @@ function RispostaArrivata({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
 // Voci visibili: prima la scelta personale «Cosa vedo», poi con "Le mie" solo quelle create da me o assegnate a me.
 // Le fatte stanno nell'Archivio attività.
 const soloMie = (vv: Voce[]) => { const me = mioEmail(), x = filtraVista(vv, miaVista(), me); return S.ui.calMie && me ? x.filter(v => mia(v, me)) : x; };
-const vociVisibili = () => soloMie(voci(S.arch, S.scad));
+export const vociVisibili = () => soloMie(voci(S.arch, S.scad));
+/** Voci della Home: con un reparto scelto nella mappa, solo le sue (il numerino del menu resta su tutte). */
+const vociHome = () => { const vv = vociVisibili(); return S.ui.rep ? vv.filter(v => repartiVoce(v, repartiDi).includes(S.ui.rep)) : vv; };
 /** Voci scadute e non fatte, per il numerino sulla voce Home del menu. */
 export const nScadute = () => { const a = allarmi(vociVisibili(), dToday()); return a.urgenze.length + a.scadute.length; };
 
@@ -141,13 +146,13 @@ function Riga({ v, oggi, onEdit, data = true, allarme = '', qui = false, aperta 
         {v.tipo === 'richiamo' ? <span className="muted small">Offerta inviata da {RICHIAMO}+ giorni senza risposta: quando il cliente risponde, cambia lo stato.</span> : null}
       </div>
       {v.tipo === 'richiamo' && v.prevId && <StatoSel id={v.prevId} k="inviato" />}
-      {link && <a className="btn s p" href={link} target="_blank" rel="noopener noreferrer" title={link}>🎥 Entra</a>}
+      {link && <a className="btn s p" href={link} target="_blank" rel="noopener noreferrer" title={link}><Ic n="video" />Entra</a>}
       {v.prevId && <button className="btn s" onClick={() => apri(v.prevId!)} title={'Apre il preventivo nel configuratore: ' + (S.arch.find(e => e.id === v.prevId)?.nome || '')}>Apri preventivo</button>}
       {s && <Discuti r={{ tipo: 'voce', id: s.id }} stanza={s.preventivo_id || null} />}
       {attesa && spunta && !risp && <button className="btn s p" onClick={() => setRisp(true)} title="Segna la voce come fatta, con una nota su cosa hanno risposto (anche incollando l'email)">Risposta arrivata</button>}
-      {s && online() && !email && <button className="btn s" onClick={() => setEmail(attesa ? 'sollecito' : 'email')} title={attesa ? 'Scrivi un sollecito cortese' : "Scrivi un'email di aggiornamento da questa voce"}>{attesa ? '✉ Sollecita' : '✉ Email'}</button>}
-      {s && <button className={`btn s${vedi ? ' on' : ''}`} onClick={() => setVedi(!vedi)} title="Vedi la voce per intero, con le note e i file allegati">👁 Vedi{nAll ? ' · 📎 ' + nAll : ''}</button>}
-      {mio && !s.fatto && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la voce a un collega">👤 {s.assegnata_a ? 'Riassegna' : 'Assegna'}</button>}
+      {s && online() && !email && <button className="btn s" onClick={() => setEmail(attesa ? 'sollecito' : 'email')} title={attesa ? 'Scrivi un sollecito cortese' : "Scrivi un'email di aggiornamento da questa voce"}><Ic n="email" />{attesa ? 'Sollecita' : 'Email'}</button>}
+      {s && <button className={`btn s${vedi ? ' on' : ''}`} onClick={() => setVedi(!vedi)} title="Vedi la voce per intero, con le note e i file allegati"><Ic n="vedi" />Vedi{nAll ? <> · <Ic n="allega" />{nAll}</> : ''}</button>}
+      {mio && !s.fatto && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la voce a un collega"><Ic n="persona" />{s.assegnata_a ? 'Riassegna' : 'Assegna'}</button>}
       {mio && (qui || onEdit) && !mod && <><button className="btn s" onClick={() => qui ? setMod(bozzaDa(s)) : onEdit!(s)}>Modifica</button><button className="btn x" onClick={() => togli(s)} title="Elimina">✕</button></>}
     </div>
     {mod && <div className="callegati"><Modulo b={mod} set={setMod} chiudi={() => setMod(null)} /></div>}
@@ -187,30 +192,32 @@ function Scheda({ s }: { s: Scadenza }) {
 }
 
 /** Riquadro degli allarmi: voci superate, in arrivo nei prossimi giorni, commesse senza data di avvio. */
-export function Allarmi({ compatto = false, onEdit }: { compatto?: boolean; onEdit?: (s: Scadenza) => void }) {
-  const oggi = dToday(), { urgenze, scadute, prossime } = allarmi(vociVisibili(), oggi), np = daPianificare(S.arch);
-  const tutte = [...urgenze, ...scadute, ...prossime], vis = compatto ? tutte.slice(0, 4) : tutte;
+export function Allarmi({ onEdit }: { onEdit?: (s: Scadenza) => void }) {
+  const oggi = dToday(), { urgenze, scadute, prossime } = allarmi(vociHome(), oggi), np = daPianificare(S.arch);
+  const tutte = [...urgenze, ...scadute, ...prossime], ap = barraAperta('allarmi');
   return (
-    <div className="card calarm">
-      <h2>Allarmi
-        {urgenze.length > 0 && <span className="tag alate">🔴 {urgenze.length} urgenz{urgenze.length === 1 ? 'a' : 'e'}</span>}
+    <div className={`card calarm${ap ? '' : ' chiusa'}`}>
+      <h2 className="hbh" onClick={clicBarra('allarmi')}>Allarmi
+        {urgenze.length > 0 && <span className="tag alate"><Ic n="attenzione" s={12} />{urgenze.length} urgenz{urgenze.length === 1 ? 'a' : 'e'}</span>}
         {scadute.length > 0 && <span className="tag alate">{scadute.length} scadut{scadute.length === 1 ? 'a' : 'e'}</span>}
         <span className="tag asoon">{prossime.length} nei prossimi {PREAVVISO} giorni</span>
         {S.ui.calMie && <span className="tag">solo le mie</span>}
+        {S.ui.rep && <span className="tag on">{nomeReparto(S.ui.rep)}</span>}
         <span className="sp" />
-        {compatto && <button className="btn s" onClick={() => mostra(true)}>Mostra calendario</button>}
+        <ChevBarra k="allarmi" />
       </h2>
-      {tutte.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} qui allarme={prossime.includes(v) ? 'soon' : 'late'} />) : <p className="hint" style={{ margin: 0 }}>Niente di scaduto o in arrivo.</p>}
-      {vis.length < tutte.length && <p className="hint" style={{ margin: '6px 0 0' }}>… e altre {tutte.length - vis.length} nel calendario.</p>}
-      {!compatto && np.length > 0 && <p className="hint" style={{ margin: '10px 0 0' }}>
+      {ap && <>
+      {tutte.length ? tutte.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} qui allarme={prossime.includes(v) ? 'soon' : 'late'} />) : <p className="hint" style={{ margin: 0 }}>Niente di scaduto o in arrivo.</p>}
+      {np.length > 0 && <p className="hint" style={{ margin: '10px 0 0' }}>
         Commesse vinte senza data di avvio della produzione (non compaiono nel calendario): {np.map((e, i) => <span key={e.id}>{i ? ', ' : ''}<a href="#" onClick={ev => { ev.preventDefault(); apri(e.id); }}>{e.nome}</a></span>)}.
         Impostala nel Gantt della scheda Distinta lavorazione.</p>}
+      </>}
     </div>
   );
 }
 
-type Bozza = { id?: string; genere: Genere; categoria: string; giorno: string; ora: string; titolo: string; nota: string; preventivo_id: string; assegnata_a: string; coinvolti: string[] };
-const bozzaDa = (s: Scadenza): Bozza => ({ id: s.id, genere: s.genere || 'attivita', categoria: s.categoria || '', giorno: s.giorno, ora: oraBreve(s), titolo: s.titolo, nota: s.nota || '', preventivo_id: s.preventivo_id || '', assegnata_a: s.assegnata_a || '', coinvolti: s.coinvolti || [] });
+type Bozza = { id?: string; genere: Genere; categoria: string; giorno: string; ora: string; titolo: string; nota: string; preventivo_id: string; assegnata_a: string; coinvolti: string[]; reparti?: string[] };
+const bozzaDa = (s: Scadenza): Bozza => ({ id: s.id, genere: s.genere || 'attivita', categoria: s.categoria || '', giorno: s.giorno, ora: oraBreve(s), titolo: s.titolo, nota: s.nota || '', preventivo_id: s.preventivo_id || '', assegnata_a: s.assegnata_a || '', coinvolti: s.coinvolti || [], reparti: s.reparti || [] });
 const ESEMPI: Record<Genere, string> = {
   attivita: 'es. Rifare il computo bulloneria', promemoria: 'es. Richiamare il cliente per il preventivo',
   scadenza: 'es. Consegna documentazione collaudo', appuntamento: 'es. Sopralluogo in cantiere',
@@ -245,6 +252,9 @@ function Modulo({ b, set, chiudi }: { b: Bozza; set: (b: Bozza) => void; chiudi:
         {cloud.colleghi.map(u => <option key={u.email} value={u.email}>{u.nome || u.email}{u.email === mioEmail() ? ' (io)' : ''}</option>)}
       </select></label> : null}
       <Coinvolti val={b.coinvolti.filter(x => x !== b.assegnata_a)} set={c => set({ ...b, coinvolti: c })} escludi={b.assegnata_a} />
+      {repartiVociDisponibili() && <div className="f wide">Reparti <span className="muted small">(facoltativo: se non ne scegli, quelli di chi la deve fare)</span>
+        <div className="etqs">{REPARTI.map(r => { const on = (b.reparti || []).includes(r.k); return (
+          <button key={r.k} type="button" className={`etq${on ? ' on' : ''}`} onClick={() => set({ ...b, reparti: on ? (b.reparti || []).filter(x => x !== r.k) : [...(b.reparti || []), r.k] })}><IcReparto k={r.k} />{r.nome}</button>); })}</div></div>}
       <label className="f wide">Nota (facoltativa)<textarea rows={3} value={b.nota} onChange={e => set({ ...b, nota: e.target.value })} /></label>
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
         <button className="btn p" disabled={busy || !b.titolo.trim() || !b.giorno} onClick={salva}>{b.id ? 'Salva modifiche' : 'Aggiungi'}</button>
@@ -297,9 +307,11 @@ export function Calendario({ sotto }: { sotto?: (onEdit: (s: Scadenza) => void) 
   const [ym, setYm] = useState({ y: t.getUTCFullYear(), m: t.getUTCMonth() });
   const [sel, setSel] = useState(oggi);
   const [bozza, setBozza] = useState<Bozza | null>(null), [cosa, setCosa] = useState(false);
-  const vv = vociVisibili(), byDay = perGiorno(vv), mese = S.ui.calV === 'mese';
+  const vv = vociHome(), byDay = perGiorno(vv), mese = S.ui.calV === 'mese';
   const sposta = (d: number) => { const x = new Date(Date.UTC(ym.y, ym.m + d, 1)); setYm({ y: x.getUTCFullYear(), m: x.getUTCMonth() }); };
-  const nuova = (g = sel) => setBozza({ genere: 'attivita', categoria: '', giorno: isoDay(g), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '', coinvolti: [] });
+  // Con un reparto scelto nella mappa, la voce nuova parte già in quel reparto.
+  const nuova = (g = sel) => setBozza({ genere: 'attivita', categoria: '', giorno: isoDay(g), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '', coinvolti: [],
+    reparti: S.ui.rep && S.ui.rep !== SMISTARE ? [S.ui.rep] : [] });
   // Il modulo si apre nella colonna del giorno: se si arriva dagli allarmi o dagli appuntamenti, più sotto, la pagina ci torna.
   const modifica = (s: Scadenza) => { setSel(Date.UTC(+s.giorno.slice(0, 4), +s.giorno.slice(5, 7) - 1, +s.giorno.slice(8, 10)) / DAY); setBozza(bozzaDa(s));
     requestAnimationFrame(() => document.querySelector('.calday')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); };
@@ -325,8 +337,8 @@ export function Calendario({ sotto }: { sotto?: (onEdit: (s: Scadenza) => void) 
             {cloud.session && <span className="seg"><button className={S.ui.calMie ? '' : 'on'} onClick={() => { S.ui.calMie = false; commit(); }}>Tutte</button>
               <button className={S.ui.calMie ? 'on' : ''} onClick={() => { S.ui.calMie = true; commit(); }}>Le mie</button></span>}
             <PermessoAvvisi />
-            <button className={`btn s${vedeTutto(miaVista()) ? '' : ' on'}`} onClick={() => setCosa(!cosa)} title="Scegli cosa vedere nel calendario: le tue voci si vedono sempre">👁 Cosa vedo{vedeTutto(miaVista()) ? '' : ' · filtrato'}</button>
-            <button className="btn s" onClick={() => mostra(false)} title="Toglie il calendario dalla Home: restano solo gli allarmi">Nascondi calendario</button>
+            <button className={`btn s${vedeTutto(miaVista()) ? '' : ' on'}`} onClick={() => setCosa(!cosa)} title="Scegli cosa vedere nel calendario: le tue voci si vedono sempre"><Ic n="vedi" />Cosa vedo{vedeTutto(miaVista()) ? '' : ' · filtrato'}</button>
+            <ChevBarra k="calendario" />
           </div>
           {mese ? <Mese ym={ym} sel={sel} setSel={setSel} nuova={nuova} byDay={byDay} oggi={oggi} /> : <Agenda vv={vv} oggi={oggi} sel={sel} setSel={setSel} onEdit={modifica} />}
           <div className="klegend">
@@ -352,23 +364,56 @@ export function Calendario({ sotto }: { sotto?: (onEdit: (s: Scadenza) => void) 
 /** Prossimi appuntamenti (da oggi in poi, non ancora fatti), in ordine di data e ora. */
 function Appuntamenti({ onEdit }: { onEdit?: (s: Scadenza) => void }) {
   const oggi = dToday(), [tutti, setTutti] = useState(false);
-  const vv = vociVisibili().filter(v => v.s?.genere === 'appuntamento' && !v.s.fatto && v.giorno >= oggi)
+  const vv = vociHome().filter(v => v.s?.genere === 'appuntamento' && !v.s.fatto && v.giorno >= oggi)
     .sort((a, b) => a.giorno - b.giorno || oraBreve(a.s).localeCompare(oraBreve(b.s)));
-  const vis = tutti ? vv : vv.slice(0, 8);
+  const vis = tutti ? vv : vv.slice(0, 8), ap = barraAperta('appuntamenti');
   return (
-    <div className="card">
-      <h2>Appuntamenti<span className="tag">{vv.length} in programma</span></h2>
-      {vv.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} qui />) : <p className="hint" style={{ margin: 0 }}>Nessun appuntamento in programma.</p>}
-      {vv.length > 8 && <button className="btn s" style={{ marginTop: 8 }} onClick={() => setTutti(!tutti)}>{tutti ? 'Mostra solo i prossimi 8' : `Mostra tutti (${vv.length})`}</button>}
+    <div className={`card${ap ? '' : ' chiusa'}`}>
+      <h2 className="hbh" onClick={clicBarra('appuntamenti')}>Appuntamenti<span className="tag">{vv.length} in programma</span><span className="sp" /><ChevBarra k="appuntamenti" /></h2>
+      {ap && <>{vv.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} qui />) : <p className="hint" style={{ margin: 0 }}>Nessun appuntamento in programma.</p>}
+      {vv.length > 8 && <button className="btn s" style={{ marginTop: 8 }} onClick={() => setTutti(!tutti)}>{tutti ? 'Mostra solo i prossimi 8' : `Mostra tutti (${vv.length})`}</button>}</>}
     </div>
   );
 }
 
 /** Home: a sinistra il calendario e sotto, larghi, allarmi, appuntamenti e note; a destra la colonna con tutto il giorno scelto.
  *  Se l'utente ha nascosto il calendario: allarmi in breve, poi appuntamenti e note a tutta pagina. */
+/** Dal «+» di un reparto della mappa: voce d'agenda (promemoria, scadenza, urgenza, appuntamento…) o nota, già nel reparto.
+ *  La voce prende il reparto, la nota il suo primo tema (in «Da smistare» niente: ci finiscono da sole). */
+function NuovoInReparto({ k, chiudi }: { k: string; chiudi: () => void }) {
+  const [cosa, setCosa] = useState<'voce' | 'nota'>('voce'), qui = k !== SMISTARE;
+  const [b, setB] = useState<Bozza>({ genere: 'promemoria', categoria: '', giorno: isoDay(dToday()), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '', coinvolti: [], reparti: qui ? [k] : [] });
+  const [n, setN] = useState<Nota>({ ...notaVuota(), preventivo_id: '', etichette: qui ? REPARTI.find(r => r.k === k)!.temi.slice(0, 1) : [] });
+  useEffect(() => { const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') chiudi(); }; window.addEventListener('keydown', esc); return () => window.removeEventListener('keydown', esc); }, [chiudi]);
+  return (
+    <div className="sapscrim noprint" onMouseDown={e => { if (e.target === e.currentTarget) chiudi(); }}>
+      <div className="sapwin" role="dialog" aria-modal="true" aria-label={`Nuovo in ${nomeReparto(k)}`}>
+        <div className="saphead"><IcReparto k={k} s={16} /><b>{qui ? `Nuovo in ${nomeReparto(k)}` : 'Nuovo da smistare'}</b><span className="sp" />
+          <span className="seg"><button className={cosa === 'voce' ? 'on' : ''} onClick={() => setCosa('voce')}>Agenda</button>
+            <button className={cosa === 'nota' ? 'on' : ''} onClick={() => setCosa('nota')} disabled={!!docNonDisponibili()}>Nota</button></span>
+          <button className="btn x" onClick={chiudi} title="Chiudi (Esc)" aria-label="Chiudi">✕</button></div>
+        <div className="sapbody">
+          {cosa === 'voce' ? <Modulo b={b} set={setB} chiudi={chiudi} /> : <ModuloNota n={n} set={setN} chiudi={chiudi} dove={{}} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export const CalendarioHome = () => {
+  const [nuovo, setNuovo] = useState('');
+  // Sotto il calendario la mappa dei reparti: scegliendone uno, allarmi, appuntamenti, note e colonna del giorno mostrano solo le sue cose.
   const sotto = (onEdit?: (s: Scadenza) => void) => <><Appuntamenti onEdit={onEdit} />{!docNonDisponibili() && <NoteHome />}</>;
-  return S.ui.cal ? <Calendario sotto={m => <><Allarmi onEdit={m} />{sotto(m)}</>} /> : <><Allarmi compatto /><div className="calsep" />{sotto()}</>;
+  // In «📥 Da smistare» compare subito il riquadro con i reparti da cliccare su ogni riga.
+  const mappa = <><MappaReparti vv={vociVisibili()} onNuovo={setNuovo} />{S.ui.rep === SMISTARE && <Smistamento vv={vociVisibili()} />}
+    {nuovo && <NuovoInReparto k={nuovo} chiudi={() => setNuovo('')} />}</>;
+  // Calendario chiuso: resta la sua barra in cima, e il resto va a tutta pagina.
+  if (barraAperta('calendario')) return <Calendario sotto={m => <>{mappa}<Allarmi onEdit={m} />{sotto(m)}</>} />;
+  const oggi = perGiorno(vociHome()).get(dToday())?.length || 0;
+  return <>
+    <section className="card chiusa"><h2 className="hbh" onClick={clicBarra('calendario')}>Calendario<span className="tag">{oggi ? `${oggi} in programma oggi` : 'niente oggi'}</span>
+      <span className="sp" /><ChevBarra k="calendario" /></h2></section>
+    {mappa}<Allarmi />{sotto()}</>;
 };
 
 /** Nel preventivo aperto: le sue voci in agenda (date della commessa, richiamo, voci a mano) e l'aggiunta di un promemoria. */

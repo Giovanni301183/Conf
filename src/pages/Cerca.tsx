@@ -14,6 +14,7 @@ import { apriFile } from './Documenti';
 import { nomeDi } from '../domain/squadra';
 import { cloud, squadra } from '../store/remote';
 import { apriChat, apriScheda } from '../components/pannelli';
+import { Ic } from '../components/Icona';
 
 const parole = (q: string) => q.toLowerCase().split(/\s+/).filter(Boolean);
 const tutte = (t: string, pp: string[]) => { const s = t.toLowerCase(); return pp.every(p => s.includes(p)); };
@@ -139,7 +140,7 @@ export function Cerca() {
                 <td className="small">{fDate(m.creato.slice(0, 10))} {new Date(m.creato).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</td>
                 <td><b><Hl t={nomeDi(m.creato_da, cloud.colleghi)} pp={pp} /></b><div className="muted small"><Hl t={brano(m.testo || '', pp)} pp={pp} /></div></td>
                 <td className="small">{m.preventivo_id ? <Hl t={nomePrev(m.preventivo_id) || '–'} pp={pp} /> : 'Generale'}</td>
-                <td className="acts"><button className="btn s" onClick={() => apriChat(m.preventivo_id || null)}>💬 Apri chat</button></td>
+                <td className="acts"><button className="btn s" onClick={() => apriChat(m.preventivo_id || null)}><Ic n="chat" />Apri chat</button></td>
               </tr>
             ))}
           </tbody></table></div>

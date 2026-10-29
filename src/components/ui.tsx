@@ -112,6 +112,17 @@ export const Chev = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
 );
 
+// Barre della Home (calendario, mappa dei reparti, allarmi, appuntamenti, note): si aprono e chiudono cliccando l'intestazione.
+// Non ricordate: a ogni avvio sono aperti solo calendario e mappa.
+export const barraAperta = (k: string) => S.ui.hb[k] ?? (k === 'calendario' || k === 'mappa');
+export const giraBarra = (k: string) => { S.ui.hb[k] = !barraAperta(k); commit(); };
+/** Clic sull'intestazione, fuori dai suoi pulsanti e campi. */
+export const clicBarra = (k: string) => (e: React.MouseEvent) => { if (!(e.target as Element).closest('button,select,input,textarea,a,label')) giraBarra(k); };
+export const ChevBarra = ({ k }: { k: string }) => {
+  const o = barraAperta(k);
+  return <button type="button" className={`hbchev noprint${o ? ' on' : ''}`} onClick={() => giraBarra(k)} aria-expanded={o} title={o ? 'Chiudi' : 'Apri'}><Chev /></button>;
+};
+
 function useFoldId(id: string) {
   useLayoutEffect(() => { foldIds.add(id); return () => { foldIds.delete(id); }; }, [id]);
 }

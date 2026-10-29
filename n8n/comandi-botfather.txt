@@ -8,3 +8,5 @@ mie - Solo le voci mie o assegnate a me
 collega - Collega il tuo account (codice dal pulsante Telegram nell'app)
 id - Id di questa chat
 aiuto - Cosa puo' fare l'assistente
+nuovo - Aggiungi nota, promemoria, urgenza o appuntamento in un reparto
+reparto - Situazione di un reparto (es. /reparto acquisti)

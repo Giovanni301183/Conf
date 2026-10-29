@@ -8,6 +8,7 @@ import { S, commit } from '../store/state';
 import { toast } from '../store/actions';
 import { caricaFile, ricaricaDocumenti } from '../store/remote';
 import { ModuloNota, OpzioniPreventivi, Voce, docNonDisponibili, notaVuota, type Nota } from './Documenti';
+import { Ic } from '../components/Icona';
 
 /** Etichetta tecnica proposta dal nome del file (Tecnico e progetto se il nome non dice niente). */
 const temaPer = (nome: string) => suggerisciEtichette(nome).find(k => TECNICHE.includes(k)) || 'tecnico';
@@ -45,7 +46,7 @@ export function ArchivioTecnico() {
       <h2 style={{ marginTop: 0 }}>Archivio tecnico</h2>
       <p className="hint">Memoria del consulente tecnico dell'assistente (✦ Assistente): relazioni geologiche e geotecniche, prove di pull-out, calcoli, normative e schede tecniche.
         Qui compare <b>ogni documento o nota con un'etichetta tecnica</b> ({TECNICHE.map(nomeEtichetta).join(', ')}), da qualunque parte arrivi: scheda Documenti, note, Telegram, email.
-        Con <b>🔗 Collega</b> lo leghi quando vuoi a un preventivo o commessa, a una nota, e cambi etichette o privato. L'AI legge ogni file tecnico e ne scrive la scheda con valori e pagine.
+        Con <b><Ic n="collega" />Collega</b> lo leghi quando vuoi a un preventivo o commessa, a una nota, e cambi etichette o privato. L'AI legge ogni file tecnico e ne scrive la scheda con valori e pagine.
         I documenti <b>privati</b> li vedi solo tu. Meglio PDF, immagini o testo: Word ed Excel vanno salvati in PDF.</p>
 
       <div className="dbar">
