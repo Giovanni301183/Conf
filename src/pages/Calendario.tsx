@@ -89,14 +89,15 @@ function Assegna({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
   );
 }
 
-function Riga({ v, oggi, onEdit, data = true, allarme = '' }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean; allarme?: '' | 'late' | 'soon' }) {
+// qui = Modifica apre il modulo sotto la voce, al suo posto (Allarmi e Appuntamenti), invece che nella colonna del giorno.
+function Riga({ v, oggi, onEdit, data = true, allarme = '', qui = false }: { v: Voce; oggi: number; onEdit?: (s: Scadenza) => void; data?: boolean; allarme?: '' | 'late' | 'soon'; qui?: boolean }) {
   const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s), link = s && !s.fatto ? linkRiunione(s.nota) : '';
   // Allegati della voce (file e note): la graffetta mostra quanti sono e apre l'elenco sotto la voce.
-  const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [vedi, setVedi] = useState(false), [ass, setAss] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
+  const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [vedi, setVedi] = useState(false), [mod, setMod] = useState<Bozza | null>(null), [ass, setAss] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
   return (<>
     <div className={`cvoce ${s?.fatto ? 'fatto' : ''} ${allarme ? 'blink ' + allarme : ''}`} style={{ '--vc': c } as React.CSSProperties}>
       {s ? <input type="checkbox" checked={s.fatto} disabled={!spunta} onChange={() => segna(s)} title={spunta ? 'Fatto' : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
-      <div className="vt">
+      <div className={`vt${s ? ' apri' : ''}`} onClick={s ? () => setVedi(!vedi) : undefined} title={s ? (vedi ? 'Chiudi' : 'Apri la voce per intero, con le note e i file allegati') : undefined}>
         <b>{ora && <span className="vora">{ora}</span>}{v.titolo}</b>
         <small>{l}{s?.categoria ? ' · ' + s.categoria.toLowerCase() : ''}{data ? <> · {dFmt(v.giorno)} ({quando(v.giorno, oggi, daFare(v) && !s?.fatto)})</> : null}{v.sotto ? ' · ' + v.sotto : ''}
           {s?.assegnata_a ? ' · per ' + nomeDi(s.assegnata_a) : ''}{s?.coinvolti?.length ? ' · con ' + s.coinvolti.map(nomeDi).join(', ') : ''}{s?.creato_da ? ' · da ' + nomeDi(s.creato_da) : ''}{s?.origine === 'telegram' ? ' (Telegram)' : ''}</small>
@@ -112,8 +113,9 @@ function Riga({ v, oggi, onEdit, data = true, allarme = '' }: { v: Voce; oggi: n
       {s && online() && !email && <button className="btn s" onClick={() => setEmail(attesa ? 'sollecito' : 'email')} title={attesa ? 'Scrivi un sollecito cortese' : "Scrivi un'email di aggiornamento da questa voce"}>{attesa ? '✉ Sollecita' : '✉ Email'}</button>}
       {s && <button className={`btn s${vedi ? ' on' : ''}`} onClick={() => setVedi(!vedi)} title="Vedi la voce per intero, con le note e i file allegati">👁 Vedi{nAll ? ' · 📎 ' + nAll : ''}</button>}
       {mio && !s.fatto && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la voce a un collega">👤 {s.assegnata_a ? 'Riassegna' : 'Assegna'}</button>}
-      {mio && onEdit && <><button className="btn s" onClick={() => onEdit(s)}>Modifica</button><button className="btn x" onClick={() => togli(s)} title="Elimina">✕</button></>}
+      {mio && (qui || onEdit) && !mod && <><button className="btn s" onClick={() => qui ? setMod(bozzaDa(s)) : onEdit!(s)}>Modifica</button><button className="btn x" onClick={() => togli(s)} title="Elimina">✕</button></>}
     </div>
+    {mod && <div className="callegati"><Modulo b={mod} set={setMod} chiudi={() => setMod(null)} /></div>}
     {ass && s && <div className="callegati"><Assegna s={s} chiudi={() => setAss(false)} /></div>}
     {email && s && <div className="callegati"><ModuloEmail titolo={s.titolo} testo={s.nota || ''} contesto={contestoEmail(s.preventivo_id, s.id)}
       chiave={s.preventivo_id || s.id} preventivo={s.preventivo_id} chiudi={() => setEmail('')}
@@ -156,7 +158,7 @@ export function Allarmi({ compatto = false, onEdit }: { compatto?: boolean; onEd
         <span className="sp" />
         {compatto && <button className="btn s" onClick={() => mostra(true)}>Mostra calendario</button>}
       </h2>
-      {tutte.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} allarme={prossime.includes(v) ? 'soon' : 'late'} />) : <p className="hint" style={{ margin: 0 }}>Niente di scaduto o in arrivo.</p>}
+      {tutte.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} qui allarme={prossime.includes(v) ? 'soon' : 'late'} />) : <p className="hint" style={{ margin: 0 }}>Niente di scaduto o in arrivo.</p>}
       {vis.length < tutte.length && <p className="hint" style={{ margin: '6px 0 0' }}>… e altre {tutte.length - vis.length} nel calendario.</p>}
       {!compatto && np.length > 0 && <p className="hint" style={{ margin: '10px 0 0' }}>
         Commesse vinte senza data di avvio della produzione (non compaiono nel calendario): {np.map((e, i) => <span key={e.id}>{i ? ', ' : ''}<a href="#" onClick={ev => { ev.preventDefault(); apri(e.id); }}>{e.nome}</a></span>)}.
@@ -314,7 +316,7 @@ function Appuntamenti({ onEdit }: { onEdit?: (s: Scadenza) => void }) {
   return (
     <div className="card">
       <h2>Appuntamenti<span className="tag">{vv.length} in programma</span></h2>
-      {vv.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} />) : <p className="hint" style={{ margin: 0 }}>Nessun appuntamento in programma.</p>}
+      {vv.length ? vis.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} qui />) : <p className="hint" style={{ margin: 0 }}>Nessun appuntamento in programma.</p>}
       {vv.length > 8 && <button className="btn s" style={{ marginTop: 8 }} onClick={() => setTutti(!tutti)}>{tutti ? 'Mostra solo i prossimi 8' : `Mostra tutti (${vv.length})`}</button>}
     </div>
   );
