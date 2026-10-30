@@ -114,7 +114,7 @@ export const Chev = ({ size = 14 }: { size?: number }) => (
 
 // Barre della Home (calendario, mappa dei reparti, allarmi, appuntamenti, note): si aprono e chiudono cliccando l'intestazione.
 // Non ricordate: a ogni avvio sono aperti solo calendario e mappa.
-export const barraAperta = (k: string) => S.ui.hb[k] ?? (k === 'calendario' || k === 'mappa');
+export const barraAperta = (k: string) => S.ui.hb[k] ?? (k === 'calendario' || k === 'mappa' || k === 'arrivo');
 export const giraBarra = (k: string) => { S.ui.hb[k] = !barraAperta(k); commit(); };
 /** Clic sull'intestazione, fuori dai suoi pulsanti e campi. */
 export const clicBarra = (k: string) => (e: React.MouseEvent) => { if (!(e.target as Element).closest('button,select,input,textarea,a,label')) giraBarra(k); };

@@ -18,6 +18,7 @@ import { linkRiunione } from '../domain/riunione';
 import { Discuti } from '../components/Collegamento';
 import { MappaReparti, SceltaSettori } from '../components/MappaReparti';
 import { Smistamento } from '../components/Smistamento';
+import { InArrivo } from '../components/InArrivo';
 import { REPARTI, SMISTARE, nomeReparto, nomeSettoreMappa, repartiVoce, settoriDi } from '../domain/reparti';
 import { cambiaStato, cloud, coinvoltiDisponibili, eliminaScadenza, flussoDisponibile, isAdmin, squadra, storicoVoce, type Evento, repartiDi, repartiVociDisponibili, settoriDisponibili, settorePrev, miaVista, mioEmail, online, puoModificare, puoSpuntare, riassumiRisposta, salvaNota, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
 import { VISTA_TUTTO, filtraVista, normVista, vedeTutto, type Quanto, type Vista } from '../domain/vista';
@@ -573,12 +574,12 @@ export const CalendarioHome = () => {
   const mappa = <><MappaReparti vv={vociVisibili()} onNuovo={setNuovo} scheda={(k, st, chiudi) => <SchedaNuovo k={k} st={st} chiudi={chiudi} testa="mschedah" corpo="mschedab" />} />{S.ui.rep === SMISTARE && <Smistamento vv={vociVisibili()} />}
     {nuovo && <NuovoInReparto k={nuovo} chiudi={() => setNuovo('')} />}</>;
   // Calendario chiuso: resta la sua barra in cima, e il resto va a tutta pagina.
-  if (barraAperta('calendario')) return <Calendario mappa={mappa} sotto={m => <><Allarmi onEdit={m} />{sotto(m)}</>} />;
+  if (barraAperta('calendario')) return <Calendario mappa={mappa} sotto={m => <><InArrivo /><Allarmi onEdit={m} />{sotto(m)}</>} />;
   const oggi = perGiorno(vociHome()).get(dToday())?.length || 0;
   return <>
     <section className="card chiusa"><h2 className="hbh" onClick={clicBarra('calendario')}>Calendario<span className="tag">{oggi ? `${oggi} in programma oggi` : 'niente oggi'}</span>
       <span className="sp" /><ChevBarra k="calendario" /></h2></section>
-    {mappa}<Allarmi />{sotto()}</>;
+    {mappa}<InArrivo /><Allarmi />{sotto()}</>;
 };
 
 /** Nel preventivo aperto: le sue voci in agenda (date della commessa, richiamo, voci a mano) e l'aggiunta di un promemoria. */

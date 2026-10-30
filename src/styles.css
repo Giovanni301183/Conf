@@ -815,6 +815,13 @@ button.etq{cursor:pointer}button.etq:hover{border-color:var(--ec)}
 .cscheda dt{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
 .cscheda dd{margin:0;font-size:13px}
 .cscheda .cnota{margin:0;white-space:pre-wrap;font-size:13.5px;padding:8px 10px;background:var(--card, #fff);border-radius:8px;border:1px solid var(--line)}
+/* In arrivo: email etichettate in Gmail da sistemare */
+.carr .arr{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line)}
+.carr .arr:first-of-type{border-top:0}
+.carr .arrt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.carr .arrt small{font-size:12px}
+.carr .arretq{display:flex;flex-wrap:wrap;gap:4px}
+.carr .arrb{display:flex;flex-wrap:wrap;gap:6px}
 /* Flusso delle voci: stato accanto al tipo, storico dei passaggi nella scheda */
 .cvoce .vstato{color:var(--acc);font-weight:500}.cvoce .vstato.warn{color:var(--warn);font-weight:600}
 .cstorico{font-size:12.5px;border-top:1px solid var(--line);padding-top:6px}

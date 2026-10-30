@@ -170,6 +170,32 @@ export async function bozzaEmail(body: { titolo: string; testo: string; contesto
   return j;
 }
 
+/* ---------- In arrivo: email etichettate «Conf/…» in Gmail o inoltrate all'agenda, da sistemare (vedi api/agenda.ts, sceltaPosta) ---------- */
+export interface Arrivo {
+  id: string; creato: string;
+  dati: { titolo: string; riassunto: string; mittente: string; oggetto: string; giorno: string; ora: string; preventivo_id: string; etichette?: string[];
+    link?: string; allegati?: { nome: string }[]; attesa?: { id: string; titolo: string }; gmail?: { azione: '' | 'f' | 't' | 'r'; a: string; da_me: boolean } };
+}
+export const arrivo = { vv: [] as Arrivo[], err: '', letto: false };
+export async function loadInArrivo() {
+  if (!supabase || !cloud.session) return;
+  const r = await fetch('/api/email', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session.access_token}` }, body: JSON.stringify({ azione: 'in_arrivo' }) });
+  const j = await r.json().catch(() => ({ error: `Risposta non valida dal server (${r.status})` }));
+  arrivo.letto = true;
+  if (!r.ok) { arrivo.err = j.error || `Errore ${r.status}`; return; }
+  arrivo.err = ''; arrivo.vv = j.voci || [];
+}
+/** Scelta su un'email: a nota, f cosa da fare, t attesa della risposta, r riunione, p promemoria, v è la risposta, x ignora. */
+export async function sistemaArrivo(id: string, scelta: string, modifiche: Record<string, unknown>): Promise<{ testo?: string; errore?: string }> {
+  const r = await fetch('/api/email', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` },
+    body: JSON.stringify({ azione: 'in_arrivo_scelta', id, scelta, modifiche }) });
+  const j = await r.json().catch(() => ({ error: `Risposta non valida dal server (${r.status})` }));
+  if (!r.ok) return { errore: j.error || `Errore ${r.status}` };
+  arrivo.vv = arrivo.vv.filter(x => x.id !== id);
+  await Promise.all([loadScadenze(), loadDocumenti()]).catch(() => {});
+  return { testo: j.testo };
+}
+
 /** Riassunto dell'email di risposta incollata su «Risposta arrivata» (lo scrive l'AI, vedi api/email.ts). */
 export async function riassumiRisposta(testo: string, oggetto = ''): Promise<{ titolo: string; riassunto: string }> {
   const r = await fetch('/api/email', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${cloud.session?.access_token}` }, body: JSON.stringify({ azione: 'risposta', testo, oggetto }) });

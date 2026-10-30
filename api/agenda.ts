@@ -22,7 +22,7 @@ import { marginiBot, preventivoBot, variantiBot } from './_preventivo.js';
 import { linkGmail, scriviBozza } from './_email.js';
 import { allegatiDaCaricare, indirizzo, leggiEmail, type Commessa, type Lettura } from './_posta.js';
 import { chiaveAvviso, daAvvisare, linkRiunione, minutiA } from '../src/domain/riunione.js';
-import { attesaPer, conCodice, numDaOggetto } from '../src/domain/posta.js';
+import { attesaPer, conCodice, daEtichetteGmail, numDaOggetto, type AzioneGmail } from '../src/domain/posta.js';
 import { ETICHETTE, cartellaPer, nomeSicuro, nomiEtichette, pulisciEtichette } from '../src/domain/documenti.js';
 import { REPARTI, SMISTARE, nomeReparto, nomeSettoreMappa, repartiDaTemi, settoriDi } from '../src/domain/reparti.js';
 import { MANCA_N8N, cambia, etichetta, etichettaSettore, fatto, msgReparti, msgSalvato, msgTipi, pulsanteNuovo, repartiDiVoce, repartoDa, senzaMessaggio, settoreDa, tastiReparti, tastiSettori, temiPerReparto, tg } from './_reparti.js';
@@ -389,7 +389,9 @@ async function avvisiReparto(db: Db, v: Voce) {
 // allegati: file dell'email caricati da n8n nello Storage (cartella posta/...), legati alla nota o alla voce quando si sceglie.
 export interface AllegatoPosta { nome: string; mime: string; percorso: string }
 // attesa = voce «✉ Attesa risposta» aperta a cui sembra rispondere l'email (stessa commessa o stesso oggetto): pulsante «È la risposta».
-export type Proposta = Lettura & { oggetto: string; link?: string; allegati?: AllegatoPosta[]; attesa?: { id: string; titolo: string } };
+// gmail = email etichettata in Gmail «Conf/…» (vedi src/domain/posta.ts): scelta proposta, destinatario, se l'ha scritta chi l'ha etichettata, conversazione.
+export type Proposta = Lettura & { oggetto: string; link?: string; allegati?: AllegatoPosta[]; attesa?: { id: string; titolo: string };
+  gmail?: { azione: AzioneGmail; a: string; da_me: boolean; thread: string } };
 const ATTESA = '✉ Attesa risposta · ';
 /** Messaggio in chat privata con la lettura dell'email e i pulsanti "pe:<id>:<scelta>" (v risposta a una voce in attesa, a appunto, p promemoria, r riunione, x ignora). */
 export function propostaTelegram(id: string, l: Proposta, commessa: string | null, oggi: string) {
@@ -400,19 +402,22 @@ export function propostaTelegram(id: string, l: Proposta, commessa: string | nul
     l.allegati?.length ? `📎 ${l.allegati.length} allegat${l.allegati.length === 1 ? 'o' : 'i'}: ${l.allegati.map(a => a.nome).join(', ')}`.slice(0, 600) : '',
     l.attesa ? `↩ Sembra la risposta a: ${l.attesa.titolo.replace(ATTESA, '')}` : '', '', 'Cosa ne faccio?']
     .filter((x, i, a) => x || (i > 0 && a[i - 1])).join('\n').slice(0, 4000);
-  const tasti = [...(l.attesa ? [b(`✅ È la risposta: segna fatta e salva`, 'v')] : []), b(commessa ? '📝 Appunto nella commessa' : '📝 Appunto', 'a'), b(`🔔 Promemoria ${giornoIt(giorno)}`, 'p'),
+  const tasti = [...(l.attesa ? [b(`✅ È la risposta: segna fatta e salva`, 'v')] : []), b(commessa ? '📝 Appunto nella commessa' : '📝 Appunto', 'a'),
+    b(`☑️ Cosa da fare ${giornoIt(giorno)}`, 'f'), ...(l.gmail?.azione === 't' ? [b('⏳ Aspetto la risposta', 't')] : []), b(`🔔 Promemoria ${giornoIt(giorno)}`, 'p'),
     ...(l.giorno ? [b(`📅 Riunione ${giornoIt(l.giorno)}${l.ora ? ' ' + l.ora : ''}`, 'r')] : []), b('🗑 Ignora', 'x')];
   return { text, reply_markup: { inline_keyboard: tasti } };
 }
 
-/** Email inoltrata all'indirizzo dell'agenda: la legge l'AI e la propone in chat privata a chi l'ha inoltrata (se e' un collega abbinato). */
+/** Email inoltrata all'indirizzo dell'agenda, o etichettata «Conf/…» in Gmail (per = casella collegata a n8n): la legge l'AI e la propone
+ *  in «In arrivo» nell'app e in chat privata su Telegram a chi l'ha inoltrata o etichettata. Un'email etichettata va anche senza Telegram. */
 async function postaInArrivo(db: Db, b: any, oggi: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) return fail('Sul server manca TELEGRAM_BOT_TOKEN.');
-  const da = indirizzo(String(b.da ?? '')), gid = String(b.gmail_id ?? '').trim().slice(0, 200) || null, oggetto = String(b.oggetto ?? '').trim().slice(0, 300);
-  const { data: u } = await db.from('utenti').select('email, telegram_id, attivo').eq('email', da).maybeSingle();
-  if (!u || !u.attivo) return fail(`${da || 'Il mittente'} non è un utente attivo dell'app: email ignorata.`);
-  if (!u.telegram_id) return fail(`${da} non ha collegato Telegram: non so dove mandargli la proposta.`);
+  const per = indirizzo(String(b.per ?? '')), da = indirizzo(String(b.da ?? '')), gid = String(b.gmail_id ?? '').trim().slice(0, 200) || null, oggetto = String(b.oggetto ?? '').trim().slice(0, 300);
+  const { data: u } = await db.from('utenti').select('email, telegram_id, attivo').eq('email', per || da).maybeSingle();
+  if (!u || !u.attivo) return fail(`${per || da || 'Il mittente'} non è un utente attivo dell'app: email ignorata.`);
+  if (!per && !token) return fail('Sul server manca TELEGRAM_BOT_TOKEN.');
+  if (!per && !u.telegram_id) return fail(`${da} non ha collegato Telegram: non so dove mandargli la proposta.`);
+  const g = daEtichetteGmail(Array.isArray(b.etichette_gmail) ? b.etichette_gmail.map(String) : [], pulisciEtichette);
   // La stessa email riletta da n8n non fa una seconda proposta.
   if (gid && (await db.from('posta_proposte').select('id').eq('gmail_id', gid).maybeSingle()).data) return { ok: true, doppia: true };
   const { data: cc } = await db.from('preventivi').select('id, nome, cliente, rif, num:prev->>num').order('salvato', { ascending: false }).limit(300);
@@ -431,13 +436,18 @@ async function postaInArrivo(db: Db, b: any, oggi: string) {
   const scelti = allegatiDaCaricare(Array.isArray(b.allegati) ? b.allegati : [])
     .map((a, i) => ({ chiave: a.chiave, nome: a.nome.slice(0, 200), mime: a.mime || '', percorso: `${cartellaPosta}/${i + 1}_${nomeSicuro(a.nome)}` }));
   const dati: Proposta = { ...l, oggetto, link: linkRiunione(String(b.testo ?? '')), allegati: scelti.map(({ chiave, ...a }) => a),
-    ...(att ? { attesa: { id: att.id, titolo: att.titolo }, preventivo_id: l.preventivo_id || att.preventivo_id || '' } : {}) };
+    ...(att ? { attesa: { id: att.id, titolo: att.titolo }, preventivo_id: l.preventivo_id || att.preventivo_id || '' } : {}),
+    ...(g.temi.length ? { etichette: g.temi } : {}),
+    ...(per ? { gmail: { azione: g.azione, a: indirizzo(String(b.a ?? '')), da_me: da === per, thread: String(b.thread_id ?? '').slice(0, 200) } } : {}) };
   const { data: p, error } = await db.from('posta_proposte').insert({ email: u.email, gmail_id: gid, dati }).select('id').single();
   if (error) return error.code === '23505' ? { ok: true, doppia: true } : fail(error.message);
   const c = commesse.find(x => x.id === dati.preventivo_id);
-  const t = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chat_id: u.telegram_id, ...propostaTelegram(p.id, dati, c ? c.nome + (c.num ? ` (N° ${c.num})` : '') : null, oggi) }) });
-  if (!t.ok) return fail('Telegram non ha accettato la proposta' + (t.status === 403 ? ': il collega deve aprire la chat con il bot e premere Avvia.' : '.'));
+  if (token && u.telegram_id) {
+    const t = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: u.telegram_id, ...propostaTelegram(p.id, dati, c ? c.nome + (c.num ? ` (N° ${c.num})` : '') : null, oggi) }) });
+    // Un'email etichettata resta comunque in «In arrivo» nell'app.
+    if (!t.ok && !per) return fail('Telegram non ha accettato la proposta' + (t.status === 403 ? ': il collega deve aprire la chat con il bot e premere Avvia.' : '.'));
+  }
   const apikey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
   const caricamenti: { chiave: string; url: string; mime: string; apikey: string }[] = [];
   for (const a of scelti) {
@@ -493,12 +503,25 @@ async function legaAllegati(db: Db, d: Proposta, dove: { nota_id: string } | { s
 }
 const conAllegati = (n: number) => (n ? ` · 📎 ${n} allegat${n === 1 ? 'o' : 'i'}` : '');
 
-/** Pulsante sotto la proposta: appunto nei documenti della commessa, promemoria o riunione in agenda, oppure niente. */
-async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
+/** Email da sistemare (proposte non ancora usate) di un collega, dalla più recente: la barra «In arrivo» dell'app. */
+export async function inArrivo(db: Db, io: Me) {
+  const { data, error } = await db.from('posta_proposte').select('id, dati, creato').eq('email', io.email).is('usata', null).order('creato', { ascending: false }).limit(50);
+  if (error) return fail(error.message);
+  return { ok: true, voci: data || [] };
+}
+
+/** Scelta su un'email (pulsante Telegram o «In arrivo» nell'app): appunto nei documenti, cosa da fare, attesa della risposta, promemoria o
+ *  riunione in agenda, risposta a una voce in attesa, oppure niente. Dall'app arrivano anche le correzioni (modifiche: titolo, commessa,
+ *  temi, giorno, per chi). */
+export async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
   const { data: p } = await db.from('posta_proposte').select('id, email, dati, usata').eq('id', String(b.id ?? '')).maybeSingle();
   if (!p || p.email !== io.email) return fail('Proposta non trovata: era per un altro collega o è stata cancellata.');
   if (p.usata) return fail("Questa email l'hai già sistemata.");
-  const d = p.dati as Proposta, scelta = String(b.scelta ?? '');
+  const m = b.modifiche && typeof b.modifiche === 'object' ? b.modifiche : {}, origine = b.origine === 'app' ? 'app' : 'telegram';
+  const d: Proposta = { ...(p.dati as Proposta), ...(String(m.titolo ?? '').trim() ? { titolo: String(m.titolo).trim().slice(0, 200) } : {}),
+    ...(m.preventivo_id !== undefined ? { preventivo_id: String(m.preventivo_id || '') } : {}), ...(Array.isArray(m.etichette) ? { etichette: pulisciEtichette(m.etichette) } : {}),
+    ...(/^\d{4}-\d{2}-\d{2}$/.test(String(m.giorno ?? '')) ? { giorno: String(m.giorno) } : {}), ...(/^\d{2}:\d{2}$/.test(String(m.ora ?? '')) ? { ora: String(m.ora) } : {}) };
+  const assegnata = String(m.assegnata_a ?? '').trim().toLowerCase() || null, scelta = String(b.scelta ?? '');
   const nota = [d.riassunto, d.link && `🎥 ${d.link}`, `✉ Email${d.mittente ? ' di ' + d.mittente : ''}${d.oggetto ? `: «${d.oggetto}»` : ''}`].filter(Boolean).join('\n\n');
   let testo: string;
   if (scelta === 'v') {
@@ -532,10 +555,24 @@ async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
     const na = await legaAllegati(db, d, { nota_id: n.id }, cartella, io);
     const { data: c } = d.preventivo_id ? await db.from('preventivi').select('nome').eq('id', d.preventivo_id).maybeSingle() : { data: null };
     testo = `📝 Appunto salvato${c ? ' in Documenti di ' + c.nome : ' tra le note (libero)'}: ${d.titolo}${temiTesto(etichette)}${conAllegati(na)}`;
+  } else if (scelta === 'f' || scelta === 't') {
+    // Cosa da fare (in corso se è già di qualcuno) o attesa della risposta: in attesa di chi deve rispondere, con il sollecito al giorno scelto.
+    // Il titolo dell'attesa è quello di «Aspetto la risposta» (✉ Attesa risposta · chi — oggetto): la risposta si riconosce da sola.
+    const giorno = d.giorno || prossimoLavorativo(oggi), etichette = pulisciEtichette(d.etichette);
+    const chiAtt = (d.gmail?.da_me ? d.gmail.a : '') || d.mittente || 'destinatario';
+    const titolo = scelta === 't' ? (ATTESA + chiAtt + (d.oggetto ? ' — ' + d.oggetto : '')).slice(0, 200) : d.titolo;
+    const base = { genere: 'attivita', giorno, titolo, nota, preventivo_id: d.preventivo_id || null, assegnata_a: assegnata, creato_da: io.email, origine,
+      reparti: repartiDaTemi(etichette) };
+    const flusso = scelta === 't' ? { stato: 'in_attesa', attesa_di: chiAtt, sollecito: giorno } : assegnata ? { stato: 'in_corso' } : {};
+    let { data: v, error } = await db.from('scadenze').insert({ ...base, ...flusso }).select(COLS).single();
+    if (error && /stato|attesa_di|sollecito|reparti/.test(error.message)) ({ data: v, error } = await db.from('scadenze').insert({ ...base, reparti: undefined }).select(COLS).single());
+    if (error) return fail(error.message);
+    const na = await legaAllegati(db, d, { scadenza_id: (v as Voce).id }, null, io);
+    testo = `${scelta === 't' ? `⏳ In attesa di ${chiAtt}, sollecito ${giornoIt(giorno)}` : 'Aggiunto'}: ${riga(v as Voce, await contesto(db))}${conAllegati(na)}`;
   } else if (scelta === 'p' || scelta === 'r') {
     if (scelta === 'r' && !d.giorno) return fail("Nell'email non c'è la data della riunione: scegli promemoria e correggila nell'app.");
     const { data: v, error } = await db.from('scadenze').insert({ genere: scelta === 'r' ? 'appuntamento' : 'promemoria', giorno: d.giorno || prossimoLavorativo(oggi),
-      ora: d.ora || null, titolo: d.titolo, nota, preventivo_id: d.preventivo_id || null, creato_da: io.email, origine: 'telegram' }).select(COLS).single();
+      ora: d.ora || null, titolo: d.titolo, nota, preventivo_id: d.preventivo_id || null, assegnata_a: assegnata, creato_da: io.email, origine }).select(COLS).single();
     if (error) return fail(error.message);
     const na = await legaAllegati(db, d, { scadenza_id: (v as Voce).id }, null, io);
     testo = `Aggiunto: ${riga(v as Voce, await contesto(db))}${conAllegati(na)}`;

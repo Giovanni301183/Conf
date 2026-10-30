@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { attesaPer, conCodice, numDaOggetto, oggettoBase } from './posta';
+import { attesaPer, conCodice, daEtichetteGmail, numDaOggetto, oggettoBase } from './posta';
+import { pulisciEtichette } from './documenti';
 
 describe('codice della commessa nell\'oggetto', () => {
   it('lo aggiunge una volta sola, solo se c\'è il numero', () => {
@@ -26,4 +27,16 @@ describe('risposta a una email mandata', () => {
   it('prima lo stesso oggetto', () => expect(attesaPer(vv, 'Re: Consegna pali', '')?.id).toBe('b'));
   it('poi la stessa commessa', () => expect(attesaPer(vv, 'Domanda veloce', 'p1')?.id).toBe('a'));
   it('niente se non corrisponde', () => expect(attesaPer(vv, 'Altro', 'p9')).toBeUndefined());
+});
+
+describe('etichette di Gmail «Conf/…»', () => {
+  const g = (nn: string[]) => daEtichetteGmail(nn, pulisciEtichette);
+  it('temi e scelta proposta', () => {
+    expect(g(['INBOX', 'Conf/Acquisti', 'Conf/Da fare'])).toEqual({ temi: ['acquisti'], azione: 'f' });
+    expect(g(['Conf/Attesa risposta', 'Conf/Tecnico e progetto'])).toEqual({ temi: ['tecnico'], azione: 't' });
+    expect(g(['Conf/Riunione'])).toEqual({ temi: ['riunione'], azione: 'r' });
+  });
+  it('ignora le etichette messe da n8n e quelle fuori da Conf/', () => {
+    expect(g(['Conf/In app', 'Conf/Non entrata', 'Acquisti', 'IMPORTANT'])).toEqual({ temi: [], azione: '' });
+  });
 });

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Versione** | 1.5 |
+| **Versione** | 1.6 |
 | **Data** | 30/10/2026 |
 | **Autore** | G. Sorrentino |
 | **Fonte dati** | `CONFIGURATORE TRACKER 12 MODULI 1303 (RIORDINATO).xlsx` |
@@ -27,6 +27,7 @@
 | 1.3 | Scheda **Montaggio** (§9sexies): computo con listino montaggio, Gantt di cantiere con progettazione e pull-out test, export Excel e PDF |
 | 1.4 | **Home con mappa dei reparti e settori** (§9septies): mappa subito sotto il calendario anche sul telefono, pallini dei settori intorno al reparto aperto, filtro reparto + settore su allarmi, appuntamenti e note; settori anche nell'assistente e su Telegram |
 | 1.5 | **Flusso delle voci fino alla chiusura** (§9octies): stati aperta → in corso → in attesa → fatta → chiusa, esito obbligatorio, seguito collegato, conferma dell'autore, rinvii con motivo, storico; annullamento solo amministratore (autore solo su voce intatta) |
+| 1.6 | **Email collegate con le etichette di Gmail** (§9nonies): etichette «Conf/…» in Gmail → barra **In arrivo** in cima alla Home (e Telegram), dove ogni email diventa cosa da fare, attesa della risposta, appuntamento o nota |
 
 ---
 
@@ -414,6 +415,23 @@ Ogni cosa da fare deve arrivare a una chiusura chiara: chi la fa, a che punto è
 Dati: migrazione `20261030040000_flusso_voci.sql` — colonne `stato`, `esito`, `attesa_di`, `sollecito`, `seguito_di`, `rinvii`, `passaggi`, `annullo_chiesto`, `annullo_da` su `scadenze`; tabella `scadenze_eventi` (storico); il trigger tiene d'accordo `stato` e `fatto` (Telegram, n8n e le versioni vecchie che cambiano solo `fatto` continuano a funzionare) e applica le regole su conferma, riapertura e annullamento. Senza la migrazione l'app resta con la sola spunta.
 
 **Prossimi passi**: avviso all'autore per le voci che nessuno prende in carico entro un giorno e solleciti delle attese nel promemoria del mattino; pulsanti del flusso su Telegram; conteggio di voci aperte, in attesa e ferme nella mappa dei reparti;.
+
+## 9nonies. Email collegate con le etichette di Gmail (v1.6)
+
+Per portare un'email nell'app basta mettere un'etichetta in Gmail, anche dal telefono. Per ora vale per la casella di G. Sorrentino (collegata a n8n).
+
+**Etichette in Gmail** (si creano a mano, sotto un'etichetta madre «Conf»):
+- **temi**, con il nome dei temi dell'app: `Conf/Acquisti`, `Conf/Vendita`, `Conf/Tecnico`, `Conf/Cantiere`… → temi della nota o della voce (e reparti);
+- **cosa farne**: `Conf/Da fare` (cosa da fare), `Conf/Attesa risposta` (voce in attesa: di chi deve rispondere, con il sollecito), `Conf/Riunione` (appuntamento);
+- **di servizio, le mette n8n**: `Conf/In app` (passata all'app) e `Conf/Non entrata` (l'app non l'ha presa: vedi le esecuzioni di n8n). Vanno create anche queste.
+
+**Percorso**: ogni minuto n8n (flusso «Agenda - Etichette Gmail») cerca la prima email con un'etichetta «Conf/…» senza `Conf/In app`, la manda all'app con le etichette e gli allegati e le mette `Conf/In app`. Vale anche per le email vecchie etichettate adesso. L'AI la legge (titolo, riassunto, commessa, giorno); il codice `[TN-…]` nell'oggetto vale più dell'AI per la commessa.
+
+**In arrivo** (prima barra della Home, sotto la mappa): le email da sistemare, con mittente, oggetto, riassunto, commessa, temi e allegati. Pulsanti: *Cosa da fare*, *Aspetto la risposta* (titolo «✉ Attesa risposta · chi — oggetto», così la risposta si riconosce da sola), *Appuntamento*, *Nota*, *È la risposta* (se risponde a una voce in attesa), *Ignora*; quello indicato dall'etichetta è in evidenza. «Correggi» per cambiare titolo, commessa, giorno, ora, per chi e temi prima di scegliere. La stessa email arriva anche su Telegram con gli stessi pulsanti; scelta in un posto, nell'altro risulta già sistemata.
+
+Dati: nessuna migrazione (le proposte stanno in `posta_proposte`, campo `dati`). Server: azione `posta` con `per` (casella) ed `etichette_gmail`; `api/email.ts` azioni `in_arrivo` e `in_arrivo_scelta` per l'app.
+
+**Prossimi passi**: email successive della stessa conversazione legate da sole alla stessa voce o nota; caselle dei colleghi.
 
 ## 10. Decisioni sui punti aperti
 

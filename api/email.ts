@@ -4,6 +4,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { scriviBozza } from './_email.js';
 import { leggiEmail } from './_posta.js';
+import { inArrivo, sceltaPosta } from './agenda.js';
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
@@ -15,10 +16,17 @@ export async function POST(req: Request) {
   const { data: who } = await admin.auth.getUser(token);
   const me = who.user?.email?.toLowerCase();
   if (!me) return json(401, { error: 'Accesso scaduto: esci e rientra.' });
-  const { data: row } = await admin.from('utenti').select('attivo, nome').eq('email', me).maybeSingle();
+  const { data: row } = await admin.from('utenti').select('attivo, nome, ruolo').eq('email', me).maybeSingle();
   if (!row || !row.attivo) return json(403, { error: 'Utente non attivo.' });
 
   const b = await req.json().catch(() => null);
+  // «In arrivo»: email etichettate o inoltrate da sistemare, e la scelta fatta nell'app (stessa logica dei pulsanti Telegram).
+  if (b?.azione === 'in_arrivo' || b?.azione === 'in_arrivo_scelta') {
+    const io = { email: me, nome: row.nome, ruolo: row.ruolo };
+    const oggi = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+    const r: any = b.azione === 'in_arrivo' ? await inArrivo(admin as any, io) : await sceltaPosta(admin as any, { ...b, origine: 'app' }, io, oggi);
+    return r.ok ? json(200, r) : json(400, { error: r.errore });
+  }
   if (b?.azione === 'risposta') {
     const oggi = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' }).format(new Date());
     const l = await leggiEmail({ da: '', oggetto: String(b.oggetto || ''), testo: String(b.testo || '') }, [], oggi);

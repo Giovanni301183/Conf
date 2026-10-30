@@ -3,6 +3,7 @@
   n8n/agenda-chat-telegram.json      chat con l'assistente, pulsanti "Me ne occupo"/"Risolto", /collega e /id
   n8n/agenda-avvisi-riepilogo.json   avviso nel gruppo delle voci nuove (dal database) e riepilogo del mattino
   n8n/agenda-email-gmail.json        email inoltrate all'indirizzo dell'agenda (POSTA): l'AI le propone in privato come appunto, promemoria o riunione
+  n8n/agenda-etichette-gmail.json    email etichettate «Conf/…» in Gmail: vanno in «In arrivo» nell'app (e su Telegram), poi «Conf/In app»
 
 Uso:  python scripts/n8n-flussi.py [indirizzo dell'app]
       (predefinito: anteprima del branch calendario; per la produzione: https://conf-five.vercel.app)
@@ -311,6 +312,50 @@ email = [
 email_conn = {'Email in arrivo': {'main': [to('Impostazioni email')]}, 'Impostazioni email': {'main': [to('Email → app')]},
               'Email → app': {'main': [to('Allegati da caricare')]}, 'Allegati da caricare': {'main': [to('Carica allegato')]}}
 
+# ---------- Flusso 4: email etichettate in Gmail ----------
+# Ogni minuto: le etichette «Conf/…» della casella, la prima email che ne ha una e non ha ancora «Conf/In app» (né «Conf/Non entrata»),
+# all'app con le sue etichette (azione posta con per = la casella: l'email è di chi l'ha etichettata anche se il mittente è esterno).
+# Poi n8n le mette «Conf/In app» (o «Conf/Non entrata» se l'app non l'ha presa): così non si rilegge e in Gmail si vede.
+# Va anche per le email vecchie etichettate adesso (il trigger di Gmail guarda solo le nuove). Una email al minuto, per gli allegati.
+CASELLA = 'g.sorrentino@terranovasrl.net'
+API_PROD = 'https://conf-five.vercel.app/api/agenda'
+ET = "$('Email etichettata').item.json"
+CODICE_RICERCA = r"""// Ricerca Gmail delle email con un'etichetta «Conf/…» non ancora passate all'app, e nomi delle etichette per l'app.
+const ll = $input.all().map(i => i.json);
+const conf = ll.filter(l => /^conf\//i.test(l.name || ''));
+const fatta = conf.find(l => /in app/i.test(l.name)), errore = conf.find(l => /non entrata/i.test(l.name));
+const lab = n => 'label:' + n.toLowerCase().replace(/[\s\/]+/g, '-');
+const nostre = conf.filter(l => l !== fatta && l !== errore);
+if (!fatta || !nostre.length) return [];
+return [{ json: { q: '{' + nostre.map(l => lab(l.name)).join(' ') + '} -' + lab(fatta.name) + (errore ? ' -' + lab(errore.name) : ''),
+  nomi: Object.fromEntries(conf.map(l => [l.id, l.name])), fatta: fatta.id, errore: (errore || fatta).id } }];"""
+CODICE_ALLEGATI_ET = CODICE_ALLEGATI.replace("$('Email in arrivo')", "$('Email etichettata')")
+etichette = [
+    node('Ogni minuto', 'n8n-nodes-base.scheduleTrigger', 1.2, [0, 200], {'rule': {'interval': [{'field': 'minutes', 'minutesInterval': 1}]}}),
+    node('Etichette Gmail', 'n8n-nodes-base.gmail', 2.1, [220, 200], {'resource': 'label', 'returnAll': True}, GMAIL),
+    node('Ricerca etichette', 'n8n-nodes-base.code', 2, [440, 200], {'jsCode': CODICE_RICERCA}),
+    node('Email etichettata', 'n8n-nodes-base.gmail', 2.1, [660, 200], {'operation': 'getAll', 'limit': 1, 'simple': False,
+         'filters': {'q': '={{ $json.q }}'}, 'options': {'downloadAttachments': True, 'dataPropertyAttachmentsPrefixName': 'attachment_'}}, GMAIL),
+    node('Impostazioni etichette', 'n8n-nodes-base.set', 3.4, [880, 200], {'assignments': {'assignments': [
+        {'id': U(), 'name': 'url', 'type': 'string', 'value': API_PROD}, {'id': U(), 'name': 'casella', 'type': 'string', 'value': CASELLA}]},
+        'includeOtherFields': True, 'options': {}}),
+    http('Etichettata → app', [1100, 200], "{ azione: 'posta', per: $('Impostazioni etichette').item.json.casella, gmail_id: " + ET + ".id, thread_id: " + ET + ".threadId || '', da: "
+         + ET + ".from?.value?.[0]?.address || " + ET + ".from?.text || '', a: " + ET + ".to?.value?.[0]?.address || '', oggetto: " + ET + ".subject || '', testo: "
+         + ET + ".text || '', data: " + ET + ".date || '', etichette_gmail: (" + ET + ".labelIds || []).map(id => $('Ricerca etichette').item.json.nomi[id]).filter(Boolean), allegati: "
+         + ALLEGATI.replace("$('Email in arrivo')", "$('Email etichettata')") + " }", url="={{ $('Impostazioni etichette').item.json.url }}"),
+    node('Segna in Gmail', 'n8n-nodes-base.gmail', 2.1, [1320, 100], {'operation': 'addLabels', 'messageId': "={{ " + ET + ".id }}",
+         'labelIds': "={{ $json.ok ? $('Ricerca etichette').item.json.fatta : $('Ricerca etichette').item.json.errore }}"}, GMAIL),
+    node('Allegati etichettata', 'n8n-nodes-base.code', 2, [1320, 300], {'jsCode': CODICE_ALLEGATI_ET}),
+    node('Carica allegato etichettata', 'n8n-nodes-base.httpRequest', 4.2, [1540, 300], {'method': 'PUT', 'url': '={{ $json.url }}', 'sendHeaders': True,
+         'headerParameters': {'parameters': [{'name': 'content-type', 'value': '={{ $json.mime }}'}, {'name': 'apikey', 'value': '={{ $json.apikey }}'},
+                                             {'name': 'x-upsert', 'value': 'false'}]},
+         'sendBody': True, 'contentType': 'binaryData', 'inputDataFieldName': 'data', 'options': {}}),
+]
+etichette_conn = {'Ogni minuto': {'main': [to('Etichette Gmail')]}, 'Etichette Gmail': {'main': [to('Ricerca etichette')]},
+                  'Ricerca etichette': {'main': [to('Email etichettata')]}, 'Email etichettata': {'main': [to('Impostazioni etichette')]},
+                  'Impostazioni etichette': {'main': [to('Etichettata → app')]}, 'Etichettata → app': {'main': [to('Segna in Gmail', 'Allegati etichettata')]},
+                  'Allegati etichettata': {'main': [to('Carica allegato etichettata')]}}
+
 SETTINGS = {'executionOrder': 'v1', 'timezone': 'Europe/Rome'}
 # Copia pronta da importare con il codice di bypass di .env.local (VERCEL_BYPASS): va in n8n/da-importare/, esclusa da GitHub.
 try:
@@ -322,7 +367,8 @@ for cartella, sost in [('n8n', None), (os.path.join('n8n', 'da-importare'), BYPA
     os.makedirs(os.path.join(ROOT, cartella), exist_ok=True)
     for nome, nodi, conn, file in [('Agenda - Chat Telegram', chat, chat_conn, 'agenda-chat-telegram.json'),
                                    ('Agenda - Avvisi e riepilogo', avvisi, avvisi_conn, 'agenda-avvisi-riepilogo.json'),
-                                   ('Agenda - Email Gmail', email, email_conn, 'agenda-email-gmail.json')]:
+                                   ('Agenda - Email Gmail', email, email_conn, 'agenda-email-gmail.json'),
+                                   ('Agenda - Etichette Gmail', etichette, etichette_conn, 'agenda-etichette-gmail.json')]:
         t = json.dumps({'name': nome, 'nodes': nodi, 'connections': conn, 'settings': SETTINGS, 'pinData': {}}, ensure_ascii=False, indent=1)
         with open(os.path.join(ROOT, cartella, file), 'w', encoding='utf-8') as f:
             f.write(t.replace('INSERISCI_CODICE_BYPASS', sost) if sost else t)

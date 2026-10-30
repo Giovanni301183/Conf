@@ -25,14 +25,17 @@ describe('email in arrivo', () => {
   it('pulsanti: appunto anche senza commessa (libero), riunione solo con data, con i temi', () => {
     const tasti = (m: ReturnType<typeof propostaTelegram>) => m.reply_markup.inline_keyboard.map(r => r[0].callback_data);
     const senza = propostaTelegram('id1', lettura(), null, '2026-10-23');
-    expect(tasti(senza)).toEqual(['pe:id1:a', 'pe:id1:p', 'pe:id1:x']);
-    expect(senza.reply_markup.inline_keyboard[1][0].text).toBe('🔔 Promemoria lun 26/10');
+    expect(tasti(senza)).toEqual(['pe:id1:a', 'pe:id1:f', 'pe:id1:p', 'pe:id1:x']);
+    expect(senza.reply_markup.inline_keyboard[1][0].text).toBe('☑️ Cosa da fare lun 26/10');
+    expect(senza.reply_markup.inline_keyboard[2][0].text).toBe('🔔 Promemoria lun 26/10');
     expect(senza.text).toContain('Commessa: non riconosciuta');
     expect(senza.reply_markup.inline_keyboard[0][0].text).toBe('📝 Appunto');
     expect(propostaTelegram('id1', lettura({ etichette: ['acquisti', 'qualita'] }), null, '2026-10-23').text).toContain('Temi: Acquisti, Qualità e reclami');
     const con = propostaTelegram('id1', lettura({ giorno: '2026-10-30', ora: '10:30', preventivo_id: 'p1' }), 'Ripo Nord (N° 2026/014)', '2026-10-23');
-    expect(tasti(con)).toEqual(['pe:id1:a', 'pe:id1:p', 'pe:id1:r', 'pe:id1:x']);
-    expect(con.reply_markup.inline_keyboard[2][0].text).toBe('📅 Riunione ven 30/10 10:30');
+    expect(tasti(con)).toEqual(['pe:id1:a', 'pe:id1:f', 'pe:id1:p', 'pe:id1:r', 'pe:id1:x']);
+    expect(con.reply_markup.inline_keyboard[3][0].text).toBe('📅 Riunione ven 30/10 10:30');
+    // Email etichettata «Conf/Attesa risposta» in Gmail: c'è anche «Aspetto la risposta».
+    expect(tasti(propostaTelegram('id1', lettura({ gmail: { azione: 't', a: 'rossi@x.it', da_me: true, thread: '' } } as any), null, '2026-10-23'))).toContain('pe:id1:t');
     expect(con.text).toContain('Commessa: Ripo Nord (N° 2026/014)');
     // callback_data di Telegram: massimo 64 byte con un id uuid
     expect(`pe:${'0'.repeat(36)}:a`.length).toBeLessThanOrEqual(64);

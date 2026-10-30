@@ -35,3 +35,18 @@ export function attesaPer<V extends { titolo: string; preventivo_id: string | nu
   return (base.length >= 4 ? vv.find(v => oggettoBase(v.titolo.split(' — ').slice(1).join(' — ')) === base) : undefined)
     || (pid ? vv.find(v => v.preventivo_id === pid) : undefined);
 }
+
+// Etichette di Gmail «Conf/…»: messe a un'email (anche dal telefono), n8n la porta nell'app, in «In arrivo» da sistemare.
+// Le etichette tema (Conf/Acquisti, Conf/Tecnico…) diventano i temi della nota; tre etichette dicono cosa farne:
+// Conf/Da fare = cosa da fare, Conf/Attesa risposta = voce in attesa della risposta, Conf/Riunione = appuntamento.
+// Conf/In app e Conf/Non entrata le mette n8n dopo (non sono temi).
+export const PREFISSO_GMAIL = 'Conf/';
+/** Scelta proposta: f cosa da fare, t in attesa, r riunione, '' nessuna (decide chi la sistema). */
+export type AzioneGmail = '' | 'f' | 't' | 'r';
+const AZIONI_GMAIL: [RegExp, AzioneGmail][] = [[/^da\s*fare$/i, 'f'], [/^attesa(\s+risposta)?$/i, 't'], [/^riunion[ei]$/i, 'r']];
+export function daEtichetteGmail(nomi: string[], pulisci: (v: unknown) => string[]): { temi: string[]; azione: AzioneGmail } {
+  const nostre = nomi.filter(n => n.toLowerCase().startsWith(PREFISSO_GMAIL.toLowerCase())).map(n => n.slice(PREFISSO_GMAIL.length).trim())
+    .filter(n => n && !/in app|non entrata/i.test(n));
+  const azione = nostre.map(n => AZIONI_GMAIL.find(([r]) => r.test(n))?.[1]).find(Boolean) || '';
+  return { temi: pulisci(nostre.filter(n => !AZIONI_GMAIL.some(([r, a]) => r.test(n) && a !== 'r'))), azione };
+}
