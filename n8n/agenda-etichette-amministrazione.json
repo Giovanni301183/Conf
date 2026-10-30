@@ -1,0 +1,570 @@
+{
+ "name": "Agenda - Etichette Gmail amministrazione",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 1
+      }
+     ]
+    }
+   },
+   "id": "c1b467af-c9d8-4ea3-8492-af2810704085",
+   "name": "Ogni minuto (amm.)",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    700
+   ]
+  },
+  {
+   "parameters": {
+    "assignments": {
+     "assignments": [
+      {
+       "id": "c2f9141f-d735-481e-940a-fc8bd808e1ed",
+       "name": "url",
+       "type": "string",
+       "value": "https://conf-five.vercel.app/api/agenda"
+      },
+      {
+       "id": "3281ec99-15bc-429e-891c-3a4cc7ac3add",
+       "name": "casella",
+       "type": "string",
+       "value": "amministrazione@terranovasrl.net"
+      },
+      {
+       "id": "4758f2f9-a906-40a8-b1c4-c06197c22297",
+       "name": "utente",
+       "type": "string",
+       "value": "INSERISCI_EMAIL_COLLEGA_AMMINISTRAZIONE"
+      }
+     ]
+    },
+    "includeOtherFields": true,
+    "options": {}
+   },
+   "id": "8a82543a-205f-4fcb-8c04-1d78ce51c3ad",
+   "name": "Impostazioni etichette (amm.)",
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    200,
+    700
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "label",
+    "returnAll": true
+   },
+   "id": "ce6440fd-db71-4587-ba76-82ff457b622b",
+   "name": "Etichette Gmail (amm.)",
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.1,
+   "position": [
+    400,
+    700
+   ],
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "",
+     "name": "Gmail Amministrazione"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Ricerca Gmail delle email con un'etichetta «Conf/…» non ancora passate all'app (anche vecchie), e nomi delle etichette per l'app.\nconst ll = $input.all().map(i => i.json);\nconst conf = ll.filter(l => /^conf\\//i.test(l.name || ''));\nconst fatta = conf.find(l => /in app/i.test(l.name)), errore = conf.find(l => /non entrata/i.test(l.name));\nconst lab = n => 'label:' + n.toLowerCase().replace(/[\\s\\/]+/g, '-');\nconst cerca = conf.filter(l => l !== fatta && l !== errore);\nif (!fatta || !cerca.length) return [];\nreturn [{ json: { q: '{' + cerca.map(l => lab(l.name)).join(' ') + '} -' + lab(fatta.name) + (errore ? ' -' + lab(errore.name) : ''),\n  nomi: Object.fromEntries(conf.map(l => [l.id, l.name])), fatta: fatta.id, errore: (errore || fatta).id } }];"
+   },
+   "id": "43e3de5a-6b67-4f65-b4bd-010c1f70ac3a",
+   "name": "Ricerca etichette (amm.)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    600,
+    700
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('Impostazioni etichette (amm.)').first().json.url }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ azione: 'fili' }) }}",
+    "options": {}
+   },
+   "id": "41114482-92c6-4e7c-aa79-e51e68d92150",
+   "name": "Fili attivi (amm.)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    800,
+    700
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Agenda - segreto"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "operation": "getAll",
+    "limit": 30,
+    "filters": {
+     "q": "={{ $('Ricerca etichette (amm.)').first().json.q }}"
+    }
+   },
+   "id": "53d0d742-f260-4c66-961b-ae259323ddde",
+   "name": "Email con etichetta (amm.)",
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.1,
+   "position": [
+    1000,
+    700
+   ],
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "",
+     "name": "Gmail Amministrazione"
+    }
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "jsCode": "// Una riga per ogni conversazione legata a una voce aperta (le dà l'app); nessuna = si passa oltre.\nconst ff = $('Fili attivi (amm.)').first().json.fili || [];\nreturn ff.length ? ff.map(t => ({ json: { thread: t } })) : [{ json: { nessuno: true } }];"
+   },
+   "id": "a46b998c-dee7-4fcb-8cb7-58c83f34bfab",
+   "name": "Fili da guardare (amm.)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1200,
+    700
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "conditions": [
+      {
+       "id": "24994b43-7205-4f1d-8bc2-2e74f2309d60",
+       "leftValue": "={{ !$json.nessuno }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "id": "8be91b54-7ce4-4b16-9d6b-493b483535f5",
+   "name": "Ci sono fili? (amm.)",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    1400,
+    700
+   ]
+  },
+  {
+   "parameters": {
+    "resource": "thread",
+    "operation": "get",
+    "threadId": "={{ $json.thread }}",
+    "options": {}
+   },
+   "id": "0a398bbb-67ed-472d-b598-8e0ea8c3d0db",
+   "name": "Messaggi dei fili (amm.)",
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.1,
+   "position": [
+    1600,
+    600
+   ],
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "",
+     "name": "Gmail Amministrazione"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Tutte le email trovate (etichettate e delle conversazioni legate), con conversazione e data, per chiedere all'app quali leggere.\nconst ms = m => Number(m.internalDate) || Date.parse(m.date || (m.headers && m.headers.date) || (((m.payload && m.payload.headers) || []).find(h => /^date$/i.test(h.name)) || {}).value || '') || 0;\nconst piatti = xs => xs.flatMap(x => Array.isArray(x.messages) ? x.messages : [x]);\nlet tutti = $('Email con etichetta (amm.)').all().map(i => i.json);\ntry { tutti = tutti.concat(piatti($('Messaggi dei fili (amm.)').all().map(i => i.json))); } catch (e) {}\nreturn [{ json: { email: tutti.filter(m => m && m.id).map(m => ({ id: m.id, thread: m.threadId || '', data: ms(m) })) } }];"
+   },
+   "id": "1af6ead8-49d8-4213-847b-9bf53e961f4d",
+   "name": "Raccogli (amm.)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1800,
+    700
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('Impostazioni etichette (amm.)').first().json.url }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ azione: 'posta_nuove', email: $json.email }) }}",
+    "options": {}
+   },
+   "id": "7ef06ab8-b93c-4f7b-b247-0e29cd6d3dce",
+   "name": "Quali leggere (amm.)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    2000,
+    700
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Agenda - segreto"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Una email al minuto, la più vecchia da leggere (così gli allegati vanno con la loro email).\nconst ids = $input.first().json.ids || [];\nreturn ids.length ? [{ json: { id: ids[0] } }] : [];"
+   },
+   "id": "6ba6fb23-fff1-456d-81b3-019cf7a2abc0",
+   "name": "Prima da leggere (amm.)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2200,
+    700
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "get",
+    "messageId": "={{ $json.id }}",
+    "simple": false,
+    "options": {
+     "downloadAttachments": true,
+     "dataPropertyAttachmentsPrefixName": "attachment_"
+    }
+   },
+   "id": "748103a9-78d8-4618-a38c-82d792e9fe12",
+   "name": "Email etichettata (amm.)",
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.1,
+   "position": [
+    2400,
+    700
+   ],
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "",
+     "name": "Gmail Amministrazione"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ $('Impostazioni etichette (amm.)').first().json.url }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ azione: 'posta', per: $('Impostazioni etichette (amm.)').first().json.utente || $('Impostazioni etichette (amm.)').first().json.casella, casella: $('Impostazioni etichette (amm.)').first().json.casella, gmail_id: $('Email etichettata (amm.)').first().json.id, thread_id: $('Email etichettata (amm.)').first().json.threadId || '', da: $('Email etichettata (amm.)').first().json.from?.value?.[0]?.address || $('Email etichettata (amm.)').first().json.from?.text || '', a: $('Email etichettata (amm.)').first().json.to?.value?.[0]?.address || '', oggetto: $('Email etichettata (amm.)').first().json.subject || '', testo: $('Email etichettata (amm.)').first().json.text || '', data: $('Email etichettata (amm.)').first().json.date || '', data_ms: Number($('Email etichettata (amm.)').first().json.internalDate) || 0, etichette_gmail: ($('Email etichettata (amm.)').first().json.labelIds || []).map(id => $('Ricerca etichette (amm.)').first().json.nomi[id]).filter(Boolean), allegati: Object.entries($('Email etichettata (amm.)').first().binary || {}).map(([k, f]) => ({ chiave: k, nome: f.fileName || k, mime: f.mimeType || '', peso: f.fileSize || '' })) }) }}",
+    "options": {}
+   },
+   "id": "d0633f9c-2a3c-4542-a7bb-e4c8b8bfb6c8",
+   "name": "Etichettata → app (amm.)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    2600,
+    700
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Agenda - segreto"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "resource": "thread",
+    "operation": "addLabels",
+    "threadId": "={{ $('Email etichettata (amm.)').first().json.threadId }}",
+    "labelIds": "={{ $json.ok ? $('Ricerca etichette (amm.)').first().json.fatta : $('Ricerca etichette (amm.)').first().json.errore }}"
+   },
+   "id": "1d3824a9-d144-4ec2-beaf-dce247314ead",
+   "name": "Segna in Gmail (amm.)",
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.1,
+   "position": [
+    2800,
+    600
+   ],
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "",
+     "name": "Gmail Amministrazione"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Un elemento per ogni allegato da caricare, con il suo file preso dall'email.\nconst file = $('Email etichettata (amm.)').first().binary || {};\nconst r = $input.first().json;\nreturn (r.ok && r.caricamenti ? r.caricamenti : []).filter(c => file[c.chiave]).map(c => ({ json: c, binary: { data: file[c.chiave] } }));"
+   },
+   "id": "445a9543-32d0-434d-9d23-a58cc5791be8",
+   "name": "Allegati etichettata (amm.)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2800,
+    800
+   ]
+  },
+  {
+   "parameters": {
+    "method": "PUT",
+    "url": "={{ $json.url }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "content-type",
+       "value": "={{ $json.mime }}"
+      },
+      {
+       "name": "apikey",
+       "value": "={{ $json.apikey }}"
+      },
+      {
+       "name": "x-upsert",
+       "value": "false"
+      }
+     ]
+    },
+    "sendBody": true,
+    "contentType": "binaryData",
+    "inputDataFieldName": "data",
+    "options": {}
+   },
+   "id": "26928f9d-e7c5-4abd-8f58-4d5e418a5203",
+   "name": "Carica allegato etichettata (amm.)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    3000,
+    800
+   ]
+  }
+ ],
+ "connections": {
+  "Ogni minuto (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Impostazioni etichette (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Impostazioni etichette (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Etichette Gmail (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Etichette Gmail (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Ricerca etichette (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ricerca etichette (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Fili attivi (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Fili attivi (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Email con etichetta (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Email con etichetta (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Fili da guardare (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Fili da guardare (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Ci sono fili? (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ci sono fili? (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Messaggi dei fili (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Raccogli (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Messaggi dei fili (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Raccogli (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Raccogli (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Quali leggere (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Quali leggere (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Prima da leggere (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Prima da leggere (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Email etichettata (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Email etichettata (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Etichettata → app (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Etichettata → app (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Segna in Gmail (amm.)",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Allegati etichettata (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Allegati etichettata (amm.)": {
+   "main": [
+    [
+     {
+      "node": "Carica allegato etichettata (amm.)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "Europe/Rome"
+ },
+ "pinData": {}
+}

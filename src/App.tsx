@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useToastState } from './components/ui';
 import { eur, fN } from './domain/format';
 import { R, S, TABS, commit, useStore, type Tab } from './store/state';
@@ -100,20 +100,25 @@ export default function App() {
   // In Home, nell'archivio e nei settori in sviluppo la barra in alto non mostra preventivo e valori: restano la ricerca e, sugli schermi stretti, il menu.
   const home = S.ui.tab === 'archivio' || S.ui.tab === 'prev' || (passo && !pronta);
   const mini = S.ui.mini && !menu;   // sul telefono il menu a scomparsa è sempre intero
+  // menu stretto: passandoci sopra col mouse si apre intero sopra la pagina, uscendo torna a icone
+  const [peek, setPeek] = useState(false), tPeek = useRef(0);
+  const sm = mini && !peek;
   const dirty = isDirty(), nSc = cloud.fase === 'pronto' || cloud.fase === 'locale' ? nScadute() : 0;
   return (
     <div className={`app${mini ? ' mini' : ''}`}>
       {menu && <div className="scrim" onClick={() => setMenu(false)} />}
-      <aside className={`side ${menu ? 'open' : ''}${mini ? ' mini' : ''}`}>
-        <div className="brand">{!mini && <img src="/logo-terranova.png" alt="Terranova" />}
-          <button className="sidetog noprint" onClick={miniTog} title={mini ? 'Allarga il menu' : 'Stringi il menu (solo icone), per avere più spazio'} aria-label={mini ? 'Allarga il menu' : 'Stringi il menu'}>
+      <aside className={`side ${menu ? 'open' : ''}${sm ? ' mini' : ''}${mini && peek ? ' peek' : ''}`}
+        onMouseEnter={() => { if (mini) tPeek.current = window.setTimeout(() => setPeek(true), 150); }}
+        onMouseLeave={() => { clearTimeout(tPeek.current); setPeek(false); }}>
+        <div className="brand">{!sm && <img src="/logo-terranova.png" alt="Terranova" />}
+          <button className="sidetog noprint" onClick={() => { setPeek(false); miniTog(); }} title={mini ? 'Allarga il menu' : 'Stringi il menu (solo icone), per avere più spazio'} aria-label={mini ? 'Allarga il menu' : 'Stringi il menu'}>
             <Ico d={mini ? 'M13 6l6 6-6 6M5 6l6 6-6 6' : 'M11 6l-6 6 6 6M19 6l-6 6 6 6'} /></button></div>
         <nav>
           <div className="ng">
             {(['archivio', 'prev', 'fatte'] as Tab[]).map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} title={LABEL[k]} onClick={() => { setMenu(false); goTab(k); }}><Ico d={ICON[k]} /><span>{LABEL[k]}</span>
               {k === 'archivio' && nSc > 0 && <em className="nbadge" title={`${nSc} voci in agenda scadute`}>{nSc}</em>}</button>)}
           </div>
-          {mini ? <div className="ng">
+          {sm ? <div className="ng">
             <button className="nsig" onClick={cambiaSettore} title={`${set.nome}: clic per cambiare settore`}>{set.nome.slice(0, 2).toUpperCase()}</button>
             {PASSI.map(k => <button key={k} className={S.ui.tab === k ? 'on' : ''} title={`${set.nome} · ${LABEL[k]}`} onClick={() => goTab(k, set.k)}><Ico d={ICON[k]} /><span>{LABEL[k]}</span></button>)}
           </div> : <div className="ng">

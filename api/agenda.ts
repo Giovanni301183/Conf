@@ -430,13 +430,15 @@ async function postaInArrivo(db: Db, b: any, oggi: string) {
   if (!u || !u.attivo) return fail(`${per || da || 'Il mittente'} non è un utente attivo dell'app: email ignorata.`);
   if (!per && !token) return fail('Sul server manca TELEGRAM_BOT_TOKEN.');
   if (!per && !u.telegram_id) return fail(`${da} non ha collegato Telegram: non so dove mandargli la proposta.`);
+  // casella = indirizzo della casella Gmail (amministrazione…), se diverso dall'utente dell'app che riceve la proposta: serve a riconoscere le email mandate da lì.
+  const box = indirizzo(String(b.casella ?? '')) || per;
   const g = daEtichetteGmail(Array.isArray(b.etichette_gmail) ? b.etichette_gmail.map(String) : [], pulisciEtichette);
   // La stessa email riletta da n8n non fa una seconda proposta.
   if (gid && (await db.from('posta_proposte').select('id').eq('gmail_id', gid).maybeSingle()).data) return { ok: true, doppia: true };
   // Conversazione già legata a una voce o a una nota (tabella posta_fili): l'email entra da sola, senza proposta (vedi attaccaAlFilo).
   const thread = per ? String(b.thread_id ?? '').slice(0, 200) : '', ms = Number(b.data_ms) || Date.parse(String(b.data ?? '')) || Date.now();
   const { data: filo } = thread ? await db.from('posta_fili').select('thread, scadenza_id, nota_id, contatto, ultimo').eq('thread', thread).maybeSingle() : { data: null };
-  const contatto = per && da === per ? indirizzo(String(b.a ?? '')) : da;
+  const contatto = per && da === box ? indirizzo(String(b.a ?? '')) : da;
   const { data: cc } = await db.from('preventivi').select('id, nome, cliente, rif, num:prev->>num').order('salvato', { ascending: false }).limit(300);
   const commesse = (cc || []) as Commessa[];
   const l = await leggiEmail({ da: String(b.da ?? ''), oggetto, testo: String(b.testo ?? ''), data: String(b.data ?? '') }, commesse, oggi);
@@ -457,7 +459,7 @@ async function postaInArrivo(db: Db, b: any, oggi: string) {
   const dati: Proposta = { ...l, oggetto, link: linkRiunione(String(b.testo ?? '')), allegati: scelti.map(({ chiave, ...a }) => a),
     ...(att ? { attesa: { id: att.id, titolo: att.titolo }, preventivo_id: l.preventivo_id || att.preventivo_id || '' } : {}),
     ...(g.temi.length ? { etichette: g.temi } : {}), ...(filoSugg.length ? { filo: filoSugg } : {}),
-    ...(per ? { gmail: { azione: g.azione, a: indirizzo(String(b.a ?? '')), da_me: da === per, thread, da, ms } } : {}) };
+    ...(per ? { gmail: { azione: g.azione, a: indirizzo(String(b.a ?? '')), da_me: da === box, thread, da, ms } } : {}) };
   if (filo) return attaccaAlFilo(db, filo as Filo, dati, scelti, String(b.testo ?? ''), { email: u.email, telegram_id: u.telegram_id }, gid, contatto, oggi);
   const { data: p, error } = await db.from('posta_proposte').insert({ email: u.email, gmail_id: gid, dati }).select('id').single();
   if (error) return error.code === '23505' ? { ok: true, doppia: true } : fail(error.message);

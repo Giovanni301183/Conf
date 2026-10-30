@@ -413,6 +413,7 @@ table.arch td input{width:100%;max-width:260px}
 .sidetog:hover{background:rgba(255,255,255,.08);color:#fff}
 .app.mini{grid-template-columns:60px minmax(0,1fr)}
 .side.mini{padding:12px 6px}
+.app.mini .side.peek{width:196px;z-index:30;box-shadow:8px 0 32px rgba(0,0,0,.25)}
 .side.mini .brand{justify-content:center;padding:0 0 10px}
 .side.mini .sidetog{margin:0}
 .side.mini nav button{justify-content:center;padding:8px 0;position:relative}

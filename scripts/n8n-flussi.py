@@ -340,6 +340,10 @@ email_conn = {'Email in arrivo': {'main': [to('Impostazioni email')]}, 'Impostaz
 # Poi n8n mette «Conf/In app» (o «Conf/Non entrata» se l'app non l'ha presa) a tutta la conversazione: le sue email non tornano nella ricerca,
 # e le risposte che arrivano dopo le prende la lettura delle conversazioni legate.
 CASELLA = 'g.sorrentino@terranovasrl.net'
+# Seconda casella con le stesse etichette: quella dell'amministrazione. Le etichette le mette il collega che la gestisce e le email vanno
+# nel suo «In arrivo» (utente dell'app UTENTE_AMM), da dove sceglie per chi è il promemoria. Gmail con la sua credenziale «Gmail Amministrazione».
+CASELLA_AMM = 'amministrazione@terranovasrl.net'
+UTENTE_AMM = 'INSERISCI_EMAIL_COLLEGA_AMMINISTRAZIONE'
 ET = "$('Email etichettata').first().json"
 IMP = "$('Impostazioni etichette').first().json"
 CODICE_RICERCA = r"""// Ricerca Gmail delle email con un'etichetta «Conf/…» non ancora passate all'app (anche vecchie), e nomi delle etichette per l'app.
@@ -375,7 +379,8 @@ def gmail(name, pos, params, **extra):
 etichette = [
     node('Ogni minuto', 'n8n-nodes-base.scheduleTrigger', 1.2, [0, 200], {'rule': {'interval': [{'field': 'minutes', 'minutesInterval': 1}]}}),
     node('Impostazioni etichette', 'n8n-nodes-base.set', 3.4, [200, 200], {'assignments': {'assignments': [
-        {'id': U(), 'name': 'url', 'type': 'string', 'value': API}, {'id': U(), 'name': 'casella', 'type': 'string', 'value': CASELLA}]},
+        {'id': U(), 'name': 'url', 'type': 'string', 'value': API}, {'id': U(), 'name': 'casella', 'type': 'string', 'value': CASELLA},
+        {'id': U(), 'name': 'utente', 'type': 'string', 'value': CASELLA}]},
         'includeOtherFields': True, 'options': {}}),
     gmail('Etichette Gmail', [400, 200], {'resource': 'label', 'returnAll': True}),
     node('Ricerca etichette', 'n8n-nodes-base.code', 2, [600, 200], {'jsCode': CODICE_RICERCA}),
@@ -391,7 +396,7 @@ etichette = [
     node('Prima da leggere', 'n8n-nodes-base.code', 2, [2200, 200], {'jsCode': CODICE_PRIMA}),
     gmail('Email etichettata', [2400, 200], {'operation': 'get', 'messageId': '={{ $json.id }}', 'simple': False,
           'options': {'downloadAttachments': True, 'dataPropertyAttachmentsPrefixName': 'attachment_'}}),
-    http('Etichettata → app', [2600, 200], "{ azione: 'posta', per: " + IMP + ".casella, gmail_id: " + ET + ".id, thread_id: " + ET + ".threadId || '', da: "
+    http('Etichettata → app', [2600, 200], "{ azione: 'posta', per: " + IMP + ".utente || " + IMP + ".casella, casella: " + IMP + ".casella, gmail_id: " + ET + ".id, thread_id: " + ET + ".threadId || '', da: "
          + ET + ".from?.value?.[0]?.address || " + ET + ".from?.text || '', a: " + ET + ".to?.value?.[0]?.address || '', oggetto: " + ET + ".subject || '', testo: "
          + ET + ".text || '', data: " + ET + ".date || '', data_ms: Number(" + ET + ".internalDate) || 0, etichette_gmail: (" + ET
          + ".labelIds || []).map(id => $('Ricerca etichette').first().json.nomi[id]).filter(Boolean), allegati: " + ALLEGATI_ET + " }", url=URL_ET),
@@ -413,6 +418,22 @@ etichette_conn = {'Ogni minuto': {'main': [to('Impostazioni etichette')]}, 'Impo
                   'Allegati etichettata': {'main': [to('Carica allegato etichettata')]}}
 
 
+# Copia per la casella dell'amministrazione: stessi nodi con « (amm.)» nel nome (nel flusso completo i nomi devono essere unici).
+def copia_amm(nodi, conn):
+    nomi = sorted((n['name'] for n in nodi), key=len, reverse=True)
+    t = json.dumps({'n': nodi, 'c': conn}, ensure_ascii=False)
+    for k in nomi: t = t.replace(json.dumps(k, ensure_ascii=False)[1:-1], k + ' (amm.)')
+    t = t.replace(' (amm.) (amm.)', ' (amm.)').replace('"Gmail Agenda"', '"Gmail Amministrazione"')
+    d = json.loads(t)
+    for n in d['n']:
+        n['id'] = U(); n['position'] = [n['position'][0], n['position'][1] + 500]
+        if n['name'] == 'Impostazioni etichette (amm.)':
+            for a in n['parameters']['assignments']['assignments']:
+                a['id'] = U(); a['value'] = {'casella': CASELLA_AMM, 'utente': UTENTE_AMM}.get(a['name'], a['value'])
+    return d['n'], d['c']
+etichette_amm, etichette_amm_conn = copia_amm(etichette, etichette_conn)
+
+
 SETTINGS = {'executionOrder': 'v1', 'timezone': 'Europe/Rome'}
 # Copia pronta da importare con il codice di bypass di .env.local (VERCEL_BYPASS): va in n8n/da-importare/, esclusa da GitHub.
 try:
@@ -425,7 +446,8 @@ for cartella, sost in [('n8n', None), (os.path.join('n8n', 'da-importare'), BYPA
     for nome, nodi, conn, file in [('Agenda - Chat Telegram', chat, chat_conn, 'agenda-chat-telegram.json'),
                                    ('Agenda - Avvisi e riepilogo', avvisi, avvisi_conn, 'agenda-avvisi-riepilogo.json'),
                                    ('Agenda - Email Gmail', email, email_conn, 'agenda-email-gmail.json'),
-                                   ('Agenda - Etichette Gmail', etichette, etichette_conn, 'agenda-etichette-gmail.json')]:
+                                   ('Agenda - Etichette Gmail', etichette, etichette_conn, 'agenda-etichette-gmail.json'),
+                                   ('Agenda - Etichette Gmail amministrazione', etichette_amm, etichette_amm_conn, 'agenda-etichette-amministrazione.json')]:
         t = json.dumps({'name': nome, 'nodes': nodi, 'connections': conn, 'settings': SETTINGS, 'pinData': {}}, ensure_ascii=False, indent=1)
         with open(os.path.join(ROOT, cartella, file), 'w', encoding='utf-8') as f:
             f.write(t.replace('INSERISCI_CODICE_BYPASS', sost) if sost else t)
@@ -449,7 +471,9 @@ if SEGRETO and BYPASS:
     for n in em: n['position'] = [n['position'][0], n['position'][1] + 1650]
     et = json.loads(json.dumps(etichette))
     for n in et: n['position'] = [n['position'][0], n['position'][1] + 2150]
-    tutti = json.loads(json.dumps(chat)) + av + em + et
+    ea = json.loads(json.dumps(etichette_amm))
+    for n in ea: n['position'] = [n['position'][0], n['position'][1] + 2150]
+    tutti = json.loads(json.dumps(chat)) + av + em + et + ea
     for n in tutti:
         p = n['parameters']
         if p.get('authentication') == 'genericCredentialType':   # richieste all'app: segreto nell'intestazione
@@ -460,7 +484,7 @@ if SEGRETO and BYPASS:
             p['authentication'] = 'none'; n.pop('credentials', None)
         if n['name'] == 'È un inserimento?':
             n['parameters'] = cond(f"$json.headers['x-agenda-secret'] === '{SEGRETO}' && $json.body.type === 'INSERT' && !!$json.body.record?.id")
-    t = json.dumps({'name': 'Agenda Terranova - Telegram', 'nodes': tutti, 'connections': {**chat_conn, **av_conn, **email_conn, **etichette_conn}, 'settings': SETTINGS, 'pinData': {}},
+    t = json.dumps({'name': 'Agenda Terranova - Telegram', 'nodes': tutti, 'connections': {**chat_conn, **av_conn, **email_conn, **etichette_conn, **etichette_amm_conn}, 'settings': SETTINGS, 'pinData': {}},
                    ensure_ascii=False, indent=1).replace('INSERISCI_CODICE_BYPASS', BYPASS)
     with open(os.path.join(ROOT, 'n8n', 'da-importare', 'agenda-completo.json'), 'w', encoding='utf-8') as f: f.write(t)
     print('Scritto n8n/da-importare/agenda-completo.json (flusso unico, con segreto e bypass)')
@@ -487,3 +511,9 @@ if SEGRETO and BYPASS:
     with open(os.path.join(ROOT, 'n8n', 'da-importare', 'incolla-etichette-gmail.json'), 'w', encoding='utf-8') as f:
         f.write(json.dumps(pezzo, ensure_ascii=False, indent=1))
     print('Scritto n8n/da-importare/incolla-etichette-gmail.json (blocco delle etichette Gmail da incollare nel flusso)')
+    # Stesso blocco per la casella dell'amministrazione, da incollare nel flusso attivo accanto a quello delle etichette.
+    nomi = [n['name'] for n in etichette_amm]
+    pezzo = {'nodes': [n for n in tutti if n['name'] in nomi], 'connections': {k: v for k, v in etichette_amm_conn.items() if k in nomi}}
+    with open(os.path.join(ROOT, 'n8n', 'da-importare', 'incolla-etichette-amministrazione.json'), 'w', encoding='utf-8') as f:
+        f.write(json.dumps(pezzo, ensure_ascii=False, indent=1))
+    print('Scritto n8n/da-importare/incolla-etichette-amministrazione.json (etichette Gmail della casella amministrazione da incollare nel flusso)')

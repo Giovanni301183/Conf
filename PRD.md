@@ -418,7 +418,7 @@ Dati: migrazione `20261030040000_flusso_voci.sql` — colonne `stato`, `esito`, 
 
 ## 9nonies. Email collegate con le etichette di Gmail (v1.6)
 
-Per portare un'email nell'app basta mettere un'etichetta in Gmail, anche dal telefono. Per ora vale per la casella di G. Sorrentino (collegata a n8n).
+Per portare un'email nell'app basta mettere un'etichetta in Gmail, anche dal telefono. Vale per la casella di G. Sorrentino e per quella dell'amministrazione (amministrazione@terranovasrl.net, flusso «(amm.)» con la credenziale «Gmail Amministrazione»): lì le etichette le mette il collega che la gestisce, le email vanno nel suo «In arrivo» (campo `utente` nel nodo Impostazioni) e da lì sceglie per chi è il promemoria. Al server arrivano `per` (utente dell'app) e `casella` (indirizzo Gmail, per riconoscere le email mandate da lì).
 
 **Etichette in Gmail** (si creano a mano, sotto un'etichetta madre «Conf»):
 - **temi**, con il nome dei temi dell'app: `Conf/Acquisti`, `Conf/Vendita`, `Conf/Tecnico`, `Conf/Cantiere`… → temi della nota o della voce (e reparti);
