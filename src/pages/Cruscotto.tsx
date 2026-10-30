@@ -5,6 +5,7 @@ import { MESI, anni, eAnno, eCliente, eData, eStato, filtra, perCliente, perMese
 import { STATI, num, statoOf } from '../domain/model';
 import { S, commit } from '../store/state';
 import { archOpen, archPatch } from '../store/actions';
+import { Info } from '../components/ui';
 
 const kf = () => S.ui.kf;
 const setF = (k: keyof KFiltro, v: string) => { kf()[k] = kf()[k] === v ? '' : v; commit(); };
@@ -93,8 +94,7 @@ export function Cruscotto() {
 
       <div className="kgrid">
         <section className="card kc wide">
-          <h2>Valore offerto per mese · {f.anno || 'tutti gli anni'}</h2>
-          <p className="hint">Prezzo di vendita per mese della data del preventivo, diviso per stato. Clic su un mese per filtrare.</p>
+          <h2>Valore offerto per mese · {f.anno || 'tutti gli anni'}<Info>Prezzo di vendita per mese della data del preventivo, diviso per stato. Clic su un mese per filtrare.</Info></h2>
           <div className="mbars">
             <div className="yax">{[1, 0.5, 0].map(k => <span key={k}>{kEur(mMax * k)}</span>)}</div>
             <div className="plot">
@@ -115,8 +115,7 @@ export function Cruscotto() {
         </section>
 
         <section className="card kc">
-          <h2>Per stato</h2>
-          <p className="hint">Clic su uno stato per filtrare.</p>
+          <h2>Per stato<Info>Clic su uno stato per filtrare.</Info></h2>
           {stati.map(s => (
             <button key={s.k} className={`hbar ${f.stato === s.k ? 'on' : f.stato ? 'dim' : ''}`} onClick={() => setF('stato', s.k)}
               {...on(<><b>{s.ic} {s.l}</b><TipRow l="Preventivi" v={s.n} /><TipRow l="Valore" v={eur(s.v)} /></>)}>
@@ -128,8 +127,7 @@ export function Cruscotto() {
         </section>
 
         <section className="card kc">
-          <h2>Clienti principali</h2>
-          <p className="hint">Per valore offerto. Clic su un cliente per filtrare.</p>
+          <h2>Clienti principali<Info>Per valore offerto. Clic su un cliente per filtrare.</Info></h2>
           {clienti.length ? clienti.map(c => (
             <button key={c.k} className={`hbar ${f.cliente === c.k ? 'on' : f.cliente ? 'dim' : ''}`} disabled={(c as any).altri} onClick={() => setF('cliente', c.k)}
               {...on(<><b>{c.k}</b><TipRow l="Preventivi" v={c.n} /><TipRow l="Valore" v={eur(c.v)} /><TipRow l="Potenza" v={kPow(c.kwp)} /></>)}>
@@ -144,7 +142,7 @@ export function Cruscotto() {
       </div>
 
       <section className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '18px 24px 6px' }}><h2>Preventivi nel filtro · {list.length}</h2><p className="hint" style={{ marginBottom: 8 }}>I dati dei grafici in tabella, ordinati per valore. Lo stato si cambia da qui.</p></div>
+        <div style={{ padding: '18px 24px 6px' }}><h2>Preventivi nel filtro · {list.length}<Info>I dati dei grafici in tabella, ordinati per valore. Lo stato si cambia da qui.</Info></h2></div>
         <div className="wrap" style={{ border: 0, borderRadius: 0 }}><table className="arch"><tbody>
           <tr><th>Preventivo</th><th>Data</th><th>Stato</th><th className="n">kWp</th><th className="n">Costo</th><th className="n">Prezzo</th><th className="n">Margine</th><th className="n">€/Wp</th><th></th></tr>
           {[...list].sort((a, b) => num(b.prezzo) - num(a.prezzo)).map(e => {
@@ -173,8 +171,7 @@ function Scatter({ list, on }: { list: any[]; on: (b: ReactNode) => any }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <section className="card kc">
-      <h2>€/Wp e potenza</h2>
-      <p className="hint">Ogni punto è un preventivo: più a destra è grande, più in alto costa al Wp. Clic su un punto per aprirlo.</p>
+      <h2>€/Wp e potenza<Info>Ogni punto è un preventivo: più a destra è grande, più in alto costa al Wp. Clic su un punto per aprirlo.</Info></h2>
       <div ref={ref} className="scat">
         {pts.length ? (
           <svg width={w} height={H} role="img" aria-label="Dispersione kWp contro €/Wp di vendita">

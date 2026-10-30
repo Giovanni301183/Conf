@@ -1,6 +1,6 @@
 // Scheda Montaggio: computo, Gantt di cantiere e listino montaggio. Separata dal costo del preventivo.
 import { useState, type ReactNode } from 'react';
-import { Fold, Inp, TabTools } from '../components/ui';
+import { Fold, Inp, TabTools, Info } from '../components/ui';
 import { GHint, GanttFold } from '../components/Gantt';
 import { downloadMontXlsx } from '../domain/excel';
 import { eur, fN, fQ, vN } from '../domain/format';
@@ -30,8 +30,6 @@ function MontList() {
   const del = (i: number) => { const x = M.voci[i]; if (!confirm(`Eliminare la voce "${x.c} ${x.d}" dal listino montaggio?`)) return; M.voci.splice(i, 1); done(); };
   const reset = () => { if (!confirm('Ripristinare il listino montaggio predefinito? Prezzi, parametri del cantiere e voci aggiunte andranno persi.')) return; S.data.mont = defMont(); done(); };
   return <>
-    <p className="hint">Prezzi unitari di <b>fornitura</b> e di <b>posa</b>, uguali per tutti i preventivi: lascia vuoto dove non serve. <b>Quantità</b> = formula sui dati della configurazione (vuota = la scrivi nel computo del preventivo).
-      Puoi usare: {MDRV.map(([k, l], i) => <span key={k}>{i ? ' · ' : ''}<code>{k}</code> {l}</span>)}. Esempi: <code>PALI</code>, <code>T36</code>, <code>GG*SQ</code>, <code>1</code> (a corpo).</p>
     <datalist id="mgr">{gs.map(g => <option key={g} value={g} />)}</datalist>
     <div className="wrap"><table className="rows"><tbody>
       <tr><th>Gruppo</th><th>Codice</th><th>Descrizione</th><th>U.M.</th><th>Quantità</th><th className="n">Fornitura €/u</th><th className="n">Posa €/u</th><th></th></tr>
@@ -55,13 +53,12 @@ export function Montaggio() {
   return (
     <>
       <div className="card head"><div className="headrow">
-        <div><h2>Montaggio</h2>
-          <p className="hint" style={{ margin: 0 }}>Computo e pianificazione del cantiere, dalla progettazione al collaudo. È separato dal preventivo: non entra nel costo totale né nel prezzo di vendita.</p></div>
+        <div><h2>Montaggio<Info>Computo e pianificazione del cantiere, dalla progettazione al collaudo. È separato dal preventivo: non entra nel costo totale né nel prezzo di vendita.</Info></h2></div>
         <span className="sp" />
         <button className="btn" onClick={() => printPage(['mo-comp', 'mo-gantt'])}>Stampa / PDF</button><button className="btn p" onClick={downloadMontXlsx}>Scarica Excel</button>
       </div></div>
       <TabTools />
-      <Fold id="mo-comp" step={1} title="Computo montaggio" cls="pcard"
+      <Fold id="mo-comp" step={1} info={<>Quantità calcolate dalla configurazione, prezzi dal <b>Listino montaggio</b> (tendina 3). Qui li correggi solo per questo preventivo: in grigio il valore calcolato o di listino. Le voci senza prezzo hanno il bordo dorato.</>} title="Computo montaggio" cls="pcard"
         sum={<>{M.rows.filter(r => r.q > 0).length} voci con quantità · fornitura {eur(M.tf)} · posa {eur(M.tp)} · <b>&nbsp;totale {eur(M.tot)}</b>{M.miss ? <>&nbsp;· <span style={{ color: 'var(--warn)' }}>{M.miss} voci senza prezzo</span></> : null}</>}>{() => {
         const rows: ReactNode[] = [];
         for (const g of M.gruppi) {
@@ -80,7 +77,6 @@ export function Montaggio() {
         }
         return <>
           <div className="onlyprint gtitle"><b>Computo montaggio</b> · {commName()} · emesso il {dFmt(dToday())}</div>
-          <p className="hint noprint">Quantità calcolate dalla configurazione, prezzi dal <b>Listino montaggio</b> (tendina 3). Qui li correggi solo per questo preventivo: in grigio il valore calcolato o di listino. Le voci senza prezzo hanno il bordo dorato.</p>
           <div className="wrap"><table className="dl mc"><tbody>
             <tr><th>Codice</th><th>Descrizione</th><th>U.M.</th><th className="n">Q.tà</th><th className="n">Fornitura €/u</th><th className="n">Posa €/u</th><th className="n">Fornitura €</th><th className="n">Posa €</th><th className="n">Totale €</th></tr>
             {rows}
@@ -97,7 +93,8 @@ export function Montaggio() {
         par: { id: 'mo-gpar', title: 'Parametri del cantiere', sum: 'valgono per tutti i preventivi', keys: MPAR as [string, string][], base: 'data.mont.par' },
       }} />
 
-      <Fold id="mo-list" step={3} title="Listino montaggio" sum={`${M.rows.length} voci · ${M.rows.filter(r => opt(r.v.pf) || opt(r.v.pp)).length} con prezzo · valgono per tutti i preventivi`}>{() => <MontList />}</Fold>
+      <Fold id="mo-list" step={3} info={<>Prezzi unitari di <b>fornitura</b> e di <b>posa</b>, uguali per tutti i preventivi: lascia vuoto dove non serve. <b>Quantità</b> = formula sui dati della configurazione (vuota = la scrivi nel computo del preventivo).
+      Puoi usare: {MDRV.map(([k, l], i) => <span key={k}>{i ? ' · ' : ''}<code>{k}</code> {l}</span>)}. Esempi: <code>PALI</code>, <code>T36</code>, <code>GG*SQ</code>, <code>1</code> (a corpo).</>} title="Listino montaggio" sum={`${M.rows.length} voci · ${M.rows.filter(r => opt(r.v.pf) || opt(r.v.pp)).length} con prezzo · valgono per tutti i preventivi`}>{() => <MontList />}</Fold>
     </>
   );
 }

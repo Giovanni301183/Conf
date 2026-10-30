@@ -10,7 +10,7 @@ import { S, commit } from '../store/state';
 import { toast } from '../store/actions';
 import { arrivo, cloud, loadInArrivo, mioEmail, online, sistemaArrivo, type Arrivo } from '../store/remote';
 import { Etq, OpzioniPreventivi } from '../pages/Documenti';
-import { ChevBarra, barraAperta, clicBarra } from './ui';
+import { ChevBarra, barraAperta, clicBarra, Info } from './ui';
 import { Ic } from './Icona';
 
 const scambia = (xx: string[], k: string) => xx.includes(k) ? xx.filter(x => x !== k) : [...xx, k];
@@ -71,9 +71,8 @@ function Email({ a }: { a: Arrivo }) {
         {d.filo?.length ? <span className="small"><Ic n="collega" />Sembra parte di: <b>{d.filo.map(f => f.titolo.replace(ATTESA, '')).join(' · ')}</b></span> : null}
       </div>
       {lega && <div className="cform">
-        <label className="f wide">Aggiungi a quale voce aperta<select value={voce} autoFocus onChange={e => setVoce(e.target.value)}>
+        <label className="f wide"><span>Aggiungi a quale voce aperta<Info>L'email diventa un appunto della voce e le prossime email di questa conversazione entrano da sole.</Info></span><select value={voce} autoFocus onChange={e => setVoce(e.target.value)}>
           <option value="">— scegli —</option>{aperte.map(s => <option key={s.id} value={s.id}>{s.titolo.replace(ATTESA, '')} · {fDate(s.giorno)}</option>)}</select></label>
-        <p className="hint wide" style={{ margin: 0 }}>L'email diventa un appunto della voce e le prossime email di questa conversazione entrano da sole.</p>
         <div className="wide" style={{ display: 'flex', gap: 8 }}>
           <button className="btn p" disabled={!voce || !!busy} onClick={async () => { setBusy('l'); const r = await sistemaArrivo(a.id, 'l', { ...m, voce_id: voce }); setBusy(''); toast(r.errore ? 'Email non collegata: ' + r.errore : r.testo || 'Fatto'); commit(); }}>{busy === 'l' ? 'Salvo…' : 'Aggiungi'}</button>
           <button className="btn" onClick={() => setLega(false)}>Annulla</button>

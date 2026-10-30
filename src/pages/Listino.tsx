@@ -1,6 +1,6 @@
 // Scheda Listino: componenti per categoria, tutti modificabili; sotto-distinte dei quadri.
 import { Fragment, useState } from 'react';
-import { Fold, Inp, SubFold, TabTools } from '../components/ui';
+import { Fold, Inp, SubFold, TabTools, Info } from '../components/ui';
 import { costLine, tot, unitCost } from '../domain/compute';
 import { exportListinoCSV } from '../domain/excel';
 import { download, fN, vN } from '../domain/format';
@@ -129,8 +129,6 @@ function Sostituisci() {
   };
   const opts = D.listino.map(x => <option key={x.c} value={x.c}>{x.art ? `${x.art} — ${x.d} (${x.c})` : `${x.c} — ${x.d}`}</option>);
   return <>
-    <p className="hint">Cambia un codice in tutte le righe delle distinte base che lo usano, per esempio i bulloni del pilastro motore o un profilo. Quantità e formule restano uguali.
-      Vale per i preventivi nuovi; uno già salvato, quando lo riapri, chiede se ricalcolarlo con il listino attuale.</p>
     <div className="wrap"><table><tbody>
       <tr><th>Codice da sostituire</th><th></th><th>Nuovo codice</th><th></th><th></th></tr>
       {cc.map((c, i) => (
@@ -203,7 +201,7 @@ export function Listino() {
   return (
     <>
       <div className="card head"><div className="headrow">
-        <div><h2>Listino componenti</h2><p className="hint" style={{ margin: 0 }}>Ogni valore è modificabile e il preventivo si ricalcola subito. Apri una categoria per vedere le voci.</p></div>
+        <div><h2>Listino componenti<Info>Ogni valore è modificabile e il preventivo si ricalcola subito. Apri una categoria per vedere le voci.</Info></h2></div>
         <span className="sp" />
         <input placeholder="Cerca codice o descrizione…" value={S.ui.filter} onChange={e => onFilter(e.target.value)} style={{ width: 250 }} />
       </div></div>
@@ -218,7 +216,8 @@ export function Listino() {
           <span className="muted">I dati restano salvati in questo browser; "Esporta dati" ne fa una copia.</span>
         </div>
       </>}</Fold>
-      <Fold id="li-sost" title="Sostituisci referenza nelle distinte" sum="Cambia un codice in tutte le distinte base, o solo in alcuni gruppi">{() => <Sostituisci />}</Fold>
+      <Fold id="li-sost" info={<>Cambia un codice in tutte le righe delle distinte base che lo usano, per esempio i bulloni del pilastro motore o un profilo. Quantità e formule restano uguali.
+      Vale per i preventivi nuovi; uno già salvato, quando lo riapri, chiede se ricalcolarlo con il listino attuale.</>} title="Sostituisci referenza nelle distinte" sum="Cambia un codice in tutte le distinte base, o solo in alcuni gruppi">{() => <Sostituisci />}</Fold>
       {CATS.map(cat => {
         const idx = L.map((_, i) => i).filter(i => L[i].cat === cat);
         const types = ['barra', 'pezzo', 'comm'].filter(t => idx.some(i => L[i].t === t));

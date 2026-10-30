@@ -17,14 +17,13 @@ export function Extra() {
   };
   const pr = (i: number) => R.lines.filter(l => l.riga === 'extra')[i]?.prezzo ?? 0;
   return (
-    <Fold id="ex" title="Voci di costo extra" sum={n ? `${n} ${n === 1 ? 'voce' : 'voci'} · ${eur(s)}` : 'Nessuna voce · apri per aggiungere trasporto, montaggio, imballo…'}
+    <Fold id="ex" info={<>"% sul costo" si calcola su {R.settore === 'fisso' ? 'strutture' : 'tracker + impianto'} (senza le altre voci extra). Il tipo di costo decide in quale colonna finisce l'importo.
+        {fisso ? <> Nell'offerta ogni voce va <b>a parte</b>, con la sua riga e il suo prezzo di vendita: non entra nel prezzo delle strutture.</> : null}</>} title="Voci di costo extra" sum={n ? `${n} ${n === 1 ? 'voce' : 'voci'} · ${eur(s)}` : 'Nessuna voce · apri per aggiungere trasporto, montaggio, imballo…'}
       act={<>
         <button className="btn" onClick={() => add('Trasporto')}>+ Trasporto</button><button className="btn" onClick={() => add('Montaggio')}>+ Montaggio</button>
         {fisso && <button className="btn" onClick={() => add('Servizio gru')}>+ Servizio gru</button>}
         <button className="btn" onClick={() => add('Imballo')}>+ Imballo</button><button className="btn p" onClick={() => add('')}>+ Voce libera</button>
       </>}>{() => <>
-      <p className="hint">"% sul costo" si calcola su {R.settore === 'fisso' ? 'strutture' : 'tracker + impianto'} (senza le altre voci extra). Il tipo di costo decide in quale colonna finisce l'importo.
-        {fisso ? <> Nell'offerta ogni voce va <b>a parte</b>, con la sua riga e il suo prezzo di vendita: non entra nel prezzo delle strutture.</> : null}</p>
       {!n ? <div className="empty">Nessuna voce extra. Usa i pulsanti in alto a destra.</div> : (
         <div className="wrap"><table><tbody>
           <tr><th>Descrizione</th><th>Tipo di costo</th><th>Modalità</th><th className="n">Valore</th><th className="n">Importo €</th>{fisso && <th className="n">Prezzo in offerta €</th>}<th></th></tr>

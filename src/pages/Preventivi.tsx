@@ -92,8 +92,7 @@ export function Preventivi() {
         </div></div>
       )}
 
-      <Fold id="ar-file" title="Backup e trasferimento" sum="Esporta tutto l'archivio su file o importa preventivi da file (per altri PC o colleghi)">{() => <>
-        <p className="hint">{cloud.session ? "L'archivio è sul server, condiviso con i colleghi. L'esportazione su file resta utile come copia di sicurezza." : "L'archivio vive nel browser di questo PC. Per sicurezza esportalo ogni tanto su file; il file si importa da qui su un altro PC."}</p>
+      <Fold id="ar-file" info={<>{cloud.session ? "L'archivio è sul server, condiviso con i colleghi. L'esportazione su file resta utile come copia di sicurezza." : "L'archivio vive nel browser di questo PC. Per sicurezza esportalo ogni tanto su file; il file si importa da qui su un altro PC."}</>} title="Backup e trasferimento" sum="Esporta tutto l'archivio su file o importa preventivi da file (per altri PC o colleghi)">{() => <>
         <div className="toolbar"><button className="btn" onClick={archExp}>Esporta tutto l'archivio</button><button className="btn" onClick={() => pickFile('arch')}>Importa da file…</button>
           <span className="muted">Accetta sia l'archivio completo sia un singolo preventivo scaricato.</span></div>
       </>}</Fold>

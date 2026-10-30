@@ -58,8 +58,7 @@ export function Configura() {
         </div>
       )}</Fold>
 
-      <Fold id="cf-mod" step={2} title="Moduli fotovoltaici" sum={`${P.modulo.marca || 'Modulo'} · ${fN(R.wp, 0)} Wp → ${fN(R.kwp, 2)} kWp`}>{() => <>
-        <p className="hint">Il modulo serve solo a calcolare la potenza (kWp) e il €/Wp.</p>
+      <Fold id="cf-mod" step={2} info={<>Il modulo serve solo a calcolare la potenza (kWp) e il €/Wp.</>} title="Moduli fotovoltaici" sum={`${P.modulo.marca || 'Modulo'} · ${fN(R.wp, 0)} Wp → ${fN(R.kwp, 2)} kWp`}>{() => <>
         <div className="grid">
           <label className="f">Marca / modello<Inp path="prev.modulo.marca" type="txt" ph="es. Marca XYZ 600W" /></label>
           <label className="f">Potenza modulo (Wp)<Inp path="prev.modulo.wp" /></label>
@@ -68,7 +67,7 @@ export function Configura() {
         </div>
       </>}</Fold>
 
-      <Fold id="cf-trk" step={3} title="Tracker" sum={rsum} act={<button className="btn p" onClick={addRiga}>+ Aggiungi riga</button>}>{() => <>
+      <Fold id="cf-trk" step={3} info={<>Agrivoltaico = pilastro in 2 pezzi con piastre di giunzione, cuscinetto da 2,30 m · Basso = pilastro unico senza piastre, cuscinetto da 2,80 m · Motore = cuscinetto − 0,08 m.</>} title="Tracker" sum={rsum} act={<button className="btn p" onClick={addRiga}>+ Aggiungi riga</button>}>{() => <>
         <div className="wrap"><table className="rows"><tbody>
           <tr><th>#</th><th>Taglia</th><th className="n">N.</th><th>Tipo</th><th>Pilastri</th><th>Asse</th><th>Omega</th>
             <th>Fondazione</th><th>Cuscinetto</th><th className="n">Motore</th><th className="n">€ / tracker</th><th></th></tr>
@@ -96,11 +95,9 @@ export function Configura() {
             );
           })}
         </tbody></table></div>
-        <p className="hint" style={{ margin: '10px 0 0' }}>Agrivoltaico = pilastro in 2 pezzi con piastre di giunzione, cuscinetto da 2,30 m · Basso = pilastro unico senza piastre, cuscinetto da 2,80 m · Motore = cuscinetto − 0,08 m.</p>
       </>}</Fold>
 
-      <Fold id="cf-imp" step={4} title="Componenti di impianto" sum={`Quadri e centralina meteo · ${fN(nImp, 0)} pezzi`}>{() => <>
-        <p className="hint">Quantità per l'intera commessa: non si moltiplicano per il numero di tracker.</p>
+      <Fold id="cf-imp" step={4} info={<>Quantità per l'intera commessa: non si moltiplicano per il numero di tracker.</>} title="Componenti di impianto" sum={`Quadri e centralina meteo · ${fN(nImp, 0)} pezzi`}>{() => <>
         <div className="grid imps">
           {IMP.map(([k, code]) => { const it = map.get(code); return (
             <label key={k} className="f imp"><span>{it ? it.d : code}<em>{eur(it ? unitCost(it) : 0)} / pz</em></span><Inp path={'prev.imp.' + k} /></label>

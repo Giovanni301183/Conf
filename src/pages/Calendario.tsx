@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { ATTESA, CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, annulliChiesti, aspetto, daConfermare, daFare, daPianificare, fatte, inAttesa, mia, oraBreve, perGiorno, persone, traGiorniLavorativi, voci, vociScadenze, type Genere, type Scadenza, type Voce } from '../domain/calendario';
 import { RINVII_TROPPI, STATI, azioni, intatta, nelFlusso, statoDi, type Stato } from '../domain/flusso';
 import { messaggiDi } from '../domain/squadra';
-import { ChevBarra, Fold, barraAperta, clicBarra } from '../components/ui';
+import { ChevBarra, Fold, barraAperta, clicBarra, Info } from '../components/ui';
 import { StatoSel } from './Cruscotto';
 import { eStato } from '../domain/kpi';
 import { DAY, dDate, dFmt, dToday, isWork, isoDay, monday } from '../domain/plan';
@@ -152,8 +152,7 @@ function Passaggio({ s, passo, chiudi }: { s: Scadenza; passo: Passo; chiudi: ()
       <b className="wide">{titolo}</b>
       {passo === 'attesa' && <>
         <label className="f">Di chi<input value={chi} autoFocus maxLength={120} placeholder="es. fornitore zincatura, cliente, un collega" onChange={e => setChi(e.target.value)} /></label>
-        <label className="f">Sollecitare il<input type="date" value={soll} onChange={e => setSoll(e.target.value)} /></label>
-        <p className="hint wide" style={{ margin: 0 }}>Fino a quel giorno la voce non scade e non lampeggia; poi torna negli allarmi per il sollecito.</p>
+        <label className="f"><span>Sollecitare il<Info>Fino a quel giorno la voce non scade e non lampeggia; poi torna negli allarmi per il sollecito.</Info></span><input type="date" value={soll} onChange={e => setSoll(e.target.value)} /></label>
       </>}
       <label className="f wide">{campo}
         <textarea rows={2} autoFocus={passo !== 'attesa'} value={testo} maxLength={1000} onChange={e => setTesto(e.target.value)}
@@ -486,10 +485,10 @@ export function Calendario({ mappa, sotto }: { mappa?: React.ReactNode; sotto?: 
             <span className="seg"><button className={mese ? 'on' : ''} onClick={() => vista('mese')}>Mese</button><button className={mese ? '' : 'on'} onClick={() => vista('agenda')}>Agenda</button></span>
             {mese && <>
               <button className="btn s" onClick={() => sposta(-1)} aria-label="Mese precedente">‹</button>
-              <h2>{meseNome(ym.y, ym.m)}</h2>
+              <h2>{meseNome(ym.y, ym.m)}<Info>{mese ? 'Clic su un giorno per il dettaglio, doppio clic per aggiungere. ' : ''}Le date delle commesse vengono dal Gantt dei preventivi vinti; il resto si aggiunge a mano, legato o no a un preventivo.</Info></h2>
               <button className="btn s" onClick={() => sposta(1)} aria-label="Mese successivo">›</button>
             </>}
-            {!mese && <h2>Prossimi 30 giorni</h2>}
+            {!mese && <h2>Prossimi 30 giorni<Info>Le date delle commesse vengono dal Gantt dei preventivi vinti; il resto si aggiunge a mano, legato o no a un preventivo.</Info></h2>}
             <button className="btn s" onClick={() => { setYm({ y: t.getUTCFullYear(), m: t.getUTCMonth() }); setSel(oggi); }}>Oggi</button>
             <span className="sp" />
             {cloud.session && <span className="seg"><button className={S.ui.calMie ? '' : 'on'} onClick={() => { S.ui.calMie = false; commit(); }}>Tutte</button>
@@ -503,7 +502,6 @@ export function Calendario({ mappa, sotto }: { mappa?: React.ReactNode; sotto?: 
             {(['prod', 'prodFine', 'mont', 'richiamo'] as const).map(k => <span key={k}><i style={{ background: TIPI[k][1] }} />{TIPI[k][0]}</span>)}
             {Object.entries(GENERI).map(([k, [l, c]]) => <span key={k}><i style={{ background: c }} />{l}</span>)}
           </div>
-          <p className="hint" style={{ margin: '8px 0 0' }}>{mese ? 'Clic su un giorno per il dettaglio, doppio clic per aggiungere. ' : ''}Le date delle commesse vengono dal Gantt dei preventivi vinti; il resto si aggiunge a mano, legato o no a un preventivo.</p>
         </section>
         {mappa && <div className="calmappa">{mappa}</div>}
 
@@ -614,8 +612,7 @@ export function ArchivioAttivita() {
   for (const v of vis) { const d = dDate(v.giorno), k = meseNome(d.getUTCFullYear(), d.getUTCMonth()), a = mesi.get(k); if (a) a.push(v); else mesi.set(k, [v]); }
   return (
     <div className="card">
-      <h2>Archivio attività<span className="tag">{tutte.length} fatt{tutte.length === 1 ? 'a' : 'e'}</span>{S.ui.calMie && <span className="tag">solo le mie</span>}</h2>
-      <p className="hint">Le voci spuntate come fatte escono dal calendario e restano qui. Togli la spunta per rimetterne una in agenda.</p>
+      <h2>Archivio attività<Info>Le voci spuntate come fatte escono dal calendario e restano qui. Togli la spunta per rimetterne una in agenda.</Info><span className="tag">{tutte.length} fatt{tutte.length === 1 ? 'a' : 'e'}</span>{S.ui.calMie && <span className="tag">solo le mie</span>}</h2>
       <div className="toolbar afilt">
         <input type="search" value={q} placeholder="Cerca titolo, nota, commessa, persona…" onChange={e => { setQ(e.target.value); setN(100); }} />
         <select value={anno} onChange={e => setAnno(e.target.value)}><option value="">Tutti gli anni</option>{anni.map(a => <option key={a} value={a}>{a}</option>)}</select>
@@ -651,9 +648,8 @@ export function CosaVedo({ utente, chiudi }: { utente?: Utente; chiudi: () => vo
   );
   return (
     <div className="cvista">
-      <h2>Cosa vedo nel calendario{altrui ? ` · ${nomeDi(email!)}` : ''}<span className="sp" />
+      <h2>Cosa vedo nel calendario{altrui ? ` · ${nomeDi(email!)}` : ''}<Info>{altrui ? 'Le sue voci' : 'Le tue voci'} (create {altrui ? 'da lui o assegnate a lui' : 'da te o assegnate a te'}) si vedono sempre. Il resto lo scegli qui; vale anche per il numerino degli allarmi.</Info><span className="sp" />
         <button className="btn s" disabled={busy} onClick={() => salva(VISTA_TUTTO)}>Vedi tutto</button></h2>
-      <p className="hint">{altrui ? 'Le sue voci' : 'Le tue voci'} (create {altrui ? 'da lui o assegnate a lui' : 'da te o assegnate a te'}) si vedono sempre. Il resto lo scegli qui; vale anche per il numerino degli allarmi.</p>
       <div className="vgrid">
         {giu('altri', 'Voci degli altri colleghi')}
         {giu('commesse', 'Date delle commesse (produzione e montaggio)')}

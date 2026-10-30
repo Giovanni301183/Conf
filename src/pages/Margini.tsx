@@ -21,15 +21,14 @@ export function Margini() {
   return (
     <>
       <TabTools />
-      <Fold id="mg-imp" step={1} title="Margine generale" sum={`${ric ? 'Ricarico sul costo' : 'Margine sul prezzo'} · ${fP(num(M.gen))}`}>{() => <>
+      <Fold id="mg-imp" step={1} info={<>{ric ? 'Ricarico: prezzo = costo × (1 + %). Es. costo 100 €, ricarico 25 % → prezzo 125 €.' : 'Margine sul prezzo: prezzo = costo ÷ (1 − %). Es. costo 100 €, margine 20 % → prezzo 125 € (il margine è il 20 % del prezzo).'}
+          {' '}Vale per tutte le categorie, salvo quelle con un valore proprio al passo 2. <b>Prezzo spot:</b> scrivi il prezzo totale che vuoi fare: il margine generale e quelli per categoria si spostano tutti degli stessi punti, così le differenze tra categorie restano.</>} title="Margine generale" sum={`${ric ? 'Ricarico sul costo' : 'Margine sul prezzo'} · ${fP(num(M.gen))}`}>{() => <>
         <div className="grid">
           <div className="f">Come si calcola<Seg path="prev.marg.modo" opts={[['margine', 'Margine sul prezzo'], ['ricarico', 'Ricarico sul costo']]} /></div>
           <label className="f">{ric ? 'Ricarico' : 'Margine'} generale (%)<Inp path="prev.marg.gen" /></label>
           <label className="f">Margine risultante<span className="stat">{eur(mg)}</span></label>
           <label className="f">Prezzo di vendita<span className="stat">{eur(V)}</span></label>
         </div>
-        <p className="hint" style={{ margin: '12px 0 0' }}>{ric ? 'Ricarico: prezzo = costo × (1 + %). Es. costo 100 €, ricarico 25 % → prezzo 125 €.' : 'Margine sul prezzo: prezzo = costo ÷ (1 − %). Es. costo 100 €, margine 20 % → prezzo 125 € (il margine è il 20 % del prezzo).'}
-          {' '}Vale per tutte le categorie, salvo quelle con un valore proprio al passo 2.</p>
         <div className="grid" style={{ marginTop: 14, alignItems: 'end' }}>
           <label className="f">Prezzo spot (€)<input value={spot} inputMode="decimal" placeholder={fN(V, 0)} onChange={e => setSpot(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') applica(); }} /></label>
@@ -40,11 +39,9 @@ export function Margini() {
             <div className="f"><button className="btn p" onClick={applica}>Applica</button></div>
           </>)}
         </div>
-        <p className="hint" style={{ margin: '8px 0 0' }}>Scrivi il prezzo totale che vuoi fare: il margine generale e quelli per categoria si spostano tutti degli stessi punti, così le differenze tra categorie restano.</p>
       </>}</Fold>
 
-      <Fold id="mg-cat" step={2} title="Margine per categoria" sum={own.length ? own.map(c => `${c.toLowerCase()} ${fP(num(M.cat[c]))}`).join(' · ') : 'Tutte le categorie usano il valore generale'}>{() => <>
-        <p className="hint">Lascia vuoto per usare il valore generale ({fP(num(M.gen))}). Serve per esempio a tenere un margine più alto sulla carpenteria e più basso sui componenti acquistati. Le righe <b>ZINCATURA</b> e <b>LAVORAZIONE</b> raccolgono il costo di zincatura e di lavorazione di tutte le categorie (la struttura è mostrata senza): se le lasci vuote seguono il margine della categoria di ogni pezzo.</p>
+      <Fold id="mg-cat" step={2} info={<>Lascia vuoto per usare il valore generale ({fP(num(M.gen))}). Serve per esempio a tenere un margine più alto sulla carpenteria e più basso sui componenti acquistati. Le righe <b>ZINCATURA</b> e <b>LAVORAZIONE</b> raccolgono il costo di zincatura e di lavorazione di tutte le categorie (la struttura è mostrata senza): se le lasci vuote seguono il margine della categoria di ogni pezzo.</>} title="Margine per categoria" sum={own.length ? own.map(c => `${c.toLowerCase()} ${fP(num(M.cat[c]))}`).join(' · ') : 'Tutte le categorie usano il valore generale'}>{() => <>
         <div className="wrap"><table><tbody>
           <tr><th>Categoria</th><th className="n">Costo €</th><th className="n" style={{ width: 130 }}>{ric ? 'Ricarico' : 'Margine'} %</th><th className="n">Margine €</th><th className="n">Prezzo €</th><th className="n">Margine sul prezzo</th></tr>
           {[...MCATS, 'NON TROVATO'].map(c => {

@@ -17,8 +17,7 @@ export function Distinte() {
   return (
     <>
       <TabTools />
-      <Fold id="di-taglie" title="Taglie di tracker" sum={`${keys.length} taglie · ${keys.join(' / ')} moduli`} act={<button className="btn" onClick={resetDistinte}>Ripristina da Excel</button>}>{() => <>
-        <p className="hint">I numeri sono i <b>driver</b> delle quantità: MOT = pilastri motore, CUSC = pilastri cuscinetto, OMEGA = kit omega, PANN = kit pannello (= numero di moduli).</p>
+      <Fold id="di-taglie" info={<>I numeri sono i <b>driver</b> delle quantità: MOT = pilastri motore, CUSC = pilastri cuscinetto, OMEGA = kit omega, PANN = kit pannello (= numero di moduli).</>} title="Taglie di tracker" sum={`${keys.length} taglie · ${keys.join(' / ')} moduli`} act={<button className="btn" onClick={resetDistinte}>Ripristina da Excel</button>}>{() => <>
         <div className="wrap"><table><tbody>
           <tr><th>Taglia</th><th className="n">MOT</th><th className="n">CUSC</th><th className="n">OMEGA</th><th className="n">PANN</th><th>Assi</th></tr>
           {keys.map(k => (
@@ -30,9 +29,8 @@ export function Distinte() {
         </tbody></table></div>
       </>}</Fold>
 
-      <Fold id="di-assi" title="Blocco assi di rotazione" sum={`${sel} moduli: ${assiTxt(s)}`}
+      <Fold id="di-assi" info={<>Codice <code>$ASSE</code> = asse scelto in configurazione (3,0 o 2,5 mm). Quantità per tracker.</>} title="Blocco assi di rotazione" sum={`${sel} moduli: ${assiTxt(s)}`}
         act={<><Seg path="ui.sizeSel" opts={keys.map(k => [k, k] as const)} /><button className="btn" onClick={() => { s.assi.push({ c: '$ASSE', d: 'Asse', L: 6, q: '2' }); done(); }}>+ riga</button></>}>{() => <>
-        <p className="hint">Codice <code>$ASSE</code> = asse scelto in configurazione (3,0 o 2,5 mm). Quantità per tracker.</p>
         <div className="wrap"><table><tbody>
           <tr><th>Codice</th><th>Descrizione</th><th className="n">Lungh. m</th><th className="n">Q.tà</th><th></th></tr>
           {s.assi.map((_, j) => { const p = `data.sizes.${sel}.assi.${j}.`; return (
@@ -49,9 +47,8 @@ export function Distinte() {
         const rows = D.template.map((_, j) => j).filter(j => D.template[j].g === g);
         const addTpl = () => { let at = -1; D.template.forEach((t, j) => { if (t.g === g) at = j; }); D.template.splice(at + 1, 0, { g, c: D.listino[0].c, d: '', L: '', qa: 'MOT*1', qb: '' }); done(); };
         return (
-          <Fold key={g} id={'di-g-' + g} title={g.charAt(0) + g.slice(1).toLowerCase()} sum={`${rows.length} righe · comuni a tutte le taglie`} act={<button className="btn" onClick={addTpl}>+ riga</button>}>{() => <>
-            <p className="hint">Quantità come formula dei driver (es. <code>CUSC*2</code>, <code>OMEGA*4+PANN*4</code>). "Basso" vuoto = come Agrivoltaico, <code>0</code> = assente nel basso.
-              Lunghezze in metri oppure <code>$LFOND</code>, <code>$LCUSC</code>, <code>$LMOT</code>.</p>
+          <Fold key={g} id={'di-g-' + g} info={<>Quantità come formula dei driver (es. <code>CUSC*2</code>, <code>OMEGA*4+PANN*4</code>). "Basso" vuoto = come Agrivoltaico, <code>0</code> = assente nel basso.
+              Lunghezze in metri oppure <code>$LFOND</code>, <code>$LCUSC</code>, <code>$LMOT</code>.</>} title={g.charAt(0) + g.slice(1).toLowerCase()} sum={`${rows.length} righe · comuni a tutte le taglie`} act={<button className="btn" onClick={addTpl}>+ riga</button>}>{() => <>
             <div className="wrap"><table><tbody>
               <tr><th>Codice</th><th>Descrizione</th><th className="n">Lungh.</th><th className="n">Q.tà Agrivoltaico</th><th className="n">Q.tà Basso</th><th>Gruppo</th><th></th></tr>
               {rows.map(j => { const p = `data.template.${j}.`; return (

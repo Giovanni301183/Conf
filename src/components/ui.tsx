@@ -1,5 +1,6 @@
 // Componenti comuni: campi legati allo stato, selettori, tendine.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { COLS, num } from '../domain/model';
 import { vN } from '../domain/format';
 import { S, commit, getP } from '../store/state';
@@ -129,17 +130,41 @@ function useFoldId(id: string) {
 const toggle = (id: string) => { S.ui.folds[id] = !isOpen(id); commit(); };
 
 /** Tendina: chiusa mostra solo titolo + riepilogo in una riga; il contenuto si genera solo quando e' aperta. */
-export function Fold({ id, title, sum, act, cls = '', step, children }: {
-  id: string; title: ReactNode; sum?: ReactNode; act?: ReactNode; cls?: string; step?: number; children: () => ReactNode;
+/** Puntino «i»: la spiegazione compare passandoci sopra col mouse (o toccandolo), invece di restare sempre aperta. */
+export function Info({ children }: { children: ReactNode }) {
+  const r = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number; su: boolean } | null>(null);
+  const apri = () => {
+    const b = r.current?.getBoundingClientRect(); if (!b) return;
+    const su = b.bottom + 160 > window.innerHeight && b.top > 160;
+    setPos({ x: Math.max(8, Math.min(b.left + b.width / 2 - 150, window.innerWidth - 308)), y: su ? b.top - 6 : b.bottom + 6, su });
+  };
+  useEffect(() => {
+    if (!pos) return;
+    const chiudi = () => setPos(null);
+    window.addEventListener('scroll', chiudi, true);
+    return () => window.removeEventListener('scroll', chiudi, true);
+  }, [pos]);
+  return (
+    <span ref={r} className="info noprint" tabIndex={0} role="button" aria-label="Spiegazione"
+      onMouseEnter={apri} onMouseLeave={() => setPos(null)} onFocus={apri} onBlur={() => setPos(null)}
+      onClick={e => { e.stopPropagation(); e.preventDefault(); pos ? setPos(null) : apri(); }}>i
+      {pos && createPortal(<div className={`infobox${pos.su ? ' su' : ''}`} style={{ left: pos.x, top: pos.y }}>{children}</div>, document.body)}
+    </span>
+  );
+}
+
+export function Fold({ id, title, sum, act, cls = '', step, info, children }: {
+  id: string; title: ReactNode; sum?: ReactNode; act?: ReactNode; cls?: string; step?: number; info?: ReactNode; children: () => ReactNode;
 }) {
   useFoldId(id);
   const o = isOpen(id);
   return (
     <section className={`card fold ${o ? 'open' : ''} ${cls}`} data-fold={id}>
-      <div className="fh" onClick={e => { if (!(e.target as Element).closest('input,select,textarea,.fact')) toggle(id); }}>
+      <div className="fh" onClick={e => { if (!(e.target as Element).closest('input,select,textarea,.fact,.info')) toggle(id); }}>
         {step != null && <span className="step">{step}</span>}
         <div className="ft">
-          <h2>{title}</h2>
+          <h2>{title}{info && <Info>{info}</Info>}</h2>
           {sum && <div className="fsum">{sum}</div>}
         </div>
         <span className="sp" />

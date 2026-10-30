@@ -91,7 +91,7 @@ export function GanttFold({ G, o }: { G: any; o: GanttOpts }) {
   const resetAll = () => { if (!confirm('Cancellare le durate e le date scritte a mano e tornare ai valori calcolati?')) return; ov.dur = {}; ov.da = {}; done(); };
 
   return (
-    <Fold id={o.id} step={o.step} title={o.title} cls="pcard"
+    <Fold id={o.id} step={o.step} info={o.hint} title={o.title} cls="pcard"
       sum={`Avvio ${dFmt(G.start)} · fine ${dFmt(G.end)} · ${G.nWork} giorni lavorativi${nOv ? ` · ${nOv} modific${nOv === 1 ? 'a' : 'he'} a mano` : ''}`}
       act={<>
         <label className="small muted">Avvio commessa</label>
@@ -99,7 +99,6 @@ export function GanttFold({ G, o }: { G: any; o: GanttOpts }) {
         <button className="btn" onClick={o.onPrint}>Stampa / PDF</button>
       </>}>{() => <>
       <div className="onlyprint gtitle"><b>{o.title}</b> · {commName()} · avvio {dFmt(G.start)} · fine {dFmt(G.end)} · {G.nWork} giorni lavorativi · emesso il {dFmt(today)}</div>
-      <p className="hint noprint">{o.hint}</p>
       <div className="glegend">{[...new Set<string>(G.tasks.map(x => x.fase))].map(k => <span key={k}><i style={{ background: `var(${FASI[k][1]})` }} />{FASI[k][0]}</span>)}<span><i className="lt" />Oggi</span></div>
       <div className="wrap"><table className="gt" style={{ '--nw': nw } as React.CSSProperties}><tbody>
         <tr><th>Fase</th><th>Base di calcolo</th><th className="n">Durata gg</th><th className="n">Inizio</th><th className="n">Fine</th><th className="np"></th>

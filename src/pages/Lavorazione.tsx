@@ -1,6 +1,6 @@
 // Scheda Distinta di lavorazione: produzione, lista di taglio, ordini, Gantt di produzione. Export Excel.
 import type { ReactNode } from 'react';
-import { Fold, TabTools } from '../components/ui';
+import { Fold, TabTools, Info } from '../components/ui';
 import { GHint, GanttFold } from '../components/Gantt';
 import { downloadLavorXlsx } from '../domain/excel';
 import { eur, fL, fN, fQ } from '../domain/format';
@@ -16,14 +16,13 @@ export function Lavorazione() {
   const vuota = !D.righe.length && !D.imp.length;
   const head = (
     <div className="card head"><div className="headrow">
-      <div><h2>Distinta di lavorazione</h2>
-        <p className="hint" style={{ margin: 0 }}>Per la produzione e per l'ufficio acquisti. Il file Excel ha sei fogli: Commessa, Produzione, Lista di taglio, Ordini, Gantt (modificabile, si ricalcola da solo) e Calendario.</p></div>
+      <div><h2>Distinta di lavorazione<Info>Per la produzione e per l'ufficio acquisti. Il file Excel ha sei fogli: Commessa, Produzione, Lista di taglio, Ordini, Gantt (modificabile, si ricalcola da solo) e Calendario.</Info></h2></div>
       <span className="sp" />
       <button className="btn p" onClick={downloadLavorXlsx} disabled={vuota}>Scarica Excel</button>
     </div></div>
   );
   if (vuota) return <>{head}<div className="card"><div className="empty">La distinta è vuota. In <b>Configura</b> imposta almeno un tracker o un componente di impianto.</div></div></>;
-  const nota = <p className="hint">Peso nero = peso teorico del listino (acquisto acciaio e lavorazione). Peso zincato = nero + {fN(D.mz * 100, 1)} % di maggiorazione, solo sui pezzi che vanno allo zincatore.</p>;
+  const nota = <>Peso nero = peso teorico del listino (acquisto acciaio e lavorazione). Peso zincato = nero + {fN(D.mz * 100, 1)} % di maggiorazione, solo sui pezzi che vanno allo zincatore.</>;
   const row = (x: any, k: string) => (
     <tr key={k}><td><span className="code">{x.art ?? x.code}</span></td><td>{x.desc}</td><td className="muted">{LAV_T[x.t]}</td><td className="n">{x.L !== '' ? fL(x.L) : ''}</td><td className="n">{fQ(x.qPer)}</td>
       <td className="n"><b>{fQ(x.q)}</b></td><td className="n">{fN(x.kgU, 2)}</td><td className="n">{fN(x.kgT, 1)}</td><td className="n">{kz(x.kgZ)}</td><td className="c">{yn(x.zinc)}</td></tr>
@@ -33,7 +32,7 @@ export function Lavorazione() {
     <>
       {head}
       <TabTools />
-      <Fold id="dl-prod" step={1} title="Produzione" sum={`${D.righe.map(x => `R${x.i + 1}: ${fN(x.n, 0)} × ${x.r.taglia} mod`).join(' · ') || 'Solo impianto'} · ${fN(D.kg, 1)} kg neri · ${fN(D.kgZ, 1)} kg zincati`}>{() => {
+      <Fold id="dl-prod" step={1} info={<>Pezzi per ogni riga tracker, divisi per gruppo di assieme. Nessun prezzo: è il foglio per l'officina. {nota}</>} title="Produzione" sum={`${D.righe.map(x => `R${x.i + 1}: ${fN(x.n, 0)} × ${x.r.taglia} mod`).join(' · ') || 'Solo impianto'} · ${fN(D.kg, 1)} kg neri · ${fN(D.kgZ, 1)} kg zincati`}>{() => {
         const rows: ReactNode[] = [];
         for (const R1 of D.righe) {
           rows.push(<tr key={'r' + R1.i} className="g1"><td colSpan={10}>R{R1.i + 1} · {fN(R1.n, 0)} tracker · {rigaCfg(R1.r)}</td></tr>);
@@ -42,8 +41,7 @@ export function Lavorazione() {
         }
         if (D.imp.length) { rows.push(<tr key="imp" className="g1"><td colSpan={10}>Impianto · per l'intera commessa</td></tr>); D.imp.forEach((x, j) => rows.push(row(x, 'imp' + j))); }
         return <>
-          <p className="hint">Pezzi per ogni riga tracker, divisi per gruppo di assieme. Nessun prezzo: è il foglio per l'officina.</p>{nota}
-          <div className="wrap"><table className="dl"><tbody>
+                    <div className="wrap"><table className="dl"><tbody>
             <tr><th>Codice</th><th>Descrizione</th><th>Lavorazione</th><th className="n">L (m)</th><th className="n">Q.tà / tracker</th><th className="n">Q.tà totale</th><th className="n">Peso unit. nero kg</th><th className="n">Peso tot. nero kg</th><th className="n">Peso tot. zincato kg</th><th className="c">Zincatura</th></tr>
             {rows}
             <tr className="tot"><td colSpan={7}>TOTALE COMMESSA</td><td className="n">{fN(D.kg, 1)}</td><td className="n">{fN(D.kgZ, 1)}</td><td></td></tr>
@@ -51,8 +49,7 @@ export function Lavorazione() {
         </>;
       }}</Fold>
 
-      <Fold id="dl-taglio" step={2} title="Lista di taglio" sum={`${D.taglio.length} misure · ${fN(D.taglio.reduce((a, x) => a + x.pz, 0), 0)} pezzi · ${fN(D.taglio.reduce((a, x) => a + x.pz * x.L, 0), 1)} m`}>{() => <>
-        <p className="hint">Profili a barra raggruppati per profilo e lunghezza, sommando tutte le righe tracker.</p>
+      <Fold id="dl-taglio" step={2} info={<>Profili a barra raggruppati per profilo e lunghezza, sommando tutte le righe tracker.</>} title="Lista di taglio" sum={`${D.taglio.length} misure · ${fN(D.taglio.reduce((a, x) => a + x.pz, 0), 0)} pezzi · ${fN(D.taglio.reduce((a, x) => a + x.pz * x.L, 0), 1)} m`}>{() => <>
         <div className="wrap"><table className="dl"><tbody>
           <tr><th>Profilo</th><th>Descrizione</th><th className="n">Lunghezza m</th><th className="n">Pezzi</th><th className="n">Metri totali</th><th className="n">Peso nero kg</th><th className="n">Peso zincato kg</th><th className="c">Zincatura</th><th>Righe</th></tr>
           {D.taglio.map((x, j) => (
@@ -61,7 +58,7 @@ export function Lavorazione() {
         </tbody></table></div>
       </>}</Fold>
 
-      <Fold id="dl-ord" step={3} title="Ordini" sum={`${D.ordini.reduce((a, g) => a + g.items.length, 0)} codici · ${eur(D.cost)} di costo stimato · ${fN(D.kgZ, 1)} kg da zincare`}>{() => {
+      <Fold id="dl-ord" step={3} info={<>Fabbisogno totale della commessa per codice: profili in metri, il resto in pezzi. I quadri sono esplosi nei loro componenti. L'acciaio si ordina sul peso nero; il peso zincato è quello da consegnare allo zincatore.</>} title="Ordini" sum={`${D.ordini.reduce((a, g) => a + g.items.length, 0)} codici · ${eur(D.cost)} di costo stimato · ${fN(D.kgZ, 1)} kg da zincare`}>{() => {
         const rows: ReactNode[] = [];
         for (const g of D.ordini) {
           rows.push(<tr key={g.cat} className={`g1 cat-${g.cat.split(' ')[0]}`}><td colSpan={9}><span className="dot" />{g.cat}</td></tr>);
@@ -72,7 +69,6 @@ export function Lavorazione() {
           }
         }
         return <>
-          <p className="hint">Fabbisogno totale della commessa per codice: profili in metri, il resto in pezzi. I quadri sono esplosi nei loro componenti. L'acciaio si ordina sul peso nero; il peso zincato è quello da consegnare allo zincatore.</p>
           <div className="wrap"><table className="dl"><tbody>
             <tr><th>Codice</th><th>Descrizione</th><th>U.M.</th><th className="n">Quantità</th><th className="n">Peso nero kg</th><th className="n">Peso zincato kg</th><th className="c">Zincatura</th><th className="n">Costo unit. €</th><th className="n">Costo tot. €</th></tr>
             {rows}

@@ -1,7 +1,7 @@
 // Scheda Invia preventivo: controllo dei dati, intestazione, layout (DXF o immagine), dati di progetto, prezzi, voci incluse; PowerPoint compilato.
 // Comune ai settori: gli impianti fissi hanno il loro modello (domain/offertaFisso.ts), i loro campi obbligatori e le loro voci incluse.
 import { useState } from 'react';
-import { DateInp, Fold, Inp, TabTools } from '../components/ui';
+import { DateInp, Fold, Inp, TabTools, Info } from '../components/ui';
 import { eur, fP } from '../domain/format';
 import { disegna, immagineInPng, leggiDxf } from '../domain/dxf';
 import { fDate, fN, fileName, download } from '../domain/format';
@@ -54,8 +54,6 @@ function Servizi({ D }: { D: DatiOfferta }) {
   const sposta = (i: number, d: number) => cambia(l => { const j = i + d; if (j >= 0 && j < l.length) [l[i], l[j]] = [l[j], l[i]]; });
   const standard = JSON.stringify(ss) === JSON.stringify(servizi0(set));
   return <>
-    <p className="hint">Togli la spunta ai servizi da non proporre, correggi i nomi e i prezzi. Prezzo vuoto: trasporto e posa{set === 'fisso' ? ' (e la gru)' : ''} prendono i prezzi qui sopra, gli altri «Su richiesta»;
-      un numero diventa «€ … + IVA» (0 = «Incluso»), un testo va tale e quale. Vale solo per questo preventivo.</p>
     <div className="wrap"><table className="servizi"><tbody>
       <tr><th>In offerta</th><th>Servizio</th><th>Prezzo</th><th>Nell'offerta</th><th></th></tr>
       {ss.map((x, i) => <tr key={i} className={x.on === false ? 'spento' : ''}>
@@ -101,8 +99,7 @@ async function caricaLayout(f: File) {
 function ProgettoFisso({ D }: { D: DatiOfferta }) {
   const c = D.campi, da = (k: string) => (D.senza.includes(k) ? <span className="muted">{c[k]}</span> : c[k]);
   return (
-    <Fold id="in-prog" step={4} title="Dati di progetto" sum={`${c.localita_zona} · vento ${c.vento_ms} m/s · ${c.modulo_modello} · tipo ${c.modulo_tipo}`}>{() => <>
-      <p className="hint">Slide «Dati di progetto». Località, vento NTC, modulo e struttura vengono da Configura (lì «Proponi dalla località» compila anche la corrosività): per cambiarli usa i collegamenti in Controllo dei dati o la scheda Configura.</p>
+    <Fold id="in-prog" step={4} info={<>Slide «Dati di progetto». Località, vento NTC, modulo e struttura vengono da Configura (lì «Proponi dalla località» compila anche la corrosività): per cambiarli usa i collegamenti in Controllo dei dati o la scheda Configura.</>} title="Dati di progetto" sum={`${c.localita_zona} · vento ${c.vento_ms} m/s · ${c.modulo_modello} · tipo ${c.modulo_tipo}`}>{() => <>
       <div className="meta" style={{ marginTop: 0 }}>
         <div>Località<b>{da('localita')}</b><span className="muted small">{c.coordinate}</span></div>
         <div>Vento NTC 2018<b>{da('vento_ms')} m/s</b><span className="muted small">zona {c.zona_vento} · cat. {c.categoria_terreno} · {c.altitudine_m} m s.l.m.</span></div>
@@ -124,8 +121,7 @@ function CalcoloFisso({ D }: { D: DatiOfferta }) {
   const c = D.campi, g = D.liste.geometria;
   const righe = (rr: [string, string][]) => rr.map(([l, v]) => <tr key={l}><td>{l}</td><td className="n"><b>{v}</b></td></tr>);
   return (
-    <Fold id="in-calc" step={5} title="Calcolo strutturale" sum={`vr ${c.vento_ms} m/s · qp ${c.pressione_picco} kN/m² · basso ${c.p_giu} / sollevamento ${c.p_su} kN/m² · ${g.length} ${g.length === 1 ? 'taglia' : 'taglie'}`}>{() => <>
-      <p className="hint">Slide «Calcolo strutturale» dell'offerta. Valori da Configura → Sito e vento (NTC 2018 § 3.3, terreno pianeggiante) e dalla composizione dell'impianto; i cp netti della falda li dà il progettista.</p>
+    <Fold id="in-calc" step={5} info={<>Slide «Calcolo strutturale» dell'offerta. Valori da Configura → Sito e vento (NTC 2018 § 3.3, terreno pianeggiante) e dalla composizione dell'impianto; i cp netti della falda li dà il progettista.</>} title="Calcolo strutturale" sum={`vr ${c.vento_ms} m/s · qp ${c.pressione_picco} kN/m² · basso ${c.p_giu} / sollevamento ${c.p_su} kN/m² · ${g.length} ${g.length === 1 ? 'taglia' : 'taglie'}`}>{() => <>
       <div className="grid" style={{ alignItems: 'start' }}>
         <div className="wrap"><table><tbody><tr><th colSpan={2}>Vento · NTC 2018 § 3.3</th></tr>{righe([
           ['Zona vento · altitudine', `${c.zona_vento} · ${c.altitudine_m} m`], ['vb0 · a0 · ks', `${c.vb0} m/s · ${c.a0} m · ${c.ks}`], ['Coeff. di altitudine ca', c.ca],
@@ -184,8 +180,7 @@ export function Invia() {
   return (
     <>
       <div className="card head"><div className="headrow">
-        <div><h2>Invia preventivo</h2>
-          <p className="hint" style={{ margin: 0 }}>Genera l'offerta tecnico-economica dal modello PowerPoint: copertina (con numero e revisione), dati di progetto, layout, garanzie e investimento si compilano dal preventivo; le altre slide restano quelle del modello.{online() ? ' Il PDF è lo stesso che manda il bot Telegram.' : ' Per il PDF: in PowerPoint File → Salva come → PDF.'}</p></div>
+        <div><h2>Invia preventivo<Info>Genera l'offerta tecnico-economica dal modello PowerPoint: copertina (con numero e revisione), dati di progetto, layout, garanzie e investimento si compilano dal preventivo; le altre slide restano quelle del modello.{online() ? ' Il PDF è lo stesso che manda il bot Telegram.' : ' Per il PDF: in PowerPoint File → Salva come → PDF.'}</Info></h2></div>
         <span className="sp" />
         <span className="muted small">{O.inviata ? <>Inviato il {fDate(O.inviata)} · </> : null}<StatoTag k={P.stato || 'bozza'} /></span>
         <button className="btn" onClick={inviato}>Segna come inviato</button>
@@ -197,8 +192,7 @@ export function Invia() {
       <Fold id="in-ck" step={1} title="Controllo dei dati" sum={D.avvisi.length ? <span style={{ color: 'var(--warn)' }}>{D.avvisi.length} da verificare</span> : '✓ Tutto pronto'}>{() => <>
         {D.avvisi.length ? <div className="warn" style={{ marginTop: 0 }}>{D.avvisi.map((a, i) => { const d = DV[D.avvisiDove[i]]; return <div key={i} className="avvrow"><span>{a}</span>{d && <button className="btn s" onClick={() => vaiA(d)} title={'Apre ' + d.nome}>Vai →</button>}</div>; })}</div> : <p className="hint">Tutti i dati necessari ci sono.</p>}
         {manc.length ? <>
-          <h3>Campi obbligatori</h3>
-          <p className="hint">Finché questi campi non sono compilati o segnati «non disponibile», l'offerta non si genera. Nel PDF i campi non disponibili compaiono come «Non disponibile».</p>
+          <h3>Campi obbligatori<Info>Finché questi campi non sono compilati o segnati «non disponibile», l'offerta non si genera. Nel PDF i campi non disponibili compaiono come «Non disponibile».</Info></h3>
           <div className="wrap"><table><tbody>
             <tr><th>Campo</th><th>Dove si compila</th><th></th></tr>
             {manc.map(([k, l, dove]) => <tr key={k}><td>{l}</td><td className="small">{DV[k] ? <a href="#" onClick={e => { e.preventDefault(); vaiA(DV[k]); }}>{DV[k].nome} →</a> : dove}</td>
@@ -215,8 +209,7 @@ export function Invia() {
         <ul className="olist">{D.righe.map(r => <li key={r.taglia}>N.{fN(r.n, 0)} {fisso ? `STRUTTUR${r.n === 1 ? 'A' : 'E'}` : 'TRACKER TTS'}.{r.taglia} MODULI</li>)}</ul>
       </>}</Fold>
 
-      <Fold id="in-int" step={2} title="Intestazione dell'offerta" sum={`N. ${D.campi.numero_offerta} rev. ${D.campi.revisione} · ${D.campi.data_offerta} · ${D.campi.nome_impianto || '–'}`}>{() => <>
-        <p className="hint">Il numero è il progressivo del preventivo, assegnato al primo salvataggio (si cambia in Configura → Commessa). Per una nuova versione della stessa offerta aumenta la revisione.</p>
+      <Fold id="in-int" step={2} info={<>Il numero è il progressivo del preventivo, assegnato al primo salvataggio (si cambia in Configura → Commessa). Per una nuova versione della stessa offerta aumenta la revisione.</>} title="Intestazione dell'offerta" sum={`N. ${D.campi.numero_offerta} rev. ${D.campi.revisione} · ${D.campi.data_offerta} · ${D.campi.nome_impianto || '–'}`}>{() => <>
         <div className="grid">
           <label className="f">Numero offerta<span className="stat">{P.num || 'salva il preventivo'}</span></label>
           <label className="f">Revisione<Inp path="prev.offerta.rev" type="txt" /></label>
@@ -228,9 +221,8 @@ export function Invia() {
         </div>
       </>}</Fold>
 
-      <Fold id="in-lay" step={3} title="Layout dell'impianto" sum={O.layoutNome ? `${O.layoutNome}${O.dxf ? ' · ' + Object.entries(O.dxf).map(([t, n]) => `${n}×${t}`).join(', ') : ''}` : 'Da caricare: DXF, PNG o JPG'}>{() => <>
-        {fisso ? <p className="hint">Carica il DXF del layout (oppure un'immagine): l'app ne disegna la pianta per la slide del layout. Le campiture (aree piene) non vengono disegnate.</p>
-          : <p className="hint">Carica il DXF del layout (oppure un'immagine). Dal DXF l'app disegna la pianta e conta i tracker dai layer "Inseguitore 40", "Inseguitore 20"… o dai blocchi "Struttura 40 moduli". Le campiture (aree piene) non vengono disegnate.</p>}
+      <Fold id="in-lay" step={3} info={fisso ? <>Carica il DXF del layout (oppure un'immagine): l'app ne disegna la pianta per la slide del layout. Le campiture (aree piene) non vengono disegnate.</>
+          : <>Carica il DXF del layout (oppure un'immagine). Dal DXF l'app disegna la pianta e conta i tracker dai layer "Inseguitore 40", "Inseguitore 20"… o dai blocchi "Struttura 40 moduli". Le campiture (aree piene) non vengono disegnate.</>} title="Layout dell'impianto" sum={O.layoutNome ? `${O.layoutNome}${O.dxf ? ' · ' + Object.entries(O.dxf).map(([t, n]) => `${n}×${t}`).join(', ') : ''}` : 'Da caricare: DXF, PNG o JPG'}>{() => <>
         <div className="toolbar">
           <label className="btn p" style={{ cursor: 'pointer' }}>Carica DXF o immagine…<input type="file" accept=".dxf,.png,.jpg,.jpeg" className="hide" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) caricaLayout(f); }} /></label>
           {O.layout ? <button className="btn" onClick={() => { Object.assign(O, { layout: '', layoutW: 0, layoutH: 0, layoutNome: '', dxf: null }); save(); commit(); }}>Rimuovi</button> : null}
@@ -251,16 +243,14 @@ export function Invia() {
         ) : null}
       </>}</Fold>
 
-      {fisso ? <><ProgettoFisso D={D} /><CalcoloFisso D={D} /></> : <Fold id="in-prog" step={4} title="Dati di progetto" sum={`${PROGETTO.filter(([k]) => String(O.prog[k] ?? '').trim()).length} di ${PROGETTO.length} compilati`}>{() => <>
-        <p className="hint">Slide "Dati di progetto". Località, coordinate e modello del modulo vengono da Configura (<b>{P.luogo?.nome || 'località non indicata'}</b> · <b>{P.modulo?.marca || 'modulo non indicato'}</b>). Ogni campo va compilato o segnato «non disponibile».</p>
+      {fisso ? <><ProgettoFisso D={D} /><CalcoloFisso D={D} /></> : <Fold id="in-prog" step={4} info={<>Slide "Dati di progetto". Località, coordinate e modello del modulo vengono da Configura (<b>{P.luogo?.nome || 'località non indicata'}</b> · <b>{P.modulo?.marca || 'modulo non indicato'}</b>). Ogni campo va compilato o segnato «non disponibile».</>} title="Dati di progetto" sum={`${PROGETTO.filter(([k]) => String(O.prog[k] ?? '').trim()).length} di ${PROGETTO.length} compilati`}>{() => <>
         <ProponiSito />
         <div className="grid">{PROGETTO.map(([k, l, ph]) => <Obbl key={k} D={D} k={k} l={l} path={`prev.offerta.prog.${k}`} ph={'es. ' + ph} />)}</div>
       </>}</Fold>}
 
-      <Fold id="in-prz" step={5 + st} title="Prezzi nell'offerta" sum={D.prezzi.map(c => `${c.label}: ${c.value}`).join(' · ')}>{() => <>
-        <p className="hint">Nell'offerta vanno sempre i <b>prezzi di vendita</b> (costo + margine), mai i costi. {fisso
+      <Fold id="in-prz" step={5 + st} info={<>Nell'offerta vanno sempre i <b>prezzi di vendita</b> (costo + margine), mai i costi. {fisso
           ? <>Strutture = prezzo di vendita della sola fornitura. Trasporto, posa e <b>tutte le voci extra</b> stanno sempre a parte, ognuna con la sua riga e il suo prezzo; trasporto e posa scritti qui sostituiscono le loro voci («Incluso» mette il trasporto nelle strutture).</>
-          : <>Struttura e componenti = prezzo di vendita senza il trasporto, che resta a parte. La posa in opera è indicata a parte e non entra nel totale.</>}</p>
+          : <>Struttura e componenti = prezzo di vendita senza il trasporto, che resta a parte. La posa in opera è indicata a parte e non entra nel totale.</>}</>} title="Prezzi nell'offerta" sum={D.prezzi.map(c => `${c.label}: ${c.value}`).join(' · ')}>{() => <>
         <div className={`grid${R.prezzo - R.total < 0.5 ? ' margwarn' : ''}`} style={{ marginBottom: 14 }}>
           <label className="f">{P.marg.modo === 'ricarico' ? 'Ricarico' : 'Margine'} generale (%)<Inp path="prev.marg.gen" /></label>
           <label className="f">Costo<span className="stat">{eur(R.total)}</span></label>
@@ -278,10 +268,10 @@ export function Invia() {
           <div key={i} className="pill"><span className="pl">{c.label}</span><span className="pv">{c.strike ? <s>{c.strike}</s> : null}<b>{c.value}</b>{c.nota ? <em>{c.nota}</em> : null}</span></div>))}</div>
       </>}</Fold>
 
-      <Fold id="in-serv" step={6 + st} title="Forniture e servizi opzionali" sum={`${D.liste.servizi.length} in offerta: ${D.liste.servizi.map(x => x.voce).join(', ') || 'nessuno'}`}>{() => <Servizi D={D} />}</Fold>
+      <Fold id="in-serv" step={6 + st} info={<>Togli la spunta ai servizi da non proporre, correggi i nomi e i prezzi. Prezzo vuoto: trasporto e posa{fisso ? ' (e la gru)' : ''} prendono i prezzi qui sopra, gli altri «Su richiesta»;
+      un numero diventa «€ … + IVA» (0 = «Incluso»), un testo va tale e quale. Vale solo per questo preventivo.</>} title="Forniture e servizi opzionali" sum={`${D.liste.servizi.length} in offerta: ${D.liste.servizi.map(x => x.voce).join(', ') || 'nessuno'}`}>{() => <Servizi D={D} />}</Fold>
 
-      <Fold id="in-comm" step={7 + st} title="Condizioni commerciali" sum={`Pagamento: ${D.campi.pagamento} · validità ${D.campi.validita}`}>{() => <>
-        <p className="hint">Slide «Condizioni commerciali». Valuta (EUR) e prezzi IVA esclusa sono fissi; resa, consegna e validità vanno compilate o segnate «non disponibile» (il pagamento vuoto diventa «Da concordare»).</p>
+      <Fold id="in-comm" step={7 + st} info={<>Slide «Condizioni commerciali». Valuta (EUR) e prezzi IVA esclusa sono fissi; resa, consegna e validità vanno compilate o segnate «non disponibile» (il pagamento vuoto diventa «Da concordare»).</>} title="Condizioni commerciali" sum={`Pagamento: ${D.campi.pagamento} · validità ${D.campi.validita}`}>{() => <>
         <div className="grid">
           <Obbl D={D} k="resa" l="Resa (Incoterms 2020)" path="prev.offerta.resa" ph="es. DAP cantiere, EXW Marsala" />
           <label className="f">Condizioni di pagamento<Inp path="prev.offerta.pagamento" type="txt" ph="Da concordare" /></label>
@@ -290,9 +280,8 @@ export function Invia() {
         </div>
       </>}</Fold>
 
-      <Fold id="in-incl" step={8 + st} title="Incluso nel prezzo e garanzie" sum={`${D.liste.inclusi.length} voci incluse · garanzia ${cfg.garanzie.struttura} anni · vale per tutti i preventivi`}>{() => <>
-        {fisso ? <p className="hint">Elenco "Incluso nel prezzo" della slide Forniture e servizi opzionali (una voce per riga) e anni della slide Garanzie. Valgono per tutti i preventivi di impianti fissi.</p>
-          : <p className="hint">Elenco "Incluso nel prezzo" della slide Investimento (una voce per riga) e anni della slide Garanzie. Sono impostazioni comuni: valgono per tutti i preventivi. Nelle voci, <code>{'{{profilo_pilastri}}'}</code> e <code>{'{{spessore_asse}}'}</code> diventano il profilo e lo spessore dell'asse del preventivo (es. IPEA 140, 2,5).</p>}
+      <Fold id="in-incl" step={8 + st} info={fisso ? <>Elenco "Incluso nel prezzo" della slide Forniture e servizi opzionali (una voce per riga) e anni della slide Garanzie. Valgono per tutti i preventivi di impianti fissi.</>
+          : <>Elenco "Incluso nel prezzo" della slide Investimento (una voce per riga) e anni della slide Garanzie. Sono impostazioni comuni: valgono per tutti i preventivi. Nelle voci, <code>{'{{profilo_pilastri}}'}</code> e <code>{'{{spessore_asse}}'}</code> diventano il profilo e lo spessore dell'asse del preventivo (es. IPEA 140, 2,5).</>} title="Incluso nel prezzo e garanzie" sum={`${D.liste.inclusi.length} voci incluse · garanzia ${cfg.garanzie.struttura} anni · vale per tutti i preventivi`}>{() => <>
         <label className="f" style={{ marginBottom: 14 }}>Incluso nel prezzo
           <textarea rows={7} value={cfg.inclusi.join('\n')} onChange={e => { cfg.inclusi = e.target.value.split('\n'); save(); commit(); }} /></label>
         <div className="grid">

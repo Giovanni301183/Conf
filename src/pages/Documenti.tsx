@@ -13,7 +13,7 @@ import { Discuti } from '../components/Collegamento';
 import { SMISTARE, nomeReparto, nomeSettoreMappa, repartiNota, settoriDi } from '../domain/reparti';
 import { SceltaSettori } from '../components/MappaReparti';
 import { Ic } from '../components/Icona';
-import { ChevBarra, barraAperta, clicBarra } from '../components/ui';
+import { ChevBarra, barraAperta, clicBarra, Info } from '../components/ui';
 
 const nomeDi = (email: string) => cloud.colleghi.find(u => u.email === email)?.nome || email.split('@')[0];
 const quandoDoc = (iso: string) => new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -136,10 +136,9 @@ function Assegna({ d, chiudi }: { d: Documento; chiudi: () => void }) {
   };
   return (
     <div className="cform">
-      <label className="f">Assegna a<select value={a} autoFocus onChange={e => setA(e.target.value)}>
+      <label className="f"><span>Assegna a<Info>Diventa una voce «Da fare» nell'agenda di chi scegli, con il testo della nota, e viene annunciata nel gruppo Telegram.</Info></span><select value={a} autoFocus onChange={e => setA(e.target.value)}>
         <option value="">— scegli —</option>{cloud.colleghi.map(u => <option key={u.email} value={u.email}>{u.nome || u.email}{u.email === mioEmail() ? ' (io)' : ''}</option>)}</select></label>
       <label className="f">Entro il<input type="date" value={giorno} onChange={e => setGiorno(e.target.value)} /></label>
-      <p className="hint wide" style={{ margin: 0 }}>Diventa una voce «Da fare» nell'agenda di chi scegli, con il testo della nota, e viene annunciata nel gruppo Telegram.</p>
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
         <button className="btn p" disabled={busy || !a || !giorno} onClick={fai}>{busy ? 'Assegno…' : 'Assegna'}</button>
         <button className="btn" onClick={chiudi}>Annulla</button>
@@ -168,7 +167,7 @@ function Collega({ d, chiudi }: { d: Documento; chiudi: () => void }) {
   };
   return (
     <div className="cform">
-      <label className="f">Preventivo o commessa<select value={p} onChange={e => setP(e.target.value)}>
+      <label className="f"><span>Preventivo o commessa<Info>Tutto facoltativo. Un file senza preventivo, voce d'agenda né nota resta libero: lo ritrovi in Home sotto Note e, con un'etichetta tecnica, nell'Archivio tecnico.</Info></span><select value={p} onChange={e => setP(e.target.value)}>
         <option value="">— nessuno —</option><OpzioniPreventivi /></select></label>
       {d.tipo === 'file' && <label className="f">Allegato alla nota<select value={n} onChange={e => setN(e.target.value)}>
         <option value="">— nessuna —</option>
@@ -179,7 +178,6 @@ function Collega({ d, chiudi }: { d: Documento; chiudi: () => void }) {
         {sugE.map(k => <button key={k} type="button" className="etq" style={{ '--ec': coloreEtichetta(k) } as CSSProperties} onClick={() => setEt([...et, k])}>+ {nomeEtichetta(k)}</button>)}
         {sugP.map(e => <button key={e.id} type="button" className="etq" onClick={() => setP(e.id)}><Ic n="collega" s={12} />{e.nome}{e.cliente ? ' · ' + e.cliente : ''}</button>)}</div>}
       {mio && <label className="f wide small"><span><input type="checkbox" checked={priv} onChange={e => setPriv(e.target.checked)} /> Privato: lo vedi solo tu{d.tipo === 'nota' ? ', con i suoi allegati' : ''} (l'esperto lo usa solo nelle tue domande)</span></label>}
-      <p className="hint wide" style={{ margin: 0 }}>Tutto facoltativo. Un file senza preventivo, voce d'agenda né nota resta libero: lo ritrovi in Home sotto Note e, con un'etichetta tecnica, nell'Archivio tecnico.</p>
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
         <button className="btn p" disabled={busy} onClick={salva}>{busy ? 'Salvo…' : 'Salva'}</button>
         <button className="btn" onClick={chiudi}>Annulla</button>

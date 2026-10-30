@@ -102,7 +102,8 @@ function SitoVento({ step, z }: { step: number; z: number | null }) {
       p.giu != null && `basso ${kn(p.giu)}`, p.su != null && `sollevamento ${kn(p.su)}`].filter(Boolean).join(' · ')
     : 'Scrivi la località: coordinate, zona, quota e vento si propongono da soli';
   return (
-    <Fold id="cf-sito" step={step} title="Sito e vento (NTC 2018)" sum={sum}>{() => <>
+    <Fold id="cf-sito" step={step} info={<>Proposta da far verificare al progettista. Zona vento dalla regione, categoria per campagna aperta (rugosità D) secondo la distanza dal mare e la quota.
+        La pressione sui moduli è qp × cp × cd, con cp netti della falda dati dal progettista; per modulo = pressione × superficie del modulo.</>} title="Sito e vento (NTC 2018)" sum={sum}>{() => <>
       <div className="grid">
         <div className="f" style={{ gridColumn: 'span 2' }}>Località dell'impianto
           <span className="lrow">
@@ -146,10 +147,6 @@ function SitoVento({ step, z }: { step: number; z: number | null }) {
           <div>Pressione in sollevamento<b>{p.su != null ? kn(Math.abs(p.su)) : '–'}</b>{p.su != null && <span className="muted small">{fN((Math.abs(p.su) * mod) / 1000, 2)} kN per modulo</span>}</div>
         </div>
       </> : <p className="hint" style={{ margin: 0 }}>Servono zona vento, categoria di esposizione e altitudine.</p>}
-      <p className="hint" style={{ margin: '14px 0 0' }}>
-        Proposta da far verificare al progettista. Zona vento dalla regione, categoria per campagna aperta (rugosità D) secondo la distanza dal mare e la quota.
-        La pressione sui moduli è qp × cp × cd, con cp netti della falda dati dal progettista; per modulo = pressione × superficie del modulo.
-      </p>
     </>}</Fold>
   );
 }
@@ -215,7 +212,7 @@ export function ConfiguraFisso() {
         </div>
       )}</Fold>
 
-      <Fold id="cf-comp" step={5} title="Composizione impianto"
+      <Fold id="cf-comp" step={5} info={<>Clic su una riga per vederla nell'anteprima · Controventi vuoto = 6 sulla 36, proposta sulle altre · Arcareccio unico solo sulla taglia 4.</>} title="Composizione impianto"
         sum={`${F.taglie.map((x: any) => `${x.moduli} × ${x.n_strutture}`).join(' · ')} → ${r ? `${r.totali.strutture} strutture, ${n0(r.totali.moduli)} moduli` : '…'}`}
         act={<button className="btn p" disabled={!libere.length} onClick={aggiungi}>+ Aggiungi taglia</button>}>{() => <>
         <form className="toolbar" onSubmit={e => { e.preventDefault(); proponi(); }}>
@@ -260,7 +257,6 @@ export function ConfiguraFisso() {
             <td colSpan={6} /><td className="n">{r ? `${fN(r.totali.potenza, 2)} kWp` : ''}</td><td className="n">{r ? `${n0(r.totali.massa)} kg` : ''}</td><td />
           </tr>
         </tbody></table></div>
-        <p className="hint" style={{ margin: '10px 0 0' }}>Clic su una riga per vederla nell'anteprima · Controventi vuoto = 6 sulla 36, proposta sulle altre · Arcareccio unico solo sulla taglia 4.</p>
       </>}</Fold>
 
       <Fold id="cf-ant" step={6} title={`Anteprima taglia ${F.taglie[i]?.moduli ?? ''}`}
@@ -294,13 +290,12 @@ export function ListinoFisso() {
   const L = normListinoFisso(S.data), pr = L.prezzi;
   const ripristina = () => { if (!confirm('Ripristinare i prezzi degli impianti fissi ai valori della Distinta DE VITA?')) return; delete S.data.fisso; normListinoFisso(S.data); done(); };
   return (
-    <Fold id="li-fisso" cls="cat" title="Impianti fissi" sum={`${Object.keys(pr).length} voci · zincatura ${fN(L.par.costoZinc, 2)} €/kg, peso +${fN(L.par.aumZinc * 100, 1)} %`}
+    <Fold id="li-fisso" cls="cat" info={<>Acquisto a peso (€/kg) per i profili, a pezzo (€/pz) per bulloneria e alluminio. Lavorazione in % sul costo d'acquisto; zincatura sul peso aumentato della maggiorazione; altre lavorazioni in €/kg.</>} title="Impianti fissi" sum={`${Object.keys(pr).length} voci · zincatura ${fN(L.par.costoZinc, 2)} €/kg, peso +${fN(L.par.aumZinc * 100, 1)} %`}
       act={<button className="btn s" onClick={ripristina}>Prezzi DE VITA</button>}>{() => <>
       <div className="toolbar">
         <label className="f">Maggiorazione peso zincatura (%)<Inp path="data.fisso.par.aumZinc" type="pct" /></label>
         <label className="f">Costo zincatura (€/kg)<Inp path="data.fisso.par.costoZinc" /></label>
       </div>
-      <p className="hint">Acquisto a peso (€/kg) per i profili, a pezzo (€/pz) per bulloneria e alluminio. Lavorazione in % sul costo d'acquisto; zincatura sul peso aumentato della maggiorazione; altre lavorazioni in €/kg.</p>
       {SEZIONI.map(([tit, kk]) => (
         <div key={tit} className="wrap"><table className="rows"><tbody>
           <tr><th>{tit}</th><th className="n">Costo acquisto</th><th className="n">Lavorazione %</th><th>Zincatura</th><th className="n">Altre lav. €/kg</th></tr>

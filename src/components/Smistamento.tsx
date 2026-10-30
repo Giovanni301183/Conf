@@ -11,6 +11,7 @@ import { toast } from '../store/actions';
 import { aggiornaDoc, puoGestireDoc, puoModificare, repartiDi, repartiVociDisponibili, salvaScadenza } from '../store/remote';
 import { apriScheda } from './pannelli';
 import { Ic, IcReparto } from './Icona';
+import { Info } from './ui';
 
 /** Reparti proposti per un testo: quelli dei temi riconosciuti. */
 const proposti = (testo: string) => repartiDaTemi(suggerisciEtichette(testo));
@@ -49,9 +50,8 @@ export function Smistamento({ vv }: { vv: Voce[] }) {
 
   return (
     <div className="card smist">
-      <h2><Ic n="smistare" s={16} />Smistamento<span className="tag">{note.length + voci.length} da smistare</span></h2>
-      <p className="hint" style={{ margin: '0 0 6px' }}>Clicca il reparto giusto su ogni riga: la riga sparisce da qui e va in quel reparto.
-        ✦ = proposto leggendo il testo. Una nota prende il tema del reparto (lo cambi poi con <Ic n="collega" />Collega); una voce d'agenda il reparto (lo cambi in Modifica).</p>
+      <h2><Ic n="smistare" s={16} />Smistamento<Info>Clicca il reparto giusto su ogni riga: la riga sparisce da qui e va in quel reparto.
+        ✦ = proposto leggendo il testo. Una nota prende il tema del reparto (lo cambi poi con <Ic n="collega" />Collega); una voce d'agenda il reparto (lo cambi in Modifica).</Info><span className="tag">{note.length + voci.length} da smistare</span></h2>
       {!note.length && !voci.length && <div className="empty"><Ic n="festa" />Niente da smistare.</div>}
       {note.length > 0 && <h3>Note e file</h3>}
       {note.map(d => <Riga key={d.id} ic={<Ic n={d.tipo === 'nota' ? 'nota' : 'allega'} />} titolo={d.titolo}

@@ -10,6 +10,7 @@ import { geocode } from '../lib/geo';
 import { S, commit } from '../store/state';
 import { archOpen, archPatch, toast } from '../store/actions';
 import { KFiltri, StatoTag } from './Cruscotto';
+import { Info } from '../components/ui';
 
 const ITALIA: L.LatLngTuple = [42.5, 12.5];
 const raggio = (kwp: number) => 6 + Math.min(22, Math.sqrt(Math.max(0, kwp)) / 2.2);
@@ -83,8 +84,7 @@ export function Mappa() {
           <div ref={box} className={`map ${piazza ? 'aim' : ''}`} />
         </div>
         <div className="card mapside">
-          <h2>Senza posizione · {senza.length}</h2>
-          <p className="hint">Cerca la località scritta nel preventivo, oppure scegli "Clic" e indica il punto sulla mappa.</p>
+          <h2>Senza posizione · {senza.length}<Info>Cerca la località scritta nel preventivo, oppure scegli "Clic" e indica il punto sulla mappa.</Info></h2>
           {senza.length ? senza.map(e => (
             <div key={e.id} className={`mitem ${piazza === e.id ? 'on' : ''}`}>
               <div><b>{e.nome}</b><div className="muted small">{eLuogo(e).nome || <i>località non indicata</i>} · {fN(e.kwp, 0)} kWp</div></div>

@@ -12,7 +12,7 @@ import { REPARTI, SETTORI_MAPPA, SMISTARE, nomeReparto, nomeSettoreMappa, repart
 import { S, commit } from '../store/state';
 import { cloud, mioEmail, repartiDi, settorePrev } from '../store/remote';
 import { Ic, IcReparto, IcSettore } from './Icona';
-import { ChevBarra, barraAperta, clicBarra } from './ui';
+import { ChevBarra, barraAperta, clicBarra, Info } from './ui';
 
 const KEY_VISTO = 'tracker_prev_reparti_visto_v1', KEY_MAPPA = 'tracker_prev_mappa_v1';
 const leggi = (k: string) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
@@ -187,8 +187,7 @@ export function MappaReparti({ vv, onNuovo, scheda }: { vv: Voce[]; onNuovo?: (k
         <ChevBarra k="mappa" />
       </h2>
       <div className="mleg"><span><i className="late" />urgenze o scadute</span><span><i className="soon" />in scadenza</span><span><i className="new" />note nuove</span>
-        <span><i className="pnel" />nel reparto</span><span><i className="pcoi" />coinvolto</span>
-        <span className="muted">· il numero conta le voci da guardare · clic su un reparto per vedere solo le sue cose, poi su un settore per restringere</span></div>
+        <span><i className="pnel" />nel reparto</span><span><i className="pcoi" />coinvolto</span><Info>Il numero conta le voci da guardare. Clic su un reparto per vedere solo le sue cose, poi su un settore per restringere.</Info></div>
       {settori.length > 0 && <p className="hint msethint"><IcReparto k={sel} s={13} /> {riq ? 'Sotto' : 'Intorno a'} <b>{nomeReparto(sel)}</b> ci sono i settori: {settori.map(t => t.nome).join(', ')}. Cliccane uno per vedere solo le sue cose{scheda ? ' e aggiungere subito una voce o una nota' : ''}{selSet ? '; di nuovo per tornare a tutto il reparto' : ''}.</p>}
       <div className="msvg">
         <svg viewBox={`0 0 ${W} ${H}`} role="group" aria-label="Mappa dei reparti">

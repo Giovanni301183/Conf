@@ -6,6 +6,7 @@ import { normVista, vedeTutto } from '../domain/vista';
 import { REPARTI, nomeReparto } from '../domain/reparti';
 import { cloud, invitaUtente, isAdmin, listUtenti, online, patchUtente, resetPassword, ultimiAccessi, type Utente } from '../store/remote';
 import { Ic, IcReparto } from '../components/Icona';
+import { Info } from '../components/ui';
 
 const RUOLI = [['utente', 'Utente'], ['admin', 'Amministratore']] as const;
 const DOMINIO = '@terranovasrl.net';
@@ -47,9 +48,8 @@ export function Utenti() {
   return (
     <>
       <div className="card head">
-        <h2>Invita un utente</h2>
-        <p className="hint">Riceve un'email con il link per scegliere la password. Sono ammesse solo email {DOMINIO}.
-          L'amministratore può anche eliminare preventivi dall'archivio e gestire gli utenti; gli utenti vedono, creano e modificano tutti i preventivi e il listino.</p>
+        <h2>Invita un utente<Info>Riceve un'email con il link per scegliere la password. Sono ammesse solo email {DOMINIO}.
+          L'amministratore può anche eliminare preventivi dall'archivio e gestire gli utenti; gli utenti vedono, creano e modificano tutti i preventivi e il listino.</Info></h2>
         <form className="grid" onSubmit={invita}>
           <label className="f">Email<input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={'nome.cognome' + DOMINIO} required /></label>
           <label className="f">Nome<input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome e cognome" /></label>
