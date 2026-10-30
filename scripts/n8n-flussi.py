@@ -343,7 +343,7 @@ CASELLA = 'g.sorrentino@terranovasrl.net'
 # Seconda casella con le stesse etichette: quella dell'amministrazione. Le etichette le mette il collega che la gestisce e le email vanno
 # nel suo «In arrivo» (utente dell'app UTENTE_AMM), da dove sceglie per chi è il promemoria. Gmail con la sua credenziale «Gmail Amministrazione».
 CASELLA_AMM = 'amministrazione@terranovasrl.net'
-UTENTE_AMM = 'INSERISCI_EMAIL_COLLEGA_AMMINISTRAZIONE'
+UTENTE_AMM = CASELLA_AMM   # il collega entra nell'app con l'indirizzo della casella
 ET = "$('Email etichettata').first().json"
 IMP = "$('Impostazioni etichette').first().json"
 CODICE_RICERCA = r"""// Ricerca Gmail delle email con un'etichetta «Conf/…» non ancora passate all'app (anche vecchie), e nomi delle etichette per l'app.
