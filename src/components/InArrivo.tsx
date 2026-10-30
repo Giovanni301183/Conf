@@ -66,15 +66,18 @@ function Email({ a }: { a: Arrivo }) {
   );
 }
 
-/** Barra «In arrivo»: si rilegge all'apertura e ogni 2 minuti. Senza server o senza email da sistemare non si vede. */
+/** Barra «In arrivo»: si rilegge appena c'è l'accesso, ogni minuto e quando si torna sull'app (es. dopo aver etichettato in Gmail).
+ *  Senza server o senza email da sistemare non si vede. */
 export function InArrivo() {
-  const [, aggiorna] = useState(0);
+  const [, aggiorna] = useState(0), dentro = online() && !!cloud.session;
   useEffect(() => {
-    if (!online() || !cloud.session) return;
+    if (!dentro) return;
     const leggi = () => loadInArrivo().then(() => aggiorna(x => x + 1), () => {});
-    leggi(); const t = setInterval(leggi, 120_000);
-    return () => clearInterval(t);
-  }, []);
+    const torna = () => { if (document.visibilityState === 'visible') leggi(); };
+    leggi(); const t = setInterval(leggi, 60_000);
+    document.addEventListener('visibilitychange', torna);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', torna); };
+  }, [dentro]);
   if (!online() || !cloud.session || (!arrivo.vv.length && !arrivo.err)) return null;
   const ap = barraAperta('arrivo');
   return (
