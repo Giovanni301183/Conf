@@ -19,7 +19,7 @@
      "dataPropertyAttachmentsPrefixName": "attachment_"
     }
    },
-   "id": "d9e0a113-59e1-4120-a448-22eb9f3bff38",
+   "id": "ec2362cd-6e7a-4f72-814e-0600e26e6c9d",
    "name": "Email in arrivo",
    "type": "n8n-nodes-base.gmailTrigger",
    "typeVersion": 1.2,
@@ -39,17 +39,17 @@
     "assignments": {
      "assignments": [
       {
-       "id": "1f22ab69-2f41-4c1c-b14d-5e5ddd8075f1",
+       "id": "4b2d544b-4244-46cf-bd47-5326cb9d1c44",
        "name": "url",
        "type": "string",
-       "value": "https://conf-git-calendarrrrr-giovanne.vercel.app/api/agenda?x-vercel-protection-bypass=INSERISCI_CODICE_BYPASS"
+       "value": "https://conf-five.vercel.app/api/agenda"
       }
      ]
     },
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "e9bad765-4b1f-419e-8e37-7eacaeb6a3f6",
+   "id": "65bd2ce7-2fa2-44d8-a1c0-1c848d32e504",
    "name": "Impostazioni email",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -69,7 +69,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'posta', gmail_id: $('Email in arrivo').item.json.id, da: $('Email in arrivo').item.json.from?.value?.[0]?.address || $('Email in arrivo').item.json.from?.text || '', oggetto: $('Email in arrivo').item.json.subject || '', testo: $('Email in arrivo').item.json.text || '', data: $('Email in arrivo').item.json.date || '', allegati: Object.entries($('Email in arrivo').item.binary || {}).map(([k, f]) => ({ chiave: k, nome: f.fileName || k, mime: f.mimeType || '', peso: f.fileSize || '' })) }) }}",
     "options": {}
    },
-   "id": "5b3e7988-1ec2-4b10-b9b9-888409d37801",
+   "id": "40d524fa-70e6-4cc8-aa89-f13722841631",
    "name": "Email → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -88,7 +88,7 @@
    "parameters": {
     "jsCode": "// Un elemento per ogni allegato da caricare, con il suo file preso dall'email.\nconst file = $('Email in arrivo').first().binary || {};\nconst r = $input.first().json;\nreturn (r.ok && r.caricamenti ? r.caricamenti : []).filter(c => file[c.chiave]).map(c => ({ json: c, binary: { data: file[c.chiave] } }));"
    },
-   "id": "b194f65a-66e7-438d-80fe-060ebfcfafa3",
+   "id": "20468698-2fe4-4b26-98e2-2c8b768f4ffe",
    "name": "Allegati da caricare",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
@@ -123,7 +123,7 @@
     "inputDataFieldName": "data",
     "options": {}
    },
-   "id": "1baaa0e3-dad8-4051-b2df-8b624486031f",
+   "id": "ae5e0bd9-14b2-4202-975d-e5ac1e01d8ba",
    "name": "Carica allegato",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,

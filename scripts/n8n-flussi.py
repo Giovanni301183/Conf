@@ -253,6 +253,26 @@ chat_conn = {
        for t in ['chi_sono', 'cerca_commesse', 'colleghi', 'leggi_agenda', 'crea_voce', 'modifica_voce', 'collega_account', 'prepara_preventivo', 'invia_offerta', 'carica_layout', 'modulo_preventivo', 'cerca_appunti', 'email_da_appunto', 'crea_varianti', 'margini_preventivo', 'crea_nota', 'modifica_nota']},
 }
 
+# ---------- Modifiche fatte a mano in n8n (n8n/incolla-reparti.txt e incolla-settori.txt), qui con gli stessi testi ----------
+# Così il flusso completo reimportato le ha già: reparti e settori in crea_voce e crea_nota, menu /nuovo, situazione di un reparto,
+# risposta ai messaggi del bot, pulsanti con chat e messaggio.
+A_MANO = {
+    'Pulsante → app': {'jsonBody': "={{ JSON.stringify({ azione: $json.callback_query.data.split(':')[0], id: $json.callback_query.data.split(':')[1], scelta: $json.callback_query.data.split(':')[2] || '', telegram_id: $json.callback_query.from.id, chat: $json.callback_query.message.chat.id, msg: $json.callback_query.message.message_id }) }}"},
+    'crea_voce': {'jsonBody': '={{ JSON.stringify({ azione: \'crea\', telegram_id: $(\'Telegram Trigger\').item.json.message.from.id, genere: $fromAI(\'genere\', `Uno tra: urgenza, attivita (cosa da fare), promemoria, scadenza, appuntamento`, \'string\'), titolo: $fromAI(\'titolo\', `Descrizione breve, massimo 200 caratteri`, \'string\'), giorno: $fromAI(\'giorno\', `Data AAAA-MM-GG; vuoto solo per le urgenze (= oggi)`, \'string\', ""), ora: $fromAI(\'ora\', `Ora HH:MM, vuoto se non indicata`, \'string\', ""), nota: $fromAI(\'nota\', `Dettagli facoltativi`, \'string\', ""), categoria: $fromAI(\'categoria\', `Facoltativa: STRUTTURA, BULLONERIA, ELETTROMECCANICO, ELETTRONICO`, \'string\', ""), preventivo_id: $fromAI(\'preventivo_id\', `id del preventivo o commessa preso da cerca_commesse, vuoto se nessuno`, \'string\', ""), assegnata_a: $fromAI(\'assegnata_a\', `email del collega presa da colleghi, vuoto se nessuno`, \'string\', ""), reparto: $fromAI(\'reparto\', `Reparto se detto o dal menu /nuovo: direzione, commerciale, tecnico, rs, acquisti, produzione, qualita, logistica, cantiere, assistenza, amministrazione, hr; vuoto se non detto`, \'string\', ""), settore: $fromAI(\'settore\', `Settore solo se detto: energia (tracker e impianti fissi), serre, vigneti, recinzioni, speciali (lavori speciali); vuoto se non detto`, \'string\', ""), chat: $(\'Telegram Trigger\').item.json.message.chat.id }) }}'},
+    'crea_nota': {'jsonBody': '={{ JSON.stringify(Object.fromEntries(Object.entries({ azione: \'nota\', telegram_id: $(\'Telegram Trigger\').item.json.message.from.id, titolo: $fromAI(\'titolo\', `Titolo breve della nota`, \'string\'), testo: $fromAI(\'testo\', `Testo della nota in parole semplici; vuoto se basta il titolo`, \'string\', ""), etichette: $fromAI(\'etichette\', `Da 0 a 3 temi separati da virgola tra: acquisti, vendita, opportunita, sviluppo, tecnico, produzione, cantiere, logistica, qualita, amministrazione, marketing, personale, riunione, idea`, \'string\', ""), preventivo_id: $fromAI(\'preventivo_id\', `id della commessa da cerca_commesse; vuoto per una nota libera`, \'string\', ""), reparto: $fromAI(\'reparto\', `Reparto se detto o dal menu /nuovo: direzione, commerciale, tecnico, rs, acquisti, produzione, qualita, logistica, cantiere, assistenza, amministrazione, hr; vuoto se non detto`, \'string\', ""), settore: $fromAI(\'settore\', `Settore solo se detto: energia (tracker e impianti fissi), serre, vigneti, recinzioni, speciali (lavori speciali); vuoto se non detto`, \'string\', ""), chat: $(\'Telegram Trigger\').item.json.message.chat.id }).filter(([, v]) => v !== \'\' && v != null))) }}'},
+}
+for n in chat:
+    if n['name'] in A_MANO: n['parameters'].update(A_MANO[n['name']])
+    if n['name'] == 'Andato a buon fine?': n['parameters']['conditions']['conditions'][0]['leftValue'] = "={{ $('Pulsante → app').item.json.ok && !!$('Pulsante → app').item.json.testo }}"
+    if n['name'] == 'Assistente':
+        n['parameters']['text'] = '={{ ($(\'Telegram Trigger\').item.json.message?.reply_to_message?.from?.is_bot ? \'[in risposta a: \' + String($(\'Telegram Trigger\').item.json.message.reply_to_message.text || \'\').slice(0, 400) + \'] \' : \'\') + ($json.text ? \'[vocale] \' + $json.text : (($(\'Telegram Trigger\').item.json.message.text || $(\'Telegram Trigger\').item.json.message.caption || \'\') + ($(\'Telegram Trigger\').item.json.message.document ? \' [allegato: file "\' + $(\'Telegram Trigger\').item.json.message.document.file_name + \'", file_id=\' + $(\'Telegram Trigger\').item.json.message.document.file_id + \']\' : $(\'Telegram Trigger\').item.json.message.photo ? \' [allegato: foto, file_id=\' + $(\'Telegram Trigger\').item.json.message.photo[$(\'Telegram Trigger\').item.json.message.photo.length - 1].file_id + \']\' : \'\')) || \'(messaggio senza testo: chiedi di scriverlo a parole o con un vocale)\') }}'
+        n['parameters']['options']['systemMessage'] += '\n' + '- Reparti: Direzione, Commerciale, Tecnico, R&S, Acquisti, Produzione, Qualità e sicurezza, Logistica, Cantiere, Assistenza, Amministrazione, Risorse umane. Se il messaggio dice in quale reparto va una voce o una nota ("nota per acquisti…", "promemoria per la logistica…"), passa reparto a crea_voce o crea_nota. Se non lo dice, non indovinarlo. Se lo strumento risponde con «pulsanti», sotto c\'è già il messaggio con i tasti per cambiare reparto o annullare: dillo in mezza riga.\n- /nuovo (o "voglio aggiungere qualcosa" senza dire cosa): usa nuovo_menu (con il reparto se l\'ha detto) e rispondi solo che il menu è in chat.\n- Un messaggio che inizia con [in risposta a: … [reparto=K tipo=T]] è la risposta al menu /nuovo: se T è nota usa crea_nota con reparto K (etichette scelte da te come al solito); altrimenti crea_voce con genere T e reparto K. Converti le date relative; se per promemoria, scadenza o appuntamento manca il giorno, chiedilo. Non chiedere altre conferme: salva e riassumi in una riga.\n- /reparto <nome> o domande come "com\'è messa la produzione?": usa situazione_reparto (reparto vuoto se non dice quale). La situazione arriva già in chat dall\'app con i suoi pulsanti: non riscriverla, rispondi solo a una domanda precisa se c\'era (es. "ci sono urgenze in produzione?").\n- Altri comandi del menu: /nuovo = aggiungi qualcosa in un reparto con i pulsanti; /reparto <nome> = situazione di un reparto.\n- Settori: Energia (tracker e impianti fissi), Serre, Vigneti, Recinzioni, Lavori speciali. Se il messaggio dice il settore di una voce o di una nota ("promemoria per le serre…", "nota vigneti…"), passa settore a crea_voce o crea_nota. Se non lo dice, non indovinarlo: vale quello della commessa collegata. Sotto quello che si salva c\'è il pulsante per cambiare settore.\n- "Com\'è messa la produzione sulle serre?" o /reparto produzione serre: situazione_reparto con reparto e settore.'
+_chi = next(n for n in chat if n['name'] == 'chi_sono')
+for nome, pos, desc, corpo in [('nuovo_menu', [3080, 860], 'Manda in chat il menu con i pulsanti per aggiungere qualcosa in un reparto (/nuovo): si sceglie il reparto, poi nota, promemoria, scadenza, urgenza, appuntamento o da fare, poi si risponde con il testo.', '={{ JSON.stringify({ azione: \'menu_nuovo\', telegram_id: $(\'Telegram Trigger\').item.json.message.from.id, chat: $(\'Telegram Trigger\').item.json.message.chat.id, reparto: $fromAI(\'reparto\', `Reparto se detto, altrimenti vuoto`, \'string\', "") }) }}'), ('situazione_reparto', [3200, 860], "Situazione di un reparto: urgenze, scadute, oggi, prossimi 7 giorni, ultime note e persone. L'app la manda in chat con i pulsanti; restituisce anche il testo.", '={{ JSON.stringify({ azione: \'reparto\', telegram_id: $(\'Telegram Trigger\').item.json.message.from.id, chat: $(\'Telegram Trigger\').item.json.message.chat.id, reparto: $fromAI(\'reparto\', `Reparto (es. produzione, acquisti); vuoto se non detto`, \'string\', ""), settore: $fromAI(\'settore\', `Settore se detto (energia, serre, vigneti, recinzioni, speciali); vuoto se non detto`, \'string\', "") }) }}')]:
+    t = json.loads(json.dumps(_chi)); t.update({'id': U(), 'name': nome, 'position': pos})
+    t['parameters'].update({'toolDescription': desc, 'jsonBody': corpo})
+    chat.append(t); chat_conn[nome] = {'ai_tool': [[{'node': 'Assistente', 'type': 'ai_tool', 'index': 0}]]}
+
 # ---------- Flusso 2: avvisi e riepilogo ----------
 avvisi = [
     # Database Webhook di Supabase sulla tabella scadenze (Insert), con l'intestazione x-agenda-secret.
@@ -318,7 +338,6 @@ email_conn = {'Email in arrivo': {'main': [to('Impostazioni email')]}, 'Impostaz
 # Poi n8n le mette «Conf/In app» (o «Conf/Non entrata» se l'app non l'ha presa): così non si rilegge e in Gmail si vede.
 # Va anche per le email vecchie etichettate adesso (il trigger di Gmail guarda solo le nuove). Una email al minuto, per gli allegati.
 CASELLA = 'g.sorrentino@terranovasrl.net'
-API_PROD = 'https://conf-five.vercel.app/api/agenda'
 ET = "$('Email etichettata').item.json"
 CODICE_RICERCA = r"""// Ricerca Gmail delle email con un'etichetta «Conf/…» non ancora passate all'app, e nomi delle etichette per l'app.
 const ll = $input.all().map(i => i.json);
@@ -337,7 +356,7 @@ etichette = [
     node('Email etichettata', 'n8n-nodes-base.gmail', 2.1, [660, 200], {'operation': 'getAll', 'limit': 1, 'simple': False,
          'filters': {'q': '={{ $json.q }}'}, 'options': {'downloadAttachments': True, 'dataPropertyAttachmentsPrefixName': 'attachment_'}}, GMAIL),
     node('Impostazioni etichette', 'n8n-nodes-base.set', 3.4, [880, 200], {'assignments': {'assignments': [
-        {'id': U(), 'name': 'url', 'type': 'string', 'value': API_PROD}, {'id': U(), 'name': 'casella', 'type': 'string', 'value': CASELLA}]},
+        {'id': U(), 'name': 'url', 'type': 'string', 'value': API}, {'id': U(), 'name': 'casella', 'type': 'string', 'value': CASELLA}]},
         'includeOtherFields': True, 'options': {}}),
     http('Etichettata → app', [1100, 200], "{ azione: 'posta', per: $('Impostazioni etichette').item.json.casella, gmail_id: " + ET + ".id, thread_id: " + ET + ".threadId || '', da: "
          + ET + ".from?.value?.[0]?.address || " + ET + ".from?.text || '', a: " + ET + ".to?.value?.[0]?.address || '', oggetto: " + ET + ".subject || '', testo: "
@@ -390,7 +409,9 @@ if SEGRETO and BYPASS:
     av_conn = json.loads(json.dumps(avvisi_conn).replace('"Impostazioni"', '"Impostazioni avvisi"'))
     em = json.loads(json.dumps(email))
     for n in em: n['position'] = [n['position'][0], n['position'][1] + 1650]
-    tutti = json.loads(json.dumps(chat)) + av + em
+    et = json.loads(json.dumps(etichette))
+    for n in et: n['position'] = [n['position'][0], n['position'][1] + 2150]
+    tutti = json.loads(json.dumps(chat)) + av + em + et
     for n in tutti:
         p = n['parameters']
         if p.get('authentication') == 'genericCredentialType':   # richieste all'app: segreto nell'intestazione
@@ -401,7 +422,7 @@ if SEGRETO and BYPASS:
             p['authentication'] = 'none'; n.pop('credentials', None)
         if n['name'] == 'È un inserimento?':
             n['parameters'] = cond(f"$json.headers['x-agenda-secret'] === '{SEGRETO}' && $json.body.type === 'INSERT' && !!$json.body.record?.id")
-    t = json.dumps({'name': 'Agenda Terranova - Telegram', 'nodes': tutti, 'connections': {**chat_conn, **av_conn, **email_conn}, 'settings': SETTINGS, 'pinData': {}},
+    t = json.dumps({'name': 'Agenda Terranova - Telegram', 'nodes': tutti, 'connections': {**chat_conn, **av_conn, **email_conn, **etichette_conn}, 'settings': SETTINGS, 'pinData': {}},
                    ensure_ascii=False, indent=1).replace('INSERISCI_CODICE_BYPASS', BYPASS)
     with open(os.path.join(ROOT, 'n8n', 'da-importare', 'agenda-completo.json'), 'w', encoding='utf-8') as f: f.write(t)
     print('Scritto n8n/da-importare/agenda-completo.json (flusso unico, con segreto e bypass)')

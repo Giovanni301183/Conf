@@ -12,7 +12,7 @@
      ]
     }
    },
-   "id": "1a797513-8402-4d36-b500-75b528654d1a",
+   "id": "f7078c99-6f20-4233-bdda-2d6a1b4af40e",
    "name": "Ogni minuto",
    "type": "n8n-nodes-base.scheduleTrigger",
    "typeVersion": 1.2,
@@ -26,7 +26,7 @@
     "resource": "label",
     "returnAll": true
    },
-   "id": "1699e985-3020-4bba-88e2-34e448960ede",
+   "id": "5be71139-8bac-4e9a-815d-87905e819720",
    "name": "Etichette Gmail",
    "type": "n8n-nodes-base.gmail",
    "typeVersion": 2.1,
@@ -45,7 +45,7 @@
    "parameters": {
     "jsCode": "// Ricerca Gmail delle email con un'etichetta «Conf/…» non ancora passate all'app, e nomi delle etichette per l'app.\nconst ll = $input.all().map(i => i.json);\nconst conf = ll.filter(l => /^conf\\//i.test(l.name || ''));\nconst fatta = conf.find(l => /in app/i.test(l.name)), errore = conf.find(l => /non entrata/i.test(l.name));\nconst lab = n => 'label:' + n.toLowerCase().replace(/[\\s\\/]+/g, '-');\nconst nostre = conf.filter(l => l !== fatta && l !== errore);\nif (!fatta || !nostre.length) return [];\nreturn [{ json: { q: '{' + nostre.map(l => lab(l.name)).join(' ') + '} -' + lab(fatta.name) + (errore ? ' -' + lab(errore.name) : ''),\n  nomi: Object.fromEntries(conf.map(l => [l.id, l.name])), fatta: fatta.id, errore: (errore || fatta).id } }];"
    },
-   "id": "ce9f8d88-490b-4791-b6b5-0e3524187458",
+   "id": "59c36a77-e855-49ed-b0a5-cc0fbd1b3f34",
    "name": "Ricerca etichette",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
@@ -67,7 +67,7 @@
      "dataPropertyAttachmentsPrefixName": "attachment_"
     }
    },
-   "id": "80d975df-3c65-47d4-ab80-161aa298bace",
+   "id": "64720b71-488f-4833-8fc8-d6d3c8ae0c01",
    "name": "Email etichettata",
    "type": "n8n-nodes-base.gmail",
    "typeVersion": 2.1,
@@ -87,13 +87,13 @@
     "assignments": {
      "assignments": [
       {
-       "id": "eab70a0d-e7af-44ae-9a01-3bc408f35c5d",
+       "id": "1e3f0586-9fbd-49cb-ae1b-438e17dfc6b6",
        "name": "url",
        "type": "string",
        "value": "https://conf-five.vercel.app/api/agenda"
       },
       {
-       "id": "b46ff9a8-a124-4bd0-b5a5-8f266e6ae225",
+       "id": "74309e0c-4ac4-4c11-ae0a-01ef09c16b49",
        "name": "casella",
        "type": "string",
        "value": "g.sorrentino@terranovasrl.net"
@@ -103,7 +103,7 @@
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "7d3063b3-be9f-44fb-bbff-e8c1a3c12cdb",
+   "id": "7531217e-f329-4c0e-b008-63f709739453",
    "name": "Impostazioni etichette",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -123,7 +123,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'posta', per: $('Impostazioni etichette').item.json.casella, gmail_id: $('Email etichettata').item.json.id, thread_id: $('Email etichettata').item.json.threadId || '', da: $('Email etichettata').item.json.from?.value?.[0]?.address || $('Email etichettata').item.json.from?.text || '', a: $('Email etichettata').item.json.to?.value?.[0]?.address || '', oggetto: $('Email etichettata').item.json.subject || '', testo: $('Email etichettata').item.json.text || '', data: $('Email etichettata').item.json.date || '', etichette_gmail: ($('Email etichettata').item.json.labelIds || []).map(id => $('Ricerca etichette').item.json.nomi[id]).filter(Boolean), allegati: Object.entries($('Email etichettata').item.binary || {}).map(([k, f]) => ({ chiave: k, nome: f.fileName || k, mime: f.mimeType || '', peso: f.fileSize || '' })) }) }}",
     "options": {}
    },
-   "id": "4d3723e5-7771-48aa-a0a3-3880f7c53b99",
+   "id": "ccedcf75-6ae6-47ae-bedf-4fdc26d98bd8",
    "name": "Etichettata → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -144,7 +144,7 @@
     "messageId": "={{ $('Email etichettata').item.json.id }}",
     "labelIds": "={{ $json.ok ? $('Ricerca etichette').item.json.fatta : $('Ricerca etichette').item.json.errore }}"
    },
-   "id": "2900d152-cb3b-4c5b-b022-9bd124a9d516",
+   "id": "483d4a32-52f6-4579-90a8-b155c4f3ffd3",
    "name": "Segna in Gmail",
    "type": "n8n-nodes-base.gmail",
    "typeVersion": 2.1,
@@ -163,7 +163,7 @@
    "parameters": {
     "jsCode": "// Un elemento per ogni allegato da caricare, con il suo file preso dall'email.\nconst file = $('Email etichettata').first().binary || {};\nconst r = $input.first().json;\nreturn (r.ok && r.caricamenti ? r.caricamenti : []).filter(c => file[c.chiave]).map(c => ({ json: c, binary: { data: file[c.chiave] } }));"
    },
-   "id": "8b19c77d-2ffb-4df3-a776-94a888b368c8",
+   "id": "02236c33-caf3-48ce-8c7a-38723a4b2d7e",
    "name": "Allegati etichettata",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
@@ -198,7 +198,7 @@
     "inputDataFieldName": "data",
     "options": {}
    },
-   "id": "d25e8237-63a5-4f3c-8a58-6bb494acdd7c",
+   "id": "952741c9-5d4c-4b80-bd82-0060c1387bd0",
    "name": "Carica allegato etichettata",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
