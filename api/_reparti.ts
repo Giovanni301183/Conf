@@ -5,9 +5,10 @@
 //   nv:<reparto>:<tipo>     menu nuovo (reparto vuoto = elenco dei reparti; tipo vuoto = scegli cosa aggiungere)
 //   rv:<id voce>:<reparto>  cambia reparto di una voce d'agenda (reparto vuoto = scegli); rn: lo stesso per una nota
 //   xv:<id voce> / xn:<id nota>   annulla (elimina) quello appena salvato
-//   sr:<reparto>            situazione del reparto (vedi situazioneReparto in agenda.ts)
+//   tv:<id voce>:<settore>  settore di una voce (settore vuoto = scegli; «nessuno» = togli); tn: lo stesso per una nota
+//   sr:<reparto>:<settore>  situazione del reparto, anche di un solo settore (vedi situazioneReparto in agenda.ts)
 //   ar                      avvisi in privato per le voci nuove dei miei reparti: sì / no
-import { REPARTI, SMISTARE, nomeReparto, pulisciReparti } from '../src/domain/reparti.js';
+import { REPARTI, SETTORI_MAPPA, SMISTARE, nomeReparto, nomeSettoreMappa, pulisciReparti } from '../src/domain/reparti.js';
 
 const norm = (s: unknown) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 export const fatto = { ok: true, testo: '' };
@@ -20,6 +21,17 @@ export function repartoDa(s: unknown): string {
   return REPARTI.find(r => r.k === t || norm(r.nome) === t)?.k
     || REPARTI.find(r => norm(r.nome).startsWith(t) || r.temi.includes(t))?.k || '';
 }
+/** Chiave di un settore della mappa da come lo scrive l'assistente («energia», «Serre», «lavori speciali», «fotovoltaico»); '' se non c'è. */
+export function settoreDa(s: unknown): string {
+  const t = norm(s);
+  if (!t) return '';
+  if (t === 'nessuno' || t === 'nessun settore') return 'nessuno';
+  if (/\b(tracker|fiss|fotovolt|solar|agrivolt)/.test(t)) return 'energia';
+  if (t.includes('special')) return 'speciali';
+  return SETTORI_MAPPA.find(x => x.k === t || norm(x.nome) === t || norm(x.nome).startsWith(t) && t.length >= 3)?.k || '';
+}
+const IC_SETTORE: Record<string, string> = { energia: '☀️', serre: '🌱', vigneti: '🍇', recinzioni: '🚧', speciali: '⭐' };
+export const etichettaSettore = (k: string) => `${IC_SETTORE[k] || '•'} ${nomeSettoreMappa(k)}`;
 export const icona = (k: string) => (k === SMISTARE ? '📥' : REPARTI.find(r => r.k === k)?.ic || '•');
 export const etichetta = (k: string) => `${icona(k)} ${nomeReparto(k)}`;
 /** Reparti di una voce: quelli scelti, altrimenti quelli di chi la deve fare (o di chi l'ha creata), altrimenti «Da smistare». */
@@ -52,11 +64,15 @@ export function msgScrivi(k: string, t: string) {
   return { text: `✍️ ${etichetta(k)} · ${nome}\nRispondi a questo messaggio con ${t === 'nota' ? 'il testo della nota' : 'cosa e quando'} (va bene anche un vocale).\n[reparto=${k} tipo=${t}]`,
     reply_markup: { force_reply: true, selective: true, input_field_placeholder: t === 'nota' ? 'es. il fornitore alza i prezzi del 5%' : 'es. richiamare il fornitore venerdì alle 10' } };
 }
-/** Sotto una voce o una nota appena salvata con un reparto: cambia reparto o annulla. q = 'v' voce, 'n' nota. */
-export const msgSalvato = (q: 'v' | 'n', id: string, titolo: string, k: string, ok = '') => ({
-  text: `🏷 ${titolo.slice(0, 200)}\nReparto: ${etichetta(k)}${ok}`,
-  reply_markup: { inline_keyboard: [[{ text: '🔁 Cambia reparto', callback_data: `r${q}:${id}:` }, { text: '↩ Annulla', callback_data: `x${q}:${id}:` }]] },
+/** Sotto una voce o una nota appena salvata con un reparto o un settore: cambia reparto, settore, o annulla. q = 'v' voce, 'n' nota. */
+export const msgSalvato = (q: 'v' | 'n', id: string, titolo: string, k: string, ok = '', ss: string[] = []) => ({
+  text: [`🏷 ${titolo.slice(0, 200)}`, k ? `Reparto: ${etichetta(k)}` : '', ss.length ? `Settore: ${ss.map(etichettaSettore).join(', ')}` : ''].filter(Boolean).join('\n') + ok,
+  reply_markup: { inline_keyboard: [[{ text: '🔁 Cambia reparto', callback_data: `r${q}:${id}:` }, { text: ss.length ? '🏷 Cambia settore' : '🏷 Settore', callback_data: `t${q}:${id}:` }],
+    [{ text: '↩ Annulla', callback_data: `x${q}:${id}:` }]] },
 });
+/** Tastiera dei settori (Energia, Serre, Vigneti, Recinzioni, Lavori speciali), due per riga; con «nessuno» per toglierlo. */
+export const tastiSettori = (cb: (k: string) => string, nessuno = false) =>
+  righe([...SETTORI_MAPPA.map(x => ({ text: etichettaSettore(x.k), callback_data: cb(x.k) })), ...(nessuno ? [{ text: '✖ Nessun settore', callback_data: cb('nessuno') }] : [])]);
 
 /** Chiamata all'API di Telegram con il token del bot; false se non è andata. */
 export async function tg(metodo: string, body: Record<string, unknown>) {

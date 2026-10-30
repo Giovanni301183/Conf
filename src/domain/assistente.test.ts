@@ -42,6 +42,7 @@ describe('strumenti dell\'assistente', () => {
     const r = esegui('proponi_nota', { titolo: 'Idea serre', testo: '', etichette: ['sviluppo', 'idea'], preventivo: null }, N, 'n1').proposta as any;
     expect(r).toMatchObject({ tipo: 'nota', preventivo_id: null, etichette: ['sviluppo', 'idea'] });
     expect((esegui('proponi_nota', { titolo: 'Pali', testo: 'x', etichette: [], preventivo: '2026/014' }, N, 'n2').proposta as any).preventivo_id).toBe('p1');
+    expect((esegui('proponi_nota', { titolo: 'Serra', testo: '', etichette: [], preventivo: null, settori: ['serre', 'boh'] }, N, 'n4').proposta as any).settori).toEqual(['serre']);
     expect(esegui('proponi_nota', { titolo: 'Pali', testo: '', etichette: [], preventivo: 'Bianchi' }, N, 'n3').errore).toBe(true);
     const e = esegui('proponi_etichette', { note: [{ id: 'n1', aggiungi: ['acquisti'], togli: ['vendita'] }] }, N, 'n4').proposta as any;
     expect(e.note).toEqual([{ id: 'n1', titolo: 'Acciaio', prima: ['vendita'], dopo: ['acquisti'] }]);

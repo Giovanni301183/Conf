@@ -593,6 +593,24 @@ label.chk small{margin-left:4px}
 .mtile.late{--bl:var(--bad);animation:lampeggia 1.2s ease-in-out infinite}
 .mtile.soon{--bl:var(--warn);animation:lampeggia 2s ease-in-out infinite}
 @media (max-width:640px){.msvg{display:none}.mtiles{display:grid}}
+/* Settori del reparto aperto: pallini sulla mappa, riga di pulsanti sotto il riquadro sul telefono */
+.msetl{stroke:var(--line);stroke-width:1.5;stroke-dasharray:3 3}
+.mset{cursor:pointer;outline:none}
+.mset .disco{fill:#fff;stroke:var(--ec);stroke-width:2.2;transition:fill .15s}
+.mset .ic{color:var(--ec)}
+.mset:hover .disco,.mset:focus-visible .disco{fill:var(--soft)}
+.mset.on .disco{fill:var(--ec)}.mset.on .ic{color:#fff}
+.mset .anello{fill:none;stroke-width:3.5;opacity:0}
+.mset.late .anello{stroke:var(--bad);animation:manello 1.2s ease-in-out infinite}
+.mset.soon .anello{stroke:var(--warn);animation:manello 2s ease-in-out infinite}
+.mset .snum circle{fill:var(--bad)}.mset.soon .snum circle{fill:var(--warn)}.mset .snum text{fill:#fff;font-weight:700;font-size:10px}
+.mset .snome{fill:var(--ink2);font-weight:600;font-size:10.5px}.mset.on .snome{fill:var(--ink)}
+.msetrow{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 4px}
+.msetb{display:inline-flex;align-items:center;gap:5px;border:1.5px solid var(--ec);border-radius:999px;background:#fff;color:var(--ink);padding:5px 10px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.msetb .ic{color:var(--ec)}
+.msetb.on{background:var(--ec);color:#fff}.msetb.on .ic{color:#fff}
+.msetb.late{--bl:var(--bad);animation:lampeggia 1.2s ease-in-out infinite}.msetb.soon{--bl:var(--warn);animation:lampeggia 2s ease-in-out infinite}
+.msetb .snum{background:var(--bad);color:#fff;border-radius:999px;font-size:10.5px;padding:0 6px;line-height:16px}.msetb.soon .snum{background:var(--warn)}
 /* Smistamento (📥 Da smistare): ogni riga con i reparti da cliccare; ✦ = proposto */
 .smist h3{margin:14px 0 4px}
 .smriga{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line)}
@@ -603,7 +621,7 @@ label.chk small{margin-left:4px}
 .smt small{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .smriga .etq{cursor:pointer}.smriga .etq:hover{border-color:var(--acc2);color:var(--acc)}
 .smriga .etq.on{--ec:var(--acc2)}
-@media (prefers-reduced-motion:reduce){.mnodo .anello,.mtile{animation:none!important}.mnodo.late .anello,.mnodo.soon .anello{opacity:.9}}
+@media (prefers-reduced-motion:reduce){.mnodo .anello,.mtile,.mset .anello,.msetb{animation:none!important}.mnodo.late .anello,.mnodo.soon .anello{opacity:.9}}
 /* Allarmi: le voci scadute (rosso) e in scadenza (arancio) lampeggiano piano; i giorni del calendario con voci scadute pure */
 .cvoce.blink{border-radius:8px;padding-left:8px;padding-right:8px;margin:2px 0}
 .cvoce.blink.late{--bl:var(--bad);animation:lampeggia 1.2s ease-in-out infinite}

@@ -204,6 +204,11 @@ export const coinvoltiDisponibili = () => !supabase || conCoinvolti;
 // I reparti delle voci arrivano con la migrazione 20261030010000_reparti.sql: finché manca, le voci prendono i reparti di chi le deve fare.
 let conReparti = true;
 export const repartiVociDisponibili = () => !supabase || conReparti;
+// I settori (pallini della mappa) arrivano con la migrazione 20261030030000_settori_mappa.sql: finché manca, valgono quelli del preventivo.
+let conSettori = true;
+export const settoriDisponibili = () => !supabase || conSettori;
+/** Settore del preventivo con quell'id ('' = tracker), undefined se non è nell'archivio. */
+export const settorePrev = (id: string) => { const e = S.arch.find(x => x.id === id); return e ? String(e.prev?.settore || '') : undefined; };
 /** Reparti di un collega (li assegna l'amministratore dalla pagina Utenti). */
 export const repartiDi = (email: string) => (email === mioEmail() ? cloud.me?.reparti : cloud.colleghi.find(u => u.email === email)?.reparti) || [];
 export const mioEmail = () => cloud.session?.user.email?.toLowerCase() ?? '';
@@ -224,8 +229,9 @@ export const puoModificare = (s: Scadenza) => isAdmin() || s.creato_da === mioEm
 export const puoSpuntare = (s: Scadenza) => puoModificare(s) || perMe(s, mioEmail());
 async function loadScadenze() {
   listUtenti().then(u => { cloud.colleghi = u.filter(x => x.attivo); }, () => {});
-  const leggi = () => supabase!.from('scadenze').select(SCAD_COLS + (conCoinvolti ? ', coinvolti' : '') + (conReparti ? ', reparti' : '')).order('giorno');
+  const leggi = () => supabase!.from('scadenze').select(SCAD_COLS + (conCoinvolti ? ', coinvolti' : '') + (conReparti ? ', reparti' : '') + (conSettori ? ', settori' : '')).order('giorno');
   let { data, error } = await leggi();
+  if (error && conSettori && /settori/.test(error.message)) { conSettori = false; ({ data, error } = await leggi()); }
   if (error && conReparti && /reparti/.test(error.message)) { conReparti = false; ({ data, error } = await leggi()); }
   if (error && conCoinvolti && /coinvolti/.test(error.message)) { conCoinvolti = false; ({ data, error } = await leggi()); }
   if (error) { cloud.scadErr = error.message; S.scad = []; return; }
@@ -235,7 +241,8 @@ export async function salvaScadenza(s: Partial<Scadenza>): Promise<string> {
   const v = { giorno: s.giorno, ora: s.ora || null, genere: s.genere || 'attivita', categoria: s.categoria || null, titolo: (s.titolo || '').trim(), nota: s.nota?.trim() || null,
     preventivo_id: s.preventivo_id || null, assegnata_a: s.assegnata_a || null, fatto: !!s.fatto,
     ...(coinvoltiDisponibili() ? { coinvolti: (s.coinvolti || []).filter(e => e && e !== s.assegnata_a) } : {}),
-    ...(repartiVociDisponibili() && s.reparti !== undefined ? { reparti: s.reparti || [] } : {}) };
+    ...(repartiVociDisponibili() && s.reparti !== undefined ? { reparti: s.reparti || [] } : {}),
+    ...(settoriDisponibili() && s.settori !== undefined ? { settori: s.settori || [] } : {}) };
   if (!v.titolo || !v.giorno) return 'Servono titolo e data.';
   if (!coinvoltiDisponibili() && s.coinvolti?.length) return 'per coinvolgere più persone manca la migrazione 20261028010000_coinvolti.sql nel database';
   if (!supabase) {
@@ -277,9 +284,14 @@ async function loadDocumenti() {
   const { data, error } = await supabase!.from('documenti').select('*').order('creato', { ascending: false });
   if (error) { cloud.docErr = error.message; S.docs = []; return; }
   cloud.docErr = ''; S.docs = data;
+  if (data.length) conSettoriNote = 'settori' in data[0];
 }
+// Settori delle note: colonna documenti.settori (stessa migrazione dei settori delle voci).
+let conSettoriNote = true;
+export const settoriNoteDisponibili = () => !supabase || conSettoriNote;
 const dbErr = (m: string) => (/documenti_legato/.test(m) ? "il file deve restare legato a un preventivo, a una voce d'agenda o a una nota (per i file liberi serve la migrazione 20261028020000_archivio_unico.sql)"
   : /privato|scheda/.test(m) ? 'manca la migrazione 20261028020000_archivio_unico.sql (va eseguita nel SQL Editor di Supabase)'
+  : /settori/.test(m) ? 'manca la migrazione 20261030030000_settori_mappa.sql (va eseguita nel SQL Editor di Supabase)'
   : /etichette/.test(m) ? 'manca la migrazione 20261025020000_etichette_note.sql (va eseguita nel SQL Editor di Supabase)' : m);
 type Dove = { preventivo_id?: string | null; scadenza_id?: string | null; nota_id?: string | null };
 /** Carica un file. Con etichette e privato (archivio tecnico); un allegato è privato se lo è la sua nota. Un file tecnico lo legge subito l'AI. */
@@ -318,9 +330,10 @@ export async function leggiScheda(id: string): Promise<string> {
   } catch (e) { return (e as Error).message; }
   finally { leggendo.delete(id); await loadDocumenti(); commit(); }
 }
-export async function salvaNota(n: { id?: string; titolo: string; testo: string; cartella: string; etichette: string[]; preventivo_id?: string | null; scadenza_id?: string | null; privato?: boolean }): Promise<{ errore: string; id?: string }> {
+export async function salvaNota(n: { id?: string; titolo: string; testo: string; cartella: string; etichette: string[]; settori?: string[]; preventivo_id?: string | null; scadenza_id?: string | null; privato?: boolean }): Promise<{ errore: string; id?: string }> {
   if (!supabase) return { errore: 'Le note si salvano solo con il server.' };
   const v: Record<string, unknown> = { titolo: n.titolo.trim().slice(0, 200), testo: n.testo.trim() || null, cartella: n.cartella, etichette: n.etichette };
+  if (n.settori !== undefined && (conSettoriNote || n.settori.length)) v.settori = n.settori;
   if (n.privato !== undefined) v.privato = n.privato;
   // Il collegamento al preventivo si cambia solo se il modulo lo mostra (dalla Home); altrove resta quello di prima.
   if (n.id && n.preventivo_id !== undefined) v.preventivo_id = n.preventivo_id || null;

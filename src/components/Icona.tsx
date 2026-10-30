@@ -4,7 +4,7 @@ import type { SVGProps } from 'react';
 import {
   AlarmClock, Bell, BellOff, Calendar, ChartColumn, ChartPie, CircleCheck, Compass, Construction, Eye, Factory, FileText, Handshake,
   HardHat, Inbox, Link, Lock, Mail, MapPin, MessageCircle, Mic, Microscope, NotebookPen, PartyPopper, Paperclip, Pin, Ruler, Search,
-  Send, ShoppingCart, TriangleAlert, Truck, User, Users, Video, Wrench, Bolt, type LucideIcon,
+  Send, ShoppingCart, TriangleAlert, Truck, User, Users, Video, Wrench, Bolt, Sun, Warehouse, Grape, Fence, Sparkles, type LucideIcon,
 } from 'lucide-react';
 
 const ICONE = {
@@ -20,6 +20,8 @@ const REPARTO: Record<string, LucideIcon> = {
   qualita: HardHat, logistica: Truck, cantiere: Construction, assistenza: Wrench, amministrazione: ChartPie, hr: Users, smistare: Inbox,
 };
 
+const SETTORE: Record<string, LucideIcon> = { energia: Sun, serre: Warehouse, vigneti: Grape, recinzioni: Fence, speciali: Sparkles };
+
 type Props = { s?: number } & Omit<SVGProps<SVGSVGElement>, 'ref'>;
 const props = ({ s = 14, className, ...p }: Props) => ({ size: s, strokeWidth: 1.9, className: 'ic' + (className ? ' ' + className : ''), 'aria-hidden': true, ...p });
 
@@ -27,3 +29,5 @@ const props = ({ s = 14, className, ...p }: Props) => ({ size: s, strokeWidth: 1
 export function Ic({ n, ...p }: { n: NomeIcona } & Props) { const C = ICONE[n]; return <C {...props(p)} />; }
 /** Icona di un reparto (chiavi di domain/reparti.ts, più «smistare»). */
 export function IcReparto({ k, ...p }: { k: string } & Props) { const C = REPARTO[k] || Inbox; return <C {...props(p)} />; }
+/** Icona di un settore della mappa (energia, serre, vigneti, recinzioni, speciali). */
+export function IcSettore({ k, ...p }: { k: string } & Props) { const C = SETTORE[k] || Sparkles; return <C {...props(p)} />; }

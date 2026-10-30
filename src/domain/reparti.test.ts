@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SMISTARE, pulisciReparti, repartiNota, repartiVoce } from './reparti';
+import { SMISTARE, pulisciReparti, repartiNota, repartiVoce, settoriDi } from './reparti';
 import type { Scadenza, Voce } from './calendario';
 
 const s = (x: Partial<Scadenza>) => ({ id: '1', giorno: '2026-10-30', ora: null, genere: 'attivita', titolo: 'x', nota: null, preventivo_id: null, assegnata_a: null, fatto: false, origine: 'app', creato_da: 'a@t.it', creato: '', ...x }) as Scadenza;
@@ -23,4 +23,10 @@ describe('reparti', () => {
     expect(repartiVoce(man({ creato_da: 'nessuno@t.it' }), di)).toEqual([SMISTARE]);
   });
   it('tiene solo reparti esistenti', () => expect(pulisciReparti(['tecnico', 'boh', 'tecnico'])).toEqual(['tecnico']));
+  it('settori: quelli scelti, altrimenti dal preventivo (tracker e fissi = Energia)', () => {
+    const sp = (id: string) => ({ p1: '', p2: 'fisso', p3: 'serre' } as Record<string, string>)[id];
+    expect(settoriDi(['vigneti', 'boh'], 'p3', sp)).toEqual(['vigneti']);
+    expect([settoriDi([], 'p1', sp), settoriDi(null, 'p2', sp), settoriDi([], 'p3', sp)]).toEqual([['energia'], ['energia'], ['serre']]);
+    expect([settoriDi([], 'manca', sp), settoriDi([], null, sp)]).toEqual([[], []]);
+  });
 });

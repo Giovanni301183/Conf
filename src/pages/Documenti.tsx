@@ -7,10 +7,11 @@ import { S, commit } from '../store/state';
 import { toast } from '../store/actions';
 import { persone } from '../domain/calendario';
 import { ModuloEmail, contestoEmail } from '../components/Email';
-import { aggiornaDoc, assegnaNota, caricaFile, ricaricaDocumenti, cloud, eliminaDoc, leggendo, leggiScheda, linkAnteprime, linkDoc, mioEmail, online, puoGestireDoc, salvaNota, type PatchDoc } from '../store/remote';
+import { aggiornaDoc, assegnaNota, caricaFile, ricaricaDocumenti, cloud, eliminaDoc, leggendo, leggiScheda, linkAnteprime, linkDoc, mioEmail, online, puoGestireDoc, salvaNota, settorePrev, settoriNoteDisponibili, type PatchDoc } from '../store/remote';
 import { apriChat } from '../components/pannelli';
 import { Discuti } from '../components/Collegamento';
-import { SMISTARE, nomeReparto, repartiNota } from '../domain/reparti';
+import { SMISTARE, nomeReparto, nomeSettoreMappa, repartiNota, settoriDi } from '../domain/reparti';
+import { SceltaSettori } from '../components/MappaReparti';
 import { Ic } from '../components/Icona';
 import { ChevBarra, barraAperta, clicBarra } from '../components/ui';
 
@@ -40,7 +41,7 @@ async function sposta(d: Documento, cartella: Cartella) {
 
 // preventivo_id: presente solo quando il modulo fa scegliere il collegamento (Home); '' = nota libera.
 // privato: presente solo per chi può deciderlo (nota nuova o propria).
-export type Nota = { id?: string; titolo: string; testo: string; cartella: Cartella; etichette: string[]; preventivo_id?: string; privato?: boolean };
+export type Nota = { id?: string; titolo: string; testo: string; cartella: Cartella; etichette: string[]; settori?: string[]; preventivo_id?: string; privato?: boolean };
 export const notaVuota = (cartella: Cartella = 'altro'): Nota => ({ titolo: '', testo: '', cartella, etichette: [], privato: false });
 const scambia = (xx: string[], k: string) => xx.includes(k) ? xx.filter(x => x !== k) : [...xx, k];
 /** Finestra per scegliere uno o più file. */
@@ -107,6 +108,8 @@ export function ModuloNota({ n, set, chiudi, dove }: { n: Nota; set: (n: Nota) =
         {CARTELLE.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
       <div className="f wide">Etichette (tema, anche più di una)<div className="etqs">
         {ETICHETTE.map(([k]) => <Etq key={k} k={k} on={n.etichette.includes(k)} onClick={() => set({ ...n, etichette: scambia(n.etichette, k) })} />)}</div></div>
+      {n.settori !== undefined && settoriNoteDisponibili() && <div className="f wide">Settori <span className="muted small">(facoltativo: se non ne scegli, quello del preventivo collegato)</span>
+        <SceltaSettori val={n.settori} set={x => set({ ...n, settori: x })} /></div>}
       <label className="f wide">Testo<textarea rows={4} value={n.testo} onChange={e => set({ ...n, testo: e.target.value })} /></label>
       {n.privato !== undefined && <label className="f wide small"><span><input type="checkbox" checked={n.privato} onChange={e => set({ ...n, privato: e.target.checked })} /> Privata: la vedi solo tu, con i suoi allegati (l'esperto la usa solo nelle tue domande)</span></label>}
       <div className="f wide">Allegati (documenti, foto, PDF… massimo {LIMITE_MB} MB ciascuno)<div className="etqs">
@@ -228,7 +231,7 @@ export function Voce({ d, thumb, onEdit, conVoce }: { d: Documento; thumb?: stri
         {mio && <select className="dsel" value={d.cartella} onChange={e => sposta(d, e.target.value as Cartella)} title="Sposta in un'altra cartella">
           {CARTELLE.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
         {mio && (d.tipo === 'nota'
-          ? <button className="btn s" onClick={() => onEdit({ id: d.id, titolo: d.titolo, testo: d.testo || '', cartella: d.cartella, etichette: etichetteDi(d), ...(d.creato_da === mioEmail() ? { privato: !!d.privato } : {}) })}>Modifica</button>
+          ? <button className="btn s" onClick={() => onEdit({ id: d.id, titolo: d.titolo, testo: d.testo || '', cartella: d.cartella, etichette: etichetteDi(d), settori: d.settori || [], ...(d.creato_da === mioEmail() ? { privato: !!d.privato } : {}) })}>Modifica</button>
           : <button className="btn s" onClick={() => rinomina(d)}>Rinomina</button>)}
         {mio && <button className="btn x" onClick={() => togli(d)} title="Elimina">✕</button>}
       </div>
@@ -324,16 +327,18 @@ export function NoteHome() {
   const [temi, setTemi] = useState<string[]>([]), [cart, setCart] = useState<Cartella | ''>('');
   const no = docNonDisponibili();
   if (no) return null;
-  // Con un reparto scelto nella mappa della Home, solo le note dei suoi temi (o senza temi, in «Da smistare»).
-  const tutteNote = S.docs.filter(d => (d.tipo === 'nota' || libero(d)) && (!S.ui.rep || repartiNota(d).includes(S.ui.rep))), nC = perCartella(tutteNote), inCartella = cart ? tutteNote.filter(d => d.cartella === cart) : tutteNote;
+  // Con un reparto scelto nella mappa della Home, solo le note dei suoi temi (o senza temi, in «Da smistare»); con un suo settore, solo quelle del settore.
+  const st = S.ui.rep && S.ui.repSet;
+  const tutteNote = S.docs.filter(d => (d.tipo === 'nota' || libero(d)) && (!S.ui.rep || repartiNota(d).includes(S.ui.rep))
+    && (!st || settoriDi(d.settori, d.preventivo_id, settorePrev).includes(st))), nC = perCartella(tutteNote), inCartella = cart ? tutteNote.filter(d => d.cartella === cart) : tutteNote;
   const filtro = !!q || temi.length > 0 || !!cart;
   const note = conEtichette(cerca(inCartella, q), temi).sort((a, b) => (b.modificato || b.creato).localeCompare(a.modificato || a.creato));
   const viste = tutte || filtro ? note : note.slice(0, 10);
   const nomeP = (id: string | null) => (id && S.arch.find(e => e.id === id)?.nome) || '', ap = barraAperta('note');
   return (
     <section className={`card${ap ? '' : ' chiusa'}`}>
-      <h2 className="hbh" style={{ marginTop: 0 }} onClick={clicBarra('note')}>Note<span className="tag">{tutteNote.length}</span>{S.ui.rep && <span className="tag on">{nomeReparto(S.ui.rep)}</span>}<span className="sp" />
-        {ap && !nota && <button className="btn s p" onClick={() => setNota({ ...notaVuota(), preventivo_id: S.prev._id || '' })}>+ Nota</button>}<ChevBarra k="note" /></h2>
+      <h2 className="hbh" style={{ marginTop: 0 }} onClick={clicBarra('note')}>Note<span className="tag">{tutteNote.length}</span>{S.ui.rep && <span className="tag on">{nomeReparto(S.ui.rep)}{st && ` · ${nomeSettoreMappa(st)}`}</span>}<span className="sp" />
+        {ap && !nota && <button className="btn s p" onClick={() => setNota({ ...notaVuota(), preventivo_id: S.prev._id || '', settori: st ? [st] : [] })}>+ Nota</button>}<ChevBarra k="note" /></h2>
       {ap && <>
       <div className="dbar"><input className="dq" value={q} placeholder="Cerca nelle note…" onChange={e => setQ(e.target.value)} />
         <select className="dsel" value={cart} onChange={e => setCart(e.target.value as Cartella | '')} title="Mostra solo le note di una cartella">

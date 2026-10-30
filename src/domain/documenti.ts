@@ -9,6 +9,7 @@ export interface Documento {
   creato_da: string; creato: string; modificato: string | null; etichette?: string[] | null;
   nota_id?: string | null;   // file allegato a una nota
   privato?: boolean;         // lo vede solo chi l'ha caricato
+  settori?: string[] | null; // settori della mappa dei reparti (vedi reparti.ts); vuoto = quello del preventivo collegato
   scheda?: string | null;    // riassunto tecnico scritto dall'AI (file dell'archivio tecnico)
   letto?: string | null;
 }

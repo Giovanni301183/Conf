@@ -41,3 +41,30 @@ export function repartiVoce(v: Voce, repartiDi: (email: string) => string[]) {
   const chi = v.s?.assegnata_a || v.s?.creato_da, r = chi ? pulisciReparti(repartiDi(chi)) : [];
   return r.length ? r : [SMISTARE];
 }
+
+// Settori della mappa: pallini intorno al reparto aperto. Una voce o una nota ha i settori scelti a mano; altrimenti quello del
+// preventivo collegato (tracker e impianti fissi = Energia). «Lavori speciali» solo a mano. Senza settore resta solo nel reparto.
+export interface SettoreMappa { k: string; nome: string; colore: string }
+export const SETTORI_MAPPA: SettoreMappa[] = [
+  { k: 'energia', nome: 'Energia', colore: '#d39a1c' },
+  { k: 'serre', nome: 'Serre', colore: '#3f8f5a' },
+  { k: 'vigneti', nome: 'Vigneti', colore: '#8b4f8f' },
+  { k: 'recinzioni', nome: 'Recinzioni', colore: '#5b7590' },
+  { k: 'speciali', nome: 'Lavori speciali', colore: '#c0572f' },
+];
+export const nomeSettoreMappa = (k: string) => SETTORI_MAPPA.find(s => s.k === k)?.nome || k;
+/** Solo chiavi di settori esistenti, senza doppioni. */
+export const pulisciSettori = (kk: unknown) => (Array.isArray(kk) ? [...new Set(kk.map(String).filter(k => SETTORI_MAPPA.some(s => s.k === k)))] : []);
+/** Settore della mappa dal settore di un preventivo (prev.settore; vuoto = tracker). */
+export const settoreMappaDi = (settore: string | null | undefined) => {
+  const k = !settore || settore === 'tracker' || settore === 'fisso' ? 'energia' : settore;
+  return SETTORI_MAPPA.some(s => s.k === k) ? k : '';
+};
+/** Settori di una voce o di una nota: quelli scelti, altrimenti quello del preventivo collegato.
+ *  settoreDi = prev.settore del preventivo con quell'id ('' = tracker), undefined se non c'è. */
+export function settoriDi(scelti: unknown, prevId: string | null | undefined, settoreDi: (id: string) => string | undefined): string[] {
+  const s = pulisciSettori(scelti);
+  if (s.length || !prevId) return s;
+  const p = settoreDi(prevId), k = p === undefined ? '' : settoreMappaDi(p);
+  return k ? [k] : [];
+}

@@ -14,10 +14,10 @@ import { ModuloEmail, contestoEmail } from '../components/Email';
 import { PermessoAvvisi } from '../components/AvvisiRiunioni';
 import { linkRiunione } from '../domain/riunione';
 import { Discuti } from '../components/Collegamento';
-import { MappaReparti } from '../components/MappaReparti';
+import { MappaReparti, SceltaSettori } from '../components/MappaReparti';
 import { Smistamento } from '../components/Smistamento';
-import { REPARTI, SMISTARE, nomeReparto, repartiVoce } from '../domain/reparti';
-import { cloud, coinvoltiDisponibili, eliminaScadenza, repartiDi, repartiVociDisponibili, miaVista, mioEmail, online, puoModificare, puoSpuntare, riassumiRisposta, salvaNota, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
+import { REPARTI, SMISTARE, nomeReparto, nomeSettoreMappa, repartiVoce, settoriDi } from '../domain/reparti';
+import { cloud, coinvoltiDisponibili, eliminaScadenza, repartiDi, repartiVociDisponibili, settoriDisponibili, settorePrev, miaVista, mioEmail, online, puoModificare, puoSpuntare, riassumiRisposta, salvaNota, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
 import { VISTA_TUTTO, filtraVista, normVista, vedeTutto, type Quanto, type Vista } from '../domain/vista';
 import { Ic, IcReparto } from '../components/Icona';
 
@@ -86,8 +86,12 @@ function RispostaArrivata({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
 // Le fatte stanno nell'Archivio attività.
 const soloMie = (vv: Voce[]) => { const me = mioEmail(), x = filtraVista(vv, miaVista(), me); return S.ui.calMie && me ? x.filter(v => mia(v, me)) : x; };
 export const vociVisibili = () => soloMie(voci(S.arch, S.scad));
-/** Voci della Home: con un reparto scelto nella mappa, solo le sue (il numerino del menu resta su tutte). */
-const vociHome = () => { const vv = vociVisibili(); return S.ui.rep ? vv.filter(v => repartiVoce(v, repartiDi).includes(S.ui.rep)) : vv; };
+/** Voci della Home: con un reparto scelto nella mappa, solo le sue, e con un settore (pallino) solo quelle del settore
+ *  (il numerino del menu resta su tutte). */
+const vociHome = () => {
+  const vv = vociVisibili(), r = S.ui.rep, st = r && S.ui.repSet;
+  return r ? vv.filter(v => repartiVoce(v, repartiDi).includes(r) && (!st || settoriDi(v.s?.settori, v.prevId, settorePrev).includes(st))) : vv;
+};
 /** Voci scadute e non fatte, per il numerino sulla voce Home del menu. */
 export const nScadute = () => { const a = allarmi(vociVisibili(), dToday()); return a.urgenze.length + a.scadute.length; };
 
@@ -202,7 +206,7 @@ export function Allarmi({ onEdit }: { onEdit?: (s: Scadenza) => void }) {
         {scadute.length > 0 && <span className="tag alate">{scadute.length} scadut{scadute.length === 1 ? 'a' : 'e'}</span>}
         <span className="tag asoon">{prossime.length} nei prossimi {PREAVVISO} giorni</span>
         {S.ui.calMie && <span className="tag">solo le mie</span>}
-        {S.ui.rep && <span className="tag on">{nomeReparto(S.ui.rep)}</span>}
+        {S.ui.rep && <span className="tag on">{nomeReparto(S.ui.rep)}{S.ui.repSet && ` · ${nomeSettoreMappa(S.ui.repSet)}`}</span>}
         <span className="sp" />
         <ChevBarra k="allarmi" />
       </h2>
@@ -216,8 +220,8 @@ export function Allarmi({ onEdit }: { onEdit?: (s: Scadenza) => void }) {
   );
 }
 
-type Bozza = { id?: string; genere: Genere; categoria: string; giorno: string; ora: string; titolo: string; nota: string; preventivo_id: string; assegnata_a: string; coinvolti: string[]; reparti?: string[] };
-const bozzaDa = (s: Scadenza): Bozza => ({ id: s.id, genere: s.genere || 'attivita', categoria: s.categoria || '', giorno: s.giorno, ora: oraBreve(s), titolo: s.titolo, nota: s.nota || '', preventivo_id: s.preventivo_id || '', assegnata_a: s.assegnata_a || '', coinvolti: s.coinvolti || [], reparti: s.reparti || [] });
+type Bozza = { id?: string; genere: Genere; categoria: string; giorno: string; ora: string; titolo: string; nota: string; preventivo_id: string; assegnata_a: string; coinvolti: string[]; reparti?: string[]; settori?: string[] };
+const bozzaDa = (s: Scadenza): Bozza => ({ id: s.id, genere: s.genere || 'attivita', categoria: s.categoria || '', giorno: s.giorno, ora: oraBreve(s), titolo: s.titolo, nota: s.nota || '', preventivo_id: s.preventivo_id || '', assegnata_a: s.assegnata_a || '', coinvolti: s.coinvolti || [], reparti: s.reparti || [], settori: s.settori || [] });
 const ESEMPI: Record<Genere, string> = {
   attivita: 'es. Rifare il computo bulloneria', promemoria: 'es. Richiamare il cliente per il preventivo',
   scadenza: 'es. Consegna documentazione collaudo', appuntamento: 'es. Sopralluogo in cantiere',
@@ -255,6 +259,8 @@ function Modulo({ b, set, chiudi }: { b: Bozza; set: (b: Bozza) => void; chiudi:
       {repartiVociDisponibili() && <div className="f wide">Reparti <span className="muted small">(facoltativo: se non ne scegli, quelli di chi la deve fare)</span>
         <div className="etqs">{REPARTI.map(r => { const on = (b.reparti || []).includes(r.k); return (
           <button key={r.k} type="button" className={`etq${on ? ' on' : ''}`} onClick={() => set({ ...b, reparti: on ? (b.reparti || []).filter(x => x !== r.k) : [...(b.reparti || []), r.k] })}><IcReparto k={r.k} />{r.nome}</button>); })}</div></div>}
+      {settoriDisponibili() && <div className="f wide">Settori <span className="muted small">(facoltativo: se non ne scegli, quello del preventivo collegato)</span>
+        <SceltaSettori val={b.settori || []} set={x => set({ ...b, settori: x })} /></div>}
       <label className="f wide">Nota (facoltativa)<textarea rows={3} value={b.nota} onChange={e => set({ ...b, nota: e.target.value })} /></label>
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
         <button className="btn p" disabled={busy || !b.titolo.trim() || !b.giorno} onClick={salva}>{b.id ? 'Salva modifiche' : 'Aggiungi'}</button>
@@ -312,7 +318,7 @@ export function Calendario({ mappa, sotto }: { mappa?: React.ReactNode; sotto?: 
   const sposta = (d: number) => { const x = new Date(Date.UTC(ym.y, ym.m + d, 1)); setYm({ y: x.getUTCFullYear(), m: x.getUTCMonth() }); };
   // Con un reparto scelto nella mappa, la voce nuova parte già in quel reparto.
   const nuova = (g = sel) => setBozza({ genere: 'attivita', categoria: '', giorno: isoDay(g), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '', coinvolti: [],
-    reparti: S.ui.rep && S.ui.rep !== SMISTARE ? [S.ui.rep] : [] });
+    reparti: S.ui.rep && S.ui.rep !== SMISTARE ? [S.ui.rep] : [], settori: S.ui.rep && S.ui.repSet ? [S.ui.repSet] : [] });
   // Il modulo si apre nella colonna del giorno: se si arriva dagli allarmi o dagli appuntamenti, più sotto, la pagina ci torna.
   const modifica = (s: Scadenza) => { setSel(Date.UTC(+s.giorno.slice(0, 4), +s.giorno.slice(5, 7) - 1, +s.giorno.slice(8, 10)) / DAY); setBozza(bozzaDa(s));
     requestAnimationFrame(() => document.querySelector('.calday')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); };
@@ -384,8 +390,9 @@ function Appuntamenti({ onEdit }: { onEdit?: (s: Scadenza) => void }) {
  *  La voce prende il reparto, la nota il suo primo tema (in «Da smistare» niente: ci finiscono da sole). */
 function NuovoInReparto({ k, chiudi }: { k: string; chiudi: () => void }) {
   const [cosa, setCosa] = useState<'voce' | 'nota'>('voce'), qui = k !== SMISTARE;
-  const [b, setB] = useState<Bozza>({ genere: 'promemoria', categoria: '', giorno: isoDay(dToday()), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '', coinvolti: [], reparti: qui ? [k] : [] });
-  const [n, setN] = useState<Nota>({ ...notaVuota(), preventivo_id: '', etichette: qui ? REPARTI.find(r => r.k === k)!.temi.slice(0, 1) : [] });
+  const [b, setB] = useState<Bozza>({ genere: 'promemoria', categoria: '', giorno: isoDay(dToday()), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '', coinvolti: [], reparti: qui ? [k] : [],
+    settori: qui && S.ui.rep === k && S.ui.repSet ? [S.ui.repSet] : [] });
+  const [n, setN] = useState<Nota>({ ...notaVuota(), preventivo_id: '', etichette: qui ? REPARTI.find(r => r.k === k)!.temi.slice(0, 1) : [], settori: b.settori });
   useEffect(() => { const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') chiudi(); }; window.addEventListener('keydown', esc); return () => window.removeEventListener('keydown', esc); }, [chiudi]);
   return (
     <div className="sapscrim noprint" onMouseDown={e => { if (e.target === e.currentTarget) chiudi(); }}>

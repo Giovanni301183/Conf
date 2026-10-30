@@ -2,8 +2,12 @@
 // Gli strumenti "proponi_*" non cambiano niente: preparano una proposta che l'utente conferma o annulla nell'app.
 import { gruppiDistinte, sostituisci } from './referenze.js';
 import { ETICHETTE, nomiEtichette, pulisciEtichette } from './documenti.js';
+import { SETTORI_MAPPA, nomeSettoreMappa, pulisciSettori } from './reparti.js';
 
 export const GRUPPI = gruppiDistinte();
+// Settori della mappa dei reparti: solo se l'utente li dice; vuoto = vale quello del preventivo collegato.
+const SETTORI_SCHEMA = { type: 'array', items: { type: 'string', enum: SETTORI_MAPPA.map(s => s.k) },
+  description: "Settori se l'utente li dice (energia = tracker e impianti fissi, serre, vigneti, recinzioni, speciali = lavori speciali); [] se non li dice: vale quello del preventivo" };
 // Come GENERI in calendario.ts (che qui non si importa: dipende dallo stato del browser).
 export const GENERI_EVENTO = ['attivita', 'promemoria', 'scadenza', 'appuntamento', 'urgenza'];
 
@@ -32,10 +36,10 @@ export const datiPerAssistente = (data: any, appunti: Appunto[] = [], preventivi
 export interface Coppia { da: string; a: string; descrizione_nuovo: string | null; peso_kg: number | null; costo: number | null }
 export type Proposta =
   | { id: string; tipo: 'sostituzione'; coppie: Coppia[]; gruppi: string[]; righe: { g: string; da: string; a: string; n: number; taglie: string[] }[]; nuovi: string[] }
-  | { id: string; tipo: 'evento'; titolo: string; giorno: string; ora: string | null; genere: string; nota: string | null }
+  | { id: string; tipo: 'evento'; titolo: string; giorno: string; ora: string | null; genere: string; nota: string | null; settori?: string[] }
   | { id: string; tipo: 'email'; a: string; oggetto: string; testo: string }
   | { id: string; tipo: 'varianti'; base: string; nome: string; varianti: { prof: string | null; asse: number | null; omega: number | null }[] }
-  | { id: string; tipo: 'nota'; titolo: string; testo: string; etichette: string[]; preventivo_id: string | null; commessa: string }
+  | { id: string; tipo: 'nota'; titolo: string; testo: string; etichette: string[]; preventivo_id: string | null; commessa: string; settori?: string[] }
   | { id: string; tipo: 'etichette'; note: { id: string; titolo: string; prima: string[]; dopo: string[] }[] }
   | { id: string; tipo: 'memoria'; titolo: string; testo: string; etichette: string[]; preventivo_id: string | null; commessa: string };
 const CHIAVI_ETICHETTE = ETICHETTE.map(([k]) => k);
@@ -58,7 +62,8 @@ export const TOOLS = [
       gruppi: { type: 'array', items: { type: 'string', enum: GRUPPI }, description: 'Gruppi in cui sostituire' } }) },
   { name: 'proponi_evento', description: "Prepara un evento nel calendario della Home. Non lo crea: l'utente conferma nell'app.",
     input_schema: obj({ titolo: s('Titolo breve'), giorno: s('Data AAAA-MM-GG'), ora: ns('Ora HH:MM, o null se senza ora'),
-      genere: { type: 'string', enum: GENERI_EVENTO, description: 'attivita = da fare, promemoria, scadenza, appuntamento, urgenza' }, nota: ns('Nota facoltativa') }) },
+      genere: { type: 'string', enum: GENERI_EVENTO, description: 'attivita = da fare, promemoria, scadenza, appuntamento, urgenza' }, nota: ns('Nota facoltativa'),
+      settori: SETTORI_SCHEMA }) },
   { name: 'cerca_appunti', description: 'Cerca negli appunti (note dei documenti, note degli eventi del calendario e discussioni della chat di squadra, una per giorno e stanza, con titolo "Chat di squadra · …") per commessa, cliente o parole del testo. Per "cosa abbiamo deciso/detto in chat" cerca qui. Testo vuoto = gli ultimi appunti. Ritorna data, commessa, titolo e testo.',
     input_schema: obj({ testo: s('Parole da cercare, anche vuoto') }) },
   { name: 'proponi_email', description: "Prepara un'email di aggiornamento. Non la invia: l'utente la vede, la può correggere e la apre già compilata nel suo Gmail.",
@@ -71,7 +76,7 @@ export const TOOLS = [
   { name: 'proponi_nota', description: `Prepara una nota (appunto) da salvare nell'app, con le etichette del tema. La nota può essere libera o legata a un preventivo. Non la salva: l'utente conferma nell'app. Etichette: ${DESCR_ETICHETTE}.`,
     input_schema: obj({ titolo: s('Titolo breve'), testo: s('Testo della nota, semplice, senza markdown; vuoto se basta il titolo'),
       etichette: { type: 'array', items: { type: 'string', enum: CHIAVI_ETICHETTE }, description: 'Da 0 a 3 temi della nota' },
-      preventivo: ns('Numero (es. 2026/014) o nome del preventivo a cui legarla, solo se è chiaro; null = nota libera') }) },
+      preventivo: ns('Numero (es. 2026/014) o nome del preventivo a cui legarla, solo se è chiaro; null = nota libera'), settori: SETTORI_SCHEMA }) },
   { name: 'proponi_etichette', description: "Prepara il cambio delle etichette di note già salvate (id da cerca_appunti). Non cambia niente: l'utente conferma nell'app.",
     input_schema: obj({ note: { type: 'array', items: obj({ id: s('id della nota da cerca_appunti'),
       aggiungi: { type: 'array', items: { type: 'string', enum: CHIAVI_ETICHETTE } }, togli: { type: 'array', items: { type: 'string', enum: CHIAVI_ETICHETTE } } }) } }) },
@@ -115,7 +120,7 @@ export function esegui(nome: string, input: any, D: DatiAssistente, id: string):
     if (!titolo) return { testo: 'Manca il titolo: chiedilo.', errore: true };
     const genere = GENERI_EVENTO.includes(input.genere) ? input.genere : 'attivita';
     return { testo: "Proposta pronta: l'utente la vede con i pulsanti Conferma e Annulla. Non dire che è già creata.",
-      proposta: { id, tipo: 'evento', titolo, giorno, ora, genere, nota: input.nota ? String(input.nota).slice(0, 500) : null } };
+      proposta: { id, tipo: 'evento', titolo, giorno, ora, genere, nota: input.nota ? String(input.nota).slice(0, 500) : null, settori: pulisciSettori(input.settori) } };
   }
   if (nome === 'cerca_appunti') {
     const parole = norm(String(input.testo || '')).split(' ').filter(Boolean), tutti = D.appunti || [];
@@ -144,9 +149,9 @@ export function esegui(nome: string, input: any, D: DatiAssistente, id: string):
     const pp = D.preventivi || [], q = norm(String(input.preventivo || ''));
     const e = q ? pp.find(x => norm(x.num) === q) || pp.find(x => norm(x.nome) === q) || pp.find(x => norm(`${x.nome} ${x.cliente}`).includes(q)) : null;
     if (q && !e) return { testo: `Preventivo "${input.preventivo}" non trovato in archivio: chiedi il numero, oppure proponi la nota libera (preventivo null).`, errore: true };
-    const etichette = pulisciEtichette(input.etichette);
-    return { testo: `Proposta pronta: nota ${e ? `legata a N° ${e.num} (${e.nome})` : 'libera'}${etichette.length ? ', temi ' + nomiEtichette(etichette) : ''}. L'utente la vede con Conferma e Annulla: non dire che è già salvata.`,
-      proposta: { id, tipo: 'nota', titolo, testo, etichette, preventivo_id: e?.id || null, commessa: e ? `N° ${e.num} · ${e.nome}` : '' } };
+    const etichette = pulisciEtichette(input.etichette), settori = pulisciSettori(input.settori);
+    return { testo: `Proposta pronta: nota ${e ? `legata a N° ${e.num} (${e.nome})` : 'libera'}${etichette.length ? ', temi ' + nomiEtichette(etichette) : ''}${settori.length ? ', settore ' + settori.map(nomeSettoreMappa).join(', ') : ''}. L'utente la vede con Conferma e Annulla: non dire che è già salvata.`,
+      proposta: { id, tipo: 'nota', titolo, testo, etichette, preventivo_id: e?.id || null, commessa: e ? `N° ${e.num} · ${e.nome}` : '', settori } };
   }
   if (nome === 'proponi_etichette') {
     const tutti = D.appunti || [], note: { id: string; titolo: string; prima: string[]; dopo: string[] }[] = [];
@@ -184,6 +189,7 @@ Come lavori:
 - Se nel gruppo c'è un codice simile ma diverso da quello detto (es. l'utente dice M16x25 ma il gruppo usa M16x60), fallo notare e chiedi, invece di indovinare.
 - Varianti di materiale: le combinazioni le dice l'utente, una per preventivo; non aggiungerne e non indovinarne. Il base è il preventivo aperto, se non ne indica un altro (numero o nome). Profilo, asse e omega non detti restano quelli del base.
 - Note: "segnati che…", "prendi nota…", "metti negli appunti…" → proponi_nota. Scegli tu da 0 a 3 etichette che descrivono davvero il tema (es. ordine di acciaio al fornitore = acquisti; nuovo cliente interessato = opportunita e vendita). Legala a un preventivo solo se l'utente lo nomina o è chiaro; altrimenti nota libera. Per cambiare le etichette di note esistenti ("metti acquisti alle note sull'acciaio") trova le note con cerca_appunti e usa proponi_etichette con i loro id.
+- Settori (energia = tracker e impianti fissi, serre, vigneti, recinzioni, speciali = lavori speciali): in proponi_evento e proponi_nota passa settori solo se l'utente li dice ("nota per le serre…", "promemoria vigneti…"); altrimenti [] e vale il settore del preventivo collegato. Non indovinarli.
 - Le modifiche le fai solo con proponi_sostituzione, proponi_evento, proponi_email, proponi_varianti, proponi_nota, proponi_etichette e proponi_memoria: preparano una proposta che l'utente conferma con un pulsante. Non dire mai che una modifica è fatta finché l'app non lo conferma.
 - Per un evento servono titolo, data e, se detta, l'ora. Se manca il titolo chiedilo. Un'ora da 1 a 7 senza "di mattina" intendila del pomeriggio (es. "alle 5" = 17:00) e dillo.
 - Per un'email trova prima gli appunti giusti con cerca_appunti, poi proponila con proponi_email. Usa solo quello che c'è negli appunti: non inventare date, quantità, prezzi o impegni. Tono cordiale e professionale, testo semplice senza markdown. L'email parte dal Gmail dell'utente, che preme Invia.

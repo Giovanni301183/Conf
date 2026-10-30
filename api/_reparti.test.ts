@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { msgReparti, msgSalvato, msgScrivi, msgTipi, repartiDiVoce, repartoDa, temiPerReparto } from './_reparti';
+import { msgReparti, msgSalvato, msgScrivi, msgTipi, repartiDiVoce, repartoDa, settoreDa, tastiSettori, temiPerReparto } from './_reparti';
 import { REPARTI } from '../src/domain/reparti';
 
 describe('reparti su Telegram', () => {
@@ -17,7 +17,7 @@ describe('reparti su Telegram', () => {
     const id = '123e4567-e89b-12d3-a456-426614174000';
     const tutti = [msgReparti(), ...REPARTI.map(r => msgTipi(r.k)), msgSalvato('v', id, 'Titolo', 'amministrazione')]
       .flatMap(m => m.reply_markup.inline_keyboard.flat().map(t => t.callback_data));
-    tutti.push(...REPARTI.map(r => `rv:${id}:${r.k}`));
+    tutti.push(...REPARTI.map(r => `rv:${id}:${r.k}`), ...tastiSettori(x => `tn:${id}:${x}`, true).flat().map(t => t.callback_data));
     for (const d of tutti) expect(new TextEncoder().encode(d).length).toBeLessThanOrEqual(64);
   });
   it('la domanda porta reparto e tipo per l\'assistente', () => {
@@ -33,5 +33,13 @@ describe('reparti su Telegram', () => {
     expect(repartiDiVoce({ reparti: ['logistica'], assegnata_a: 'a@x', creato_da: 'b@x' }, di)).toEqual(['logistica']);
     expect(repartiDiVoce({ reparti: [], assegnata_a: 'a@x', creato_da: 'b@x' }, di)).toEqual(['produzione']);
     expect(repartiDiVoce({ reparti: null, assegnata_a: null, creato_da: 'b@x' }, di)).toEqual(['smistare']);
+  });
+  it('settori: riconosce come li si scrive, e la voce salvata li mostra con il pulsante per cambiarli', () => {
+    expect(['energia', 'Serre', 'vign', 'recinzioni', 'lavori speciali', 'fotovoltaico', 'impianti fissi', 'nessuno', 'boh', ''].map(settoreDa))
+      .toEqual(['energia', 'serre', 'vigneti', 'recinzioni', 'speciali', 'energia', 'energia', 'nessuno', '', '']);
+    const m = msgSalvato('v', 'id1', 'Ordine', 'acquisti', '', ['serre']);
+    expect(m.text).toBe('🏷 Ordine\nReparto: 🛒 Acquisti\nSettore: 🌱 Serre');
+    expect(m.reply_markup.inline_keyboard.flat().map(t => t.callback_data)).toEqual(['rv:id1:', 'tv:id1:', 'xv:id1:']);
+    expect(msgSalvato('n', 'id2', 'Nota', '', '', ['energia']).text).toBe('🏷 Nota\nSettore: ☀️ Energia');
   });
 });

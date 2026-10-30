@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { datiPerAssistente, type Appunto, type Proposta } from '../domain/assistente';
 import { nomiEtichette } from '../domain/documenti';
+import { nomeSettoreMappa } from '../domain/reparti';
 import { datiTecnici } from '../domain/esperto';
 import { sostituisci } from '../domain/referenze';
 import { clone } from '../domain/model';
@@ -113,12 +114,12 @@ function Card({ p, stato, onFatto }: { p: Proposta; stato?: string; onFatto: (es
         if (r.ids.length) scaricaOfferte(p.base, r.ids);
       }
       else if (p.tipo === 'evento') {
-        const e = await salvaScadenza({ titolo: p.titolo, giorno: p.giorno, ora: p.ora, genere: p.genere as any, nota: p.nota });
+        const e = await salvaScadenza({ titolo: p.titolo, giorno: p.giorno, ora: p.ora, genere: p.genere as any, nota: p.nota, ...(p.settori?.length ? { settori: p.settori } : {}) });
         if (e) throw new Error(e);
         commit(); onFatto('✓ Evento aggiunto al calendario', `Proposta ${p.id} confermata: evento creato nel calendario.`);
       }
       else if (p.tipo === 'nota') {
-        const { errore } = await salvaNota({ titolo: p.titolo, testo: p.testo, cartella: 'altro', etichette: p.etichette, preventivo_id: p.preventivo_id });
+        const { errore } = await salvaNota({ titolo: p.titolo, testo: p.testo, cartella: 'altro', etichette: p.etichette, preventivo_id: p.preventivo_id, ...(p.settori?.length ? { settori: p.settori } : {}) });
         if (errore) throw new Error(errore);
         commit(); onFatto('✓ Nota salvata' + (p.commessa ? ' in ' + p.commessa : ' (libera)'), `Proposta ${p.id} confermata: nota salvata.`);
       }
@@ -146,13 +147,14 @@ function Card({ p, stato, onFatto }: { p: Proposta; stato?: string; onFatto: (es
         <div>{p.titolo}</div>
         {p.testo && <div className="muted" style={{ whiteSpace: 'pre-wrap' }}>{p.testo}</div>}
         {p.etichette.length > 0 && <div className="muted">Temi: {nomiEtichette(p.etichette)}</div>}
+        {!!p.settori?.length && <div className="muted">Settore: {p.settori.map(nomeSettoreMappa).join(', ')}</div>}
       </> : p.tipo === 'etichette' ? <>
         <b>Etichette delle note</b>
         <ul>{p.note.map(n => <li key={n.id}>{n.titolo}: {nomiEtichette(n.prima) || '—'} → <b>{nomiEtichette(n.dopo) || 'nessuna'}</b></li>)}</ul>
       </> : <>
         <b>Nuovo evento</b>
         <div>{p.titolo}</div>
-        <div className="muted">{giorno(p.giorno)}{p.ora ? ` alle ${p.ora}` : ''}{p.nota ? ` · ${p.nota}` : ''}</div>
+        <div className="muted">{giorno(p.giorno)}{p.ora ? ` alle ${p.ora}` : ''}{p.nota ? ` · ${p.nota}` : ''}{p.settori?.length ? ` · settore ${p.settori.map(nomeSettoreMappa).join(', ')}` : ''}</div>
       </>}
       {stato ? <div className="aiesito">{stato}</div> : <div className="aibtn">
         <button className="btn p s" disabled={busy} onClick={conferma}>{busy ? 'Applico…' : 'Conferma'}</button>
