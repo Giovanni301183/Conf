@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Versione** | 0.9 |
-| **Data** | 12/10/2026 |
+| **Versione** | 1.4 |
+| **Data** | 30/10/2026 |
 | **Autore** | G. Sorrentino |
 | **Fonte dati** | `CONFIGURATORE TRACKER 12 MODULI 1303 (RIORDINATO).xlsx` |
 | **Applicazione** | `index.html` (stessa cartella) |
@@ -25,6 +25,7 @@
 | 1.1 | Gantt Excel con formule: modificando durate, date o festività in Excel si ricalcolano date e barre; nuovo foglio Calendario |
 | 1.2 | Gantt solo di produzione: tolti montaggio in campo e installazione quadri (si pianificano dopo); ultima fase = spedizione |
 | 1.3 | Scheda **Montaggio** (§9sexies): computo con listino montaggio, Gantt di cantiere con progettazione e pull-out test, export Excel e PDF |
+| 1.4 | **Home con mappa dei reparti e settori** (§9septies): mappa subito sotto il calendario anche sul telefono, pallini dei settori intorno al reparto aperto, filtro reparto + settore su allarmi, appuntamenti e note; settori anche nell'assistente e su Telegram |
 
 ---
 
@@ -344,6 +345,41 @@ Separata dal preventivo della fornitura: **non entra** nel costo totale né nel 
 - Prezzi e parametri del cantiere partono **vuoti**: li compila l'utente.
 - Export: file Excel "Montaggio" con **Computo** (celle gialle Q.tà e prezzi, totali a formule), **Gantt montaggio** a formule e **Calendario**; Stampa / PDF di computo + Gantt.
 - Il listino montaggio e i parametri del Gantt non fanno scattare l'avviso "listino cambiato" all'apertura di un preventivo salvato.
+
+## 9septies. Home: mappa dei reparti e settori (v1.4)
+
+La Home è fatta di barre che si aprono e chiudono cliccando l'intestazione: **Calendario**, **Reparti** (la mappa), **Allarmi**, **Appuntamenti**, **Note**; a destra la colonna del giorno scelto. All'avvio l'app parte sempre dalla Home con calendario e mappa aperti, il resto chiuso.
+
+**Ordine sullo schermo**
+
+| | Computer | Telefono |
+|---|---|---|
+| 1 | Calendario (a destra la colonna del giorno) | Calendario |
+| 2 | Mappa dei reparti | Mappa dei reparti (riquadri) |
+| 3 | Allarmi, Appuntamenti, Note | Colonna del giorno |
+| 4 | — | Allarmi, Appuntamenti, Note |
+
+**Mappa dei reparti**
+- «Terranova» al centro e intorno i 12 reparti (Direzione, Commerciale, Tecnico, R&S, Acquisti, Produzione, Qualità e sicurezza, Logistica, Cantiere, Assistenza, Amministrazione, Risorse umane), più «Da smistare». Sul telefono (fino a 640 px) la mappa diventa una griglia di riquadri.
+- Ogni reparto lampeggia come gli Allarmi: rosso con urgenze o voci scadute, arancio con scadenze nei prossimi giorni; il numero conta le voci da guardare, il pallino blu le note nuove. Intorno al cerchio le iniziali delle persone del reparto. Il «+» aggiunge una voce d'agenda o una nota già nel reparto.
+- **Clic su un reparto**: allarmi, appuntamenti, note e colonna del giorno mostrano solo le sue cose; le barre Allarmi, Appuntamenti e Note si aprono da sole. La pagina resta sulla mappa, perché lì compaiono i settori. Secondo clic sullo stesso reparto (o «Tutti i reparti», o «Terranova») = tutti.
+
+**Settori del reparto aperto**
+- Cliccato un reparto, intorno al suo cerchio (dal lato del centro) compaiono 5 pallini collegati con una linea tratteggiata: **Energia** (tracker e impianti fissi), **Serre**, **Vigneti**, **Recinzioni**, **Lavori speciali**. Sotto la legenda una riga ricorda quali sono. Sul telefono gli stessi settori sono una riga di pulsanti subito sotto il riquadro del reparto scelto.
+- Ogni pallino ha il numero delle voci da guardare (urgenti, scadute, in scadenza) e lampeggia come i reparti.
+- **Clic su un settore**: allarmi, appuntamenti e note mostrano solo quel reparto e quel settore (es. «Produzione · Serre») e la pagina scende ai risultati. Secondo clic sullo stesso settore = tutto il reparto.
+- Con un settore scelto, «+ Aggiungi», il «+» del reparto e «+ Nota» partono già in quel settore.
+
+**A quale settore appartiene una voce o una nota**
+1. Il settore scelto a mano: campo «Settori» nel modulo della voce d'agenda e della nota (anche più di uno).
+2. Altrimenti il settore del preventivo collegato: tracker e impianti fissi = Energia; vigneti, serre, recinzioni = il loro.
+3. Altrimenti nessuno: la voce resta solo nel reparto, fuori dai pallini. «Lavori speciali» si sceglie solo a mano.
+
+Dati: colonna `settori` (testo, elenco) sulle tabelle `scadenze` e `documenti`, migrazione `20261030030000_settori_mappa.sql`. Senza la migrazione l'app funziona con il solo settore del preventivo.
+
+**Assistente e Telegram**
+- Assistente dell'app: le proposte di evento e di nota portano i settori solo se l'utente li dice; altrimenti vale il preventivo.
+- Telegram: voci e note create dal bot prendono il settore se detto; sotto quello che si salva ci sono «Cambia reparto», «Settore» e «Annulla»; la situazione di un reparto (`/reparto produzione`) ha i pulsanti dei settori per restringerla. Le modifiche al flusso n8n sono nel file completo `n8n/da-importare/agenda-completo.json` (o da incollare con `n8n/incolla-settori.txt`).
 
 ## 10. Decisioni sui punti aperti
 

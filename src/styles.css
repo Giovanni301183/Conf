@@ -595,7 +595,8 @@ label.chk small{margin-left:4px}
 @media (max-width:640px){.msvg{display:none}.mtiles{display:grid}}
 /* Settori del reparto aperto: pallini sulla mappa, riga di pulsanti sotto il riquadro sul telefono */
 .msetl{stroke:var(--line);stroke-width:1.5;stroke-dasharray:3 3}
-.mset{cursor:pointer;outline:none}
+.mset{cursor:pointer;outline:none;animation:fade .35s ease-out}.msetl{animation:fade .35s ease-out}
+.msethint{margin:4px 0 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .mset .disco{fill:#fff;stroke:var(--ec);stroke-width:2.2;transition:fill .15s}
 .mset .ic{color:var(--ec)}
 .mset:hover .disco,.mset:focus-visible .disco{fill:var(--soft)}

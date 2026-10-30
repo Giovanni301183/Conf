@@ -59,18 +59,18 @@ export function MappaReparti({ vv, onNuovo }: { vv: Voce[]; onNuovo?: (k: string
   /** Persone da mostrare: nessuna, solo chi è nel reparto, o tutte (il reparto aperto le mostra sempre tutte). */
   const daMostrare = (k: string) => (quali === 'no' ? [] : sel === k || quali === 'tutte' ? persone(k) : persone(k).filter(p => p.nel));
   const sel = S.ui.rep;
-  // Scegliendo un reparto (o un suo settore) si aprono da sole le barre sotto (allarmi, appuntamenti, note) con le sue cose;
-  // se sono fuori schermo (sul telefono, dopo la colonna del giorno) la pagina ci scende.
-  const apriSotto = () => {
+  // Scegliendo un reparto (o un suo settore) si aprono da sole le barre sotto (allarmi, appuntamenti, note) con le sue cose.
+  // Solo scegliendo il settore, se sono fuori schermo, la pagina ci scende: col reparto resta sulla mappa, dove compaiono i settori.
+  const apriSotto = (scendi: boolean) => {
     for (const b of ['allarmi', 'appuntamenti', 'note']) S.ui.hb[b] = true;
-    requestAnimationFrame(() => {
+    if (scendi) requestAnimationFrame(() => {
       const el = document.querySelector('.calsotto') || document.querySelector('.mrep')?.nextElementSibling;
       if (el && el.getBoundingClientRect().top > window.innerHeight * 0.6) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   };
   const scegli = (k: string) => {
     S.ui.rep = sel === k ? '' : k; S.ui.repSet = '';
-    if (S.ui.rep) { const v = { ...visto, [k]: new Date().toISOString() }; setVisto(v); scrivi(KEY_VISTO, v); apriSotto(); }
+    if (S.ui.rep) { const v = { ...visto, [k]: new Date().toISOString() }; setVisto(v); scrivi(KEY_VISTO, v); apriSotto(false); }
     commit();
   };
   // Settori del reparto aperto (pallini intorno): voci da guardare e note di quel reparto e di quel settore. Clic = filtro anche per settore.
@@ -80,7 +80,7 @@ export function MappaReparti({ vv, onNuovo }: { vv: Voce[]; onNuovo?: (k: string
     return { ...t, late: a.urgenze.length + a.scadute.length, soon: a.prossime.length, note: nn };
   }) : [];
   const selSet = S.ui.repSet;
-  const scegliSet = (k: string) => { S.ui.repSet = selSet === k ? '' : k; apriSotto(); commit(); };
+  const scegliSet = (k: string) => { S.ui.repSet = selSet === k ? '' : k; apriSotto(!!S.ui.repSet); commit(); };
   const titoloSet = (t: (typeof settori)[number]) => `${nomeReparto(sel)} · ${t.nome}: ${t.late} urgenti o scadute, ${t.soon} in scadenza, ${t.note} note`;
   const classeSet = (t: (typeof settori)[number]) => `${t.late ? ' late' : t.soon ? ' soon' : ''}${selSet === t.k ? ' on' : ''}`;
   const dim = (k: string) => !!pref.miei && miei.length > 0 && k !== SMISTARE && !miei.includes(k);
@@ -165,6 +165,7 @@ export function MappaReparti({ vv, onNuovo }: { vv: Voce[]; onNuovo?: (k: string
       <div className="mleg"><span><i className="late" />urgenze o scadute</span><span><i className="soon" />in scadenza</span><span><i className="new" />note nuove</span>
         <span><i className="pnel" />nel reparto</span><span><i className="pcoi" />coinvolto</span>
         <span className="muted">· il numero conta le voci da guardare · clic su un reparto per vedere solo le sue cose, poi su un settore per restringere</span></div>
+      {settori.length > 0 && <p className="hint msethint"><IcReparto k={sel} s={13} /> Intorno a <b>{nomeReparto(sel)}</b> ci sono i settori: {settori.map(t => t.nome).join(', ')}. Cliccane uno per vedere solo le sue cose{selSet ? '; di nuovo per tornare a tutto il reparto' : ''}.</p>}
       <div className="msvg">
         <svg viewBox={`0 0 ${W} ${H}`} role="group" aria-label="Mappa dei reparti">
           {pos.map(p => <line key={p.k} className={`mlink${sel === p.k ? ' on' : ''}`} x1={cx} y1={cy} x2={p.x.toFixed(1)} y2={p.y.toFixed(1)} />)}
