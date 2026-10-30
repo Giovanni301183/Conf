@@ -405,11 +405,15 @@ Ogni cosa da fare deve arrivare a una chiusura chiara: chi la fa, a che punto è
 
 **Storico**: nella scheda della voce («Vedi») c'è l'elenco dei passaggi con data, persona e testo (esito, motivo, attesa). Lo scrive il database a ogni cambio, anche da Telegram ed email.
 
+**Attesa di risposta alle email**: «Aspetto la risposta» dopo un'email crea una cosa da fare *In attesa* del destinatario, con il sollecito alla data scelta (prima era un promemoria). Quando la risposta arriva («Risposta arrivata» nell'app o «✅ È la risposta» su Telegram) la voce si segna fatta con l'esito = cosa hanno risposto.
+
+**Voci già presenti** (migrazione `20261030050000_flusso_voci_esistenti.sql`): quelle aperte e assegnate a qualcuno passano a *In corso*; le vecchie attese di risposta diventano cose da fare *In attesa* del destinatario con il sollecito alla loro data (chiuse se già spuntate). Senza storico: le voci restano intatte.
+
 **Allarmi**: in cima le richieste di annullamento (per l'amministratore) e le voci fatte dai colleghi da confermare (per chi le ha create).
 
 Dati: migrazione `20261030040000_flusso_voci.sql` — colonne `stato`, `esito`, `attesa_di`, `sollecito`, `seguito_di`, `rinvii`, `passaggi`, `annullo_chiesto`, `annullo_da` su `scadenze`; tabella `scadenze_eventi` (storico); il trigger tiene d'accordo `stato` e `fatto` (Telegram, n8n e le versioni vecchie che cambiano solo `fatto` continuano a funzionare) e applica le regole su conferma, riapertura e annullamento. Senza la migrazione l'app resta con la sola spunta.
 
-**Prossimi passi**: avviso all'autore per le voci che nessuno prende in carico entro un giorno e solleciti delle attese nel promemoria del mattino; pulsanti del flusso su Telegram; conteggio di voci aperte, in attesa e ferme nella mappa dei reparti; «✉ Attesa risposta» come caso dello stato In attesa.
+**Prossimi passi**: avviso all'autore per le voci che nessuno prende in carico entro un giorno e solleciti delle attese nel promemoria del mattino; pulsanti del flusso su Telegram; conteggio di voci aperte, in attesa e ferme nella mappa dei reparti;.
 
 ## 10. Decisioni sui punti aperti
 

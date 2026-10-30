@@ -8,7 +8,7 @@ import { dFmt, dToday, isoDay } from '../domain/plan';
 import { conCodice, linkPosta, telefono } from '../domain/posta';
 import { S, commit } from '../store/state';
 import { toast } from '../store/actions';
-import { bozzaEmail, cloud, salvaScadenza } from '../store/remote';
+import { bozzaEmail, cloud, flussoDisponibile, salvaScadenza } from '../store/remote';
 
 const leggiA = (k: string) => { try { return localStorage.getItem('email-a:' + k) || ''; } catch { return ''; } };
 const ricordaA = (k: string, a: string) => { try { localStorage.setItem('email-a:' + k, a); } catch { /* solo una comodità */ } };
@@ -55,8 +55,8 @@ export function ModuloEmail({ titolo, testo: appunto, contesto, chiave, chiudi, 
   const attendi = async () => {
     const n = Math.max(0, Math.min(60, Math.round(giorni) || 0)), g = traGiorniLavorativi(n), chi = a.split(',')[0].trim() || 'destinatario';
     setBusy(true);
-    const e = await salvaScadenza({ genere: 'promemoria', giorno: isoDay(g), titolo: (ATTESA + chi + (oggetto ? ' — ' + oggetto : '')).slice(0, 200), preventivo_id: preventivo,
-      nota: `Email del ${dFmt(dToday())} a ${a.trim() || '—'}. Spunta quando arriva la risposta.` });
+    const e = await salvaScadenza({ genere: flussoDisponibile() ? 'attivita' : 'promemoria', giorno: isoDay(g), titolo: (ATTESA + chi + (oggetto ? ' — ' + oggetto : '')).slice(0, 200), preventivo_id: preventivo,
+      nota: `Email del ${dFmt(dToday())} a ${a.trim() || '—'}. Spunta quando arriva la risposta.`, stato: 'in_attesa', attesa_di: chi, sollecito: isoDay(g) });
     setBusy(false);
     if (e) { toast('Promemoria non salvato: ' + e); return; }
     ricordaGiorni(n); toast(`Ti ricordo la risposta il ${dFmt(g)}`); commit(); chiudi();

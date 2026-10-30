@@ -33,9 +33,10 @@ export const GENERI: Record<Genere, [string, string]> = {
 };
 // Categoria facoltativa (come le categorie del listino), utile soprattutto per le urgenze.
 export const CATEGORIE = ['STRUTTURA', 'BULLONERIA', 'ELETTROMECCANICO', 'ELETTRONICO'];
-// Email mandata e risposta attesa: un promemoria con questo titolo (nessun genere nuovo nel database), da spuntare quando la risposta arriva.
+// Email mandata e risposta attesa: una voce con questo titolo, da chiudere quando la risposta arriva. Con il flusso è una cosa da fare
+// «in attesa» del destinatario con il sollecito alla sua data; prima era un promemoria (le vecchie restano riconosciute).
 export const ATTESA = '✉ Attesa risposta · ';
-export const inAttesa = (s?: Scadenza | null) => !!s && s.genere === 'promemoria' && s.titolo.startsWith(ATTESA);
+export const inAttesa = (s?: Scadenza | null) => !!s && (s.genere === 'promemoria' || s.genere === 'attivita') && s.titolo.startsWith(ATTESA);
 /** Giorno (numero) tra n giorni lavorativi da oggi: 0 = oggi. */
 export const traGiorniLavorativi = (n: number, da = dToday()) => { let g = da; for (let i = 0; i < n; i++) do g++; while (!isWork(g)); return g; };
 export const urgente = (v: Voce) => v.s?.genere === 'urgenza' && !v.s.fatto;

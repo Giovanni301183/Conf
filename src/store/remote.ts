@@ -251,7 +251,9 @@ export async function salvaScadenza(s: Partial<Scadenza>): Promise<string> {
     ...(repartiVociDisponibili() && s.reparti !== undefined ? { reparti: s.reparti || [] } : {}),
     ...(settoriDisponibili() && s.settori !== undefined ? { settori: s.settori || [] } : {}),
     ...(supabase && conFlusso && s.motivo ? { motivo: s.motivo } : {}),
-    ...(conFlusso && !s.id && s.seguito_di ? { seguito_di: s.seguito_di } : {}) };
+    ...(conFlusso && !s.id && s.seguito_di ? { seguito_di: s.seguito_di } : {}),
+    ...(conFlusso && !s.id && s.stato ? { stato: s.stato, attesa_di: s.attesa_di || null, sollecito: s.sollecito || null } : {}),
+    ...(conFlusso && s.esito !== undefined ? { esito: s.esito || null } : {}) };
   if (!v.titolo || !v.giorno) return 'Servono titolo e data.';
   if (!coinvoltiDisponibili() && s.coinvolti?.length) return 'per coinvolgere più persone manca la migrazione 20261028010000_coinvolti.sql nel database';
   if (!supabase) {

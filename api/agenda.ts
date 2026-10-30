@@ -422,7 +422,8 @@ async function postaInArrivo(db: Db, b: any, oggi: string) {
   // Il codice [TN-numero] nell'oggetto (messo dall'app nelle email mandate) vale più della lettura dell'AI.
   const num = numDaOggetto(oggetto), perCodice = num ? commesse.find(c => c.num === num) : undefined;
   if (perCodice) l.preventivo_id = perCodice.id;
-  const { data: aa } = await db.from('scadenze').select('id, titolo, preventivo_id').eq('genere', 'promemoria').eq('fatto', false).like('titolo', ATTESA + '%')
+  // Attese di risposta: cose da fare «in attesa» (flusso) o, le vecchie, promemoria.
+  const { data: aa } = await db.from('scadenze').select('id, titolo, preventivo_id').in('genere', ['promemoria', 'attivita']).eq('fatto', false).like('titolo', ATTESA + '%')
     .order('giorno', { ascending: false }).limit(100);
   const att = attesaPer((aa || []) as { id: string; titolo: string; preventivo_id: string | null }[], oggetto, l.preventivo_id);
   // Allegati: ognuno ha il suo posto nello Storage; n8n li carica con i link firmati che tornano nella risposta.
@@ -506,7 +507,9 @@ async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
     if (!v) return fail("La voce in attesa non c'è più: scegli 📝 Appunto.");
     const giorno = oggi.split('-').reverse().join('/');
     const nuova = [v.nota, `Risposta del ${giorno}: ${d.riassunto || d.titolo}`].filter(Boolean).join('\n');
-    const { error: e1 } = await db.from('scadenze').update({ fatto: true, nota: nuova }).eq('id', v.id);
+    // Con il flusso: esito = cosa hanno risposto, e chi l'ha segnata (per lo storico e la chiusura senza conferma se la voce è sua).
+    let { error: e1 } = await db.from('scadenze').update({ fatto: true, nota: nuova, esito: d.riassunto || d.titolo, da_chi: io.email }).eq('id', v.id);
+    if (e1 && /esito|da_chi/.test(e1.message)) ({ error: e1 } = await db.from('scadenze').update({ fatto: true, nota: nuova }).eq('id', v.id));
     if (e1) return fail(e1.message);
     const pid = v.preventivo_id || d.preventivo_id || null, cartella = pid ? 'cliente' : 'altro', etichette = pulisciEtichette(d.etichette);
     const { data: n, error } = await db.from('documenti').insert({ preventivo_id: pid, scadenza_id: v.id, tipo: 'nota', cartella,

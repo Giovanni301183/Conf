@@ -56,7 +56,7 @@ function RispostaArrivata({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
     setBusy('salvo'); setErr('');
     const cosa = (riass || (lunga ? '' : testo)).trim();
     const nota = [s.nota, cosa && `Risposta del ${dFmt(dToday())}: ${cosa}`].filter(Boolean).join('\n');
-    const e = await salvaScadenza({ ...s, nota, fatto: true });
+    const e = await salvaScadenza({ ...s, nota, fatto: true, esito: cosa || 'Risposta arrivata' });
     if (e) { setErr('Voce non aggiornata: ' + e); setBusy(''); return; }
     if (lunga && salvaEmail) {
       const r = await salvaNota({ titolo: 'Risposta: ' + s.titolo.replace(ATTESA, ''), testo: testo.trim(), cartella: s.preventivo_id ? 'cliente' : 'altro', etichette: [],

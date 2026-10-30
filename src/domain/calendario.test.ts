@@ -76,8 +76,8 @@ describe('attesa risposta email', () => {
     expect(traGiorniLavorativi(1, dNum('2026-10-30')!)).toBe(dNum('2026-11-02'));   // 1 novembre festivo, di domenica
     expect(traGiorniLavorativi(1, dNum('2026-12-24')!)).toBe(dNum('2026-12-28'));   // Natale e Santo Stefano
   });
-  it('riconosce il promemoria dal titolo', () => {
+  it('riconosce dal titolo la voce (cosa da fare del flusso) o il vecchio promemoria', () => {
     const s = { genere: 'promemoria', titolo: ATTESA + 'rossi@x.it' } as Scadenza;
-    expect([inAttesa(s), inAttesa({ ...s, genere: 'attivita' }), inAttesa({ ...s, titolo: 'Richiamare' })]).toEqual([true, false, false]);
+    expect([inAttesa(s), inAttesa({ ...s, genere: 'attivita' }), inAttesa({ ...s, genere: 'appuntamento' }), inAttesa({ ...s, titolo: 'Richiamare' })]).toEqual([true, true, false, false]);
   });
 });
