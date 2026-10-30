@@ -302,7 +302,8 @@ function Agenda({ vv, oggi, sel, setSel, onEdit }: { vv: Voce[]; oggi: number; s
   );
 }
 
-export function Calendario({ sotto }: { sotto?: (onEdit: (s: Scadenza) => void) => React.ReactNode }) {
+/** mappa: subito sotto il calendario, anche sul telefono (prima della colonna del giorno); sotto: il resto della Home. */
+export function Calendario({ mappa, sotto }: { mappa?: React.ReactNode; sotto?: (onEdit: (s: Scadenza) => void) => React.ReactNode }) {
   const oggi = dToday(), t = dDate(oggi);
   const [ym, setYm] = useState({ y: t.getUTCFullYear(), m: t.getUTCMonth() });
   const [sel, setSel] = useState(oggi);
@@ -347,6 +348,7 @@ export function Calendario({ sotto }: { sotto?: (onEdit: (s: Scadenza) => void) 
           </div>
           <p className="hint" style={{ margin: '8px 0 0' }}>{mese ? 'Clic su un giorno per il dettaglio, doppio clic per aggiungere. ' : ''}Le date delle commesse vengono dal Gantt dei preventivi vinti; il resto si aggiunge a mano, legato o no a un preventivo.</p>
         </section>
+        {mappa && <div className="calmappa">{mappa}</div>}
 
         <section className="card calday">
           <h2>{giornoNome(sel)}<span className="sp" />
@@ -408,7 +410,7 @@ export const CalendarioHome = () => {
   const mappa = <><MappaReparti vv={vociVisibili()} onNuovo={setNuovo} />{S.ui.rep === SMISTARE && <Smistamento vv={vociVisibili()} />}
     {nuovo && <NuovoInReparto k={nuovo} chiudi={() => setNuovo('')} />}</>;
   // Calendario chiuso: resta la sua barra in cima, e il resto va a tutta pagina.
-  if (barraAperta('calendario')) return <Calendario sotto={m => <>{mappa}<Allarmi onEdit={m} />{sotto(m)}</>} />;
+  if (barraAperta('calendario')) return <Calendario mappa={mappa} sotto={m => <><Allarmi onEdit={m} />{sotto(m)}</>} />;
   const oggi = perGiorno(vociHome()).get(dToday())?.length || 0;
   return <>
     <section className="card chiusa"><h2 className="hbh" onClick={clicBarra('calendario')}>Calendario<span className="tag">{oggi ? `${oggi} in programma oggi` : 'niente oggi'}</span>

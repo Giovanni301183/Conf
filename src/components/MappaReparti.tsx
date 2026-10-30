@@ -59,9 +59,18 @@ export function MappaReparti({ vv, onNuovo }: { vv: Voce[]; onNuovo?: (k: string
   /** Persone da mostrare: nessuna, solo chi è nel reparto, o tutte (il reparto aperto le mostra sempre tutte). */
   const daMostrare = (k: string) => (quali === 'no' ? [] : sel === k || quali === 'tutte' ? persone(k) : persone(k).filter(p => p.nel));
   const sel = S.ui.rep;
+  // Scegliendo un reparto si aprono da sole le barre sotto (allarmi, appuntamenti, note) con le sue cose; se sono fuori schermo
+  // (sul telefono, dopo la colonna del giorno) la pagina ci scende.
   const scegli = (k: string) => {
     S.ui.rep = sel === k ? '' : k;
-    if (S.ui.rep) { const v = { ...visto, [k]: new Date().toISOString() }; setVisto(v); scrivi(KEY_VISTO, v); }
+    if (S.ui.rep) {
+      const v = { ...visto, [k]: new Date().toISOString() }; setVisto(v); scrivi(KEY_VISTO, v);
+      for (const b of ['allarmi', 'appuntamenti', 'note']) S.ui.hb[b] = true;
+      requestAnimationFrame(() => {
+        const el = document.querySelector('.calsotto') || document.querySelector('.mrep')?.nextElementSibling;
+        if (el && el.getBoundingClientRect().top > window.innerHeight * 0.6) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
     commit();
   };
   const dim = (k: string) => !!pref.miei && miei.length > 0 && k !== SMISTARE && !miei.includes(k);

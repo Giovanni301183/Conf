@@ -630,7 +630,9 @@ label.chk small{margin-left:4px}
 .hbh:hover .hbchev:not(.on){background:var(--acc-soft)}.hbh:hover .hbchev.on{background:var(--acc2)}
 .calgrid .klegend{margin-top:12px;gap:10px 14px}
 /* Home: calendario e, sotto, allarmi/appuntamenti/note a sinistra; colonna del giorno a destra, ferma mentre si scorre */
-.calhome{grid-template-areas:"main day" "sotto day";grid-template-rows:auto 1fr}
+.calhome{grid-template-areas:"main day" "mappa day" "sotto day";grid-template-rows:auto auto 1fr}
+.calmappa{grid-area:mappa;display:flex;flex-direction:column;gap:20px;min-width:0}
+.calmappa>.card{margin-bottom:0}
 .calhome>.calmain{grid-area:main}
 .calhome>.calday{grid-area:day;position:sticky;top:90px;max-height:calc(100vh - 110px);overflow:auto}
 /* Home: colonna del giorno stretta (metà), più spazio a calendario e mappa; torna larga mentre si aggiunge o modifica una voce */
@@ -642,7 +644,7 @@ label.chk small{margin-left:4px}
 .calhome>.calday .cvoce .btn.s{padding:2px 7px;font-size:11.5px}
 .calsotto{grid-area:sotto;display:flex;flex-direction:column;gap:20px;min-width:0}
 .calsotto>.card{margin-bottom:0}
-@media (max-width:1000px){.calhome{grid-template-areas:"main" "day" "sotto";grid-template-rows:auto}.calhome>.calday{position:static;max-height:none}}
+@media (max-width:1000px){.calhome{grid-template-areas:"main" "mappa" "day" "sotto";grid-template-rows:auto}.calhome>.calday{position:static;max-height:none}}
 .cvoce .vora{font-variant-numeric:tabular-nums;color:var(--vc);margin-right:7px}
 .cchip em{font-style:normal;font-weight:600;margin-right:4px;font-variant-numeric:tabular-nums}
 .cgen{flex-wrap:wrap}
