@@ -110,8 +110,9 @@ export function MappaReparti({ vv, onNuovo, scheda }: { vv: Voce[]; onNuovo?: (k
   );
 
   // Mappa: i reparti su un'ellisse intorno al centro, «Da smistare» in basso a destra.
-  // Margine intorno all'ellisse per i pallini dei settori, che escono verso l'esterno del reparto aperto.
-  const W = 960, H = 700, cx = W / 2, cy = H / 2, rx = 330, ry = 200;
+  // Centro piccolo e reparti distanziati; margine intorno all'ellisse per i rami dei settori, che escono verso l'esterno del reparto aperto.
+  // Misure scelte perché, con qualunque reparto aperto, pallini e nomi dei settori non tocchino reparti, nomi, centro e bordo.
+  const W = 1188, H = 886, cx = W / 2, cy = H / 2, rx = 340, ry = 250, HUB = 46;
   const pos = REPARTI.map((r, i) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / REPARTI.length; return { k: r.k, x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) }; });
   const tasto = (k: string) => (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scegli(k); } };
   const Nodo = ({ s, x, y, piccolo = false }: { s: Stato; x: number; y: number; piccolo?: boolean }) => {
@@ -142,11 +143,15 @@ export function MappaReparti({ vv, onNuovo, scheda }: { vv: Voce[]; onNuovo?: (k
     );
   };
 
+  // Nome del settore sul lato esterno del pallino: a destra o a sinistra sui reparti di lato; in alto e in basso, sopra e sotto
+  // alternati (il primo, il terzo e il quinto verso il reparto), perché i nomi vicini non si tocchino.
+  const posNome = (c: number, sn: number, i: number) => c > 0.5 ? { x: 23, y: 4, textAnchor: 'start' as const } : c < -0.5 ? { x: -23, y: 4, textAnchor: 'end' as const }
+    : { x: 0, y: (sn > 0) !== (i % 2 === 0) ? 33 : -25, textAnchor: 'middle' as const };
   // Pallini dei settori intorno al reparto aperto, verso l'esterno (dal centro in fuori), oltre il nome del reparto, collegati al cerchio.
   const Settori = () => {
     const p = pos.find(q => q.k === sel), s = tutti.find(x => x.k === sel);
     if (!p || !s || !settori.length) return null;
-    const r = 30 + Math.min(quanti(s), 5) * 3, R = r + 70, dir = Math.atan2(p.y - cy, p.x - cx), passo = 52 / R;
+    const r = 30 + Math.min(quanti(s), 5) * 3, R = r + 100, dir = Math.atan2(p.y - cy, p.x - cx), passo = 62 / R;
     return (
       <g transform={`translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`}>
         {settori.map((t, i) => { const a = dir + (i - (settori.length - 1) / 2) * passo, c = Math.cos(a), sn = Math.sin(a), n = t.late + t.soon; return (
@@ -158,7 +163,7 @@ export function MappaReparti({ vv, onNuovo, scheda }: { vv: Voce[]; onNuovo?: (k
               <title>{titoloSet(t)}</title>
               <circle className="anello" r={20} /><circle className="disco" r={15} /><IcSettore k={t.k} s={15} x={-7.5} y={-7.5} />
               {n > 0 && <g className="snum"><circle cx={12} cy={-12} r={8} /><text x={12} y={-8.5} textAnchor="middle">{n}</text></g>}
-              <text className="snome" y={28} textAnchor="middle">{t.k === 'speciali' ? 'Speciali' : t.nome}</text>
+              <text className="snome" {...posNome(c, sn, i)}>{t.k === 'speciali' ? 'Speciali' : t.nome}</text>
             </g>
           </g>); })}
       </g>
@@ -186,7 +191,7 @@ export function MappaReparti({ vv, onNuovo, scheda }: { vv: Voce[]; onNuovo?: (k
           {pos.map(p => <line key={p.k} className={`mlink${sel === p.k ? ' on' : ''}`} x1={cx} y1={cy} x2={p.x.toFixed(1)} y2={p.y.toFixed(1)} />)}
           <g className={`mhub${sel ? '' : ' on'}`} role="button" tabIndex={0} aria-label="Tutti i reparti" onClick={() => { S.ui.rep = ''; commit(); }}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); S.ui.rep = ''; commit(); } }}>
-            <circle cx={cx} cy={cy} r={60} /><text x={cx} y={cy + 2} textAnchor="middle">TERRANOVA</text><rect x={cx - 26} y={cy + 13} width={52} height={4} rx={2} />
+            <circle cx={cx} cy={cy} r={HUB} /><text x={cx} y={cy + 2} textAnchor="middle">TERRANOVA</text><rect x={cx - 20} y={cy + 11} width={40} height={4} rx={2} />
           </g>
           {pos.map(p => <Nodo key={p.k} s={tutti.find(s => s.k === p.k)!} x={p.x} y={p.y} />)}
           <Nodo s={tutti.at(-1)!} x={W - 64} y={H - 40} piccolo />
