@@ -12,7 +12,7 @@
      ]
     }
    },
-   "id": "bc14cd72-5dd7-4571-9def-29fed556b66e",
+   "id": "81d34465-a407-40bd-ba1d-c5eca58e203d",
    "name": "Ogni minuto",
    "type": "n8n-nodes-base.scheduleTrigger",
    "typeVersion": 1.2,
@@ -26,13 +26,13 @@
     "assignments": {
      "assignments": [
       {
-       "id": "88a3f1f7-a4e5-47b7-b842-4408e4da7942",
+       "id": "adf866c5-d807-4d70-b027-857506587f3b",
        "name": "url",
        "type": "string",
        "value": "https://conf-five.vercel.app/api/agenda"
       },
       {
-       "id": "3e6dd137-71d2-441c-a4fe-477873e6aae0",
+       "id": "7556f810-fc35-403f-89d3-1238ee3ab3b6",
        "name": "casella",
        "type": "string",
        "value": "g.sorrentino@terranovasrl.net"
@@ -42,7 +42,7 @@
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "773f86c1-99c0-49e1-bbc7-de6f90ab4641",
+   "id": "7d4904e4-250a-408c-85be-24ef376927a2",
    "name": "Impostazioni etichette",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -56,7 +56,7 @@
     "resource": "label",
     "returnAll": true
    },
-   "id": "e05a6f6b-a161-4da8-936f-639aa11926bc",
+   "id": "ad5952ca-0b3b-4cb1-9f08-dfd671cfaa8f",
    "name": "Etichette Gmail",
    "type": "n8n-nodes-base.gmail",
    "typeVersion": 2.1,
@@ -75,7 +75,7 @@
    "parameters": {
     "jsCode": "// Ricerca Gmail delle email con un'etichetta «Conf/…» non ancora passate all'app (anche vecchie), e nomi delle etichette per l'app.\nconst ll = $input.all().map(i => i.json);\nconst conf = ll.filter(l => /^conf\\//i.test(l.name || ''));\nconst fatta = conf.find(l => /in app/i.test(l.name)), errore = conf.find(l => /non entrata/i.test(l.name));\nconst lab = n => 'label:' + n.toLowerCase().replace(/[\\s\\/]+/g, '-');\nconst cerca = conf.filter(l => l !== fatta && l !== errore);\nif (!fatta || !cerca.length) return [];\nreturn [{ json: { q: '{' + cerca.map(l => lab(l.name)).join(' ') + '} -' + lab(fatta.name) + (errore ? ' -' + lab(errore.name) : ''),\n  nomi: Object.fromEntries(conf.map(l => [l.id, l.name])), fatta: fatta.id, errore: (errore || fatta).id } }];"
    },
-   "id": "4e109cfd-c56f-404b-823c-bae6ff56cfdf",
+   "id": "9cf80f1c-8c1c-4873-aa33-7f70fccec83a",
    "name": "Ricerca etichette",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
@@ -95,7 +95,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'fili' }) }}",
     "options": {}
    },
-   "id": "755caf87-4749-4cf9-bc2e-1a40139d2290",
+   "id": "8beec3aa-cd33-464f-a29a-a0e73c700d73",
    "name": "Fili attivi",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -118,7 +118,7 @@
      "q": "={{ $('Ricerca etichette').first().json.q }}"
     }
    },
-   "id": "6173e525-875a-4fee-99f3-eb561a75b6fe",
+   "id": "41b5e64b-e173-4e44-b666-3b191c0ffe6e",
    "name": "Email con etichetta",
    "type": "n8n-nodes-base.gmail",
    "typeVersion": 2.1,
@@ -138,7 +138,7 @@
    "parameters": {
     "jsCode": "// Una riga per ogni conversazione legata a una voce aperta (le dà l'app); nessuna = si passa oltre.\nconst ff = $('Fili attivi').first().json.fili || [];\nreturn ff.length ? ff.map(t => ({ json: { thread: t } })) : [{ json: { nessuno: true } }];"
    },
-   "id": "2855abda-122c-464e-b3e2-39badfecfecd",
+   "id": "c928039d-1fc3-430a-bb84-ed586b66c2ca",
    "name": "Fili da guardare",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
@@ -157,7 +157,7 @@
      },
      "conditions": [
       {
-       "id": "c62453e2-b005-4066-8c4a-e8e0318dbbb9",
+       "id": "85a41515-badc-4ba9-91f2-fb811c00540c",
        "leftValue": "={{ !$json.nessuno }}",
        "rightValue": "",
        "operator": {
@@ -171,7 +171,7 @@
     },
     "options": {}
    },
-   "id": "19c3676d-cf26-41fe-b4ec-14b9b5ad995b",
+   "id": "bddeb2f2-3c52-4cb5-865d-5e014cd89bf1",
    "name": "Ci sono fili?",
    "type": "n8n-nodes-base.if",
    "typeVersion": 2.2,
@@ -187,7 +187,7 @@
     "threadId": "={{ $json.thread }}",
     "options": {}
    },
-   "id": "58eeda6d-33ec-463b-b1d6-a648851d67e9",
+   "id": "aba9e290-a1c6-46b3-969f-2d76d5d79904",
    "name": "Messaggi dei fili",
    "type": "n8n-nodes-base.gmail",
    "typeVersion": 2.1,
@@ -207,7 +207,7 @@
    "parameters": {
     "jsCode": "// Tutte le email trovate (etichettate e delle conversazioni legate), con conversazione e data, per chiedere all'app quali leggere.\nconst ms = m => Number(m.internalDate) || Date.parse(m.date || (m.headers && m.headers.date) || (((m.payload && m.payload.headers) || []).find(h => /^date$/i.test(h.name)) || {}).value || '') || 0;\nconst piatti = xs => xs.flatMap(x => Array.isArray(x.messages) ? x.messages : [x]);\nlet tutti = $('Email con etichetta').all().map(i => i.json);\ntry { tutti = tutti.concat(piatti($('Messaggi dei fili').all().map(i => i.json))); } catch (e) {}\nreturn [{ json: { email: tutti.filter(m => m && m.id).map(m => ({ id: m.id, thread: m.threadId || '', data: ms(m) })) } }];"
    },
-   "id": "603ae4c7-1853-41fc-949e-06083102c6ea",
+   "id": "e007715f-7857-4d75-b061-3ed89b11dc55",
    "name": "Raccogli",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
@@ -227,7 +227,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'posta_nuove', email: $json.email }) }}",
     "options": {}
    },
-   "id": "fe3955d0-6587-4487-9d0b-c2f6da72b221",
+   "id": "fa3e981e-fae5-4d74-9ef7-1c7a916c2b0b",
    "name": "Quali leggere",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -246,7 +246,7 @@
    "parameters": {
     "jsCode": "// Una email al minuto, la più vecchia da leggere (così gli allegati vanno con la loro email).\nconst ids = $input.first().json.ids || [];\nreturn ids.length ? [{ json: { id: ids[0] } }] : [];"
    },
-   "id": "27a58fa8-6e1b-4a70-a345-f54bc5179453",
+   "id": "75edb102-8af4-4acf-ae6e-b407100dac6e",
    "name": "Prima da leggere",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
@@ -265,7 +265,7 @@
      "dataPropertyAttachmentsPrefixName": "attachment_"
     }
    },
-   "id": "689408c1-598b-4cab-857c-7707275a736e",
+   "id": "91b1ac04-8d83-41ab-aefe-9151327b7d2b",
    "name": "Email etichettata",
    "type": "n8n-nodes-base.gmail",
    "typeVersion": 2.1,
@@ -291,7 +291,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'posta', per: $('Impostazioni etichette').first().json.casella, gmail_id: $('Email etichettata').first().json.id, thread_id: $('Email etichettata').first().json.threadId || '', da: $('Email etichettata').first().json.from?.value?.[0]?.address || $('Email etichettata').first().json.from?.text || '', a: $('Email etichettata').first().json.to?.value?.[0]?.address || '', oggetto: $('Email etichettata').first().json.subject || '', testo: $('Email etichettata').first().json.text || '', data: $('Email etichettata').first().json.date || '', data_ms: Number($('Email etichettata').first().json.internalDate) || 0, etichette_gmail: ($('Email etichettata').first().json.labelIds || []).map(id => $('Ricerca etichette').first().json.nomi[id]).filter(Boolean), allegati: Object.entries($('Email etichettata').first().binary || {}).map(([k, f]) => ({ chiave: k, nome: f.fileName || k, mime: f.mimeType || '', peso: f.fileSize || '' })) }) }}",
     "options": {}
    },
-   "id": "3f7cc74c-9c3e-41c6-bf50-a8c6b4d48444",
+   "id": "94bd8105-23f1-4f50-b64a-70efea3f8f53",
    "name": "Etichettata → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -313,7 +313,7 @@
     "threadId": "={{ $('Email etichettata').first().json.threadId }}",
     "labelIds": "={{ $json.ok ? $('Ricerca etichette').first().json.fatta : $('Ricerca etichette').first().json.errore }}"
    },
-   "id": "134c58cc-992c-419e-90ba-0f200fff862b",
+   "id": "604a9235-b948-4295-8243-6d191235e155",
    "name": "Segna in Gmail",
    "type": "n8n-nodes-base.gmail",
    "typeVersion": 2.1,
@@ -332,7 +332,7 @@
    "parameters": {
     "jsCode": "// Un elemento per ogni allegato da caricare, con il suo file preso dall'email.\nconst file = $('Email etichettata').first().binary || {};\nconst r = $input.first().json;\nreturn (r.ok && r.caricamenti ? r.caricamenti : []).filter(c => file[c.chiave]).map(c => ({ json: c, binary: { data: file[c.chiave] } }));"
    },
-   "id": "87f78508-fb5c-4d7d-9dfb-41346e852dc9",
+   "id": "7dcf970a-ad7b-48f0-8ac5-9af7cf5f9494",
    "name": "Allegati etichettata",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
@@ -367,7 +367,7 @@
     "inputDataFieldName": "data",
     "options": {}
    },
-   "id": "913cac6d-753d-433f-83f0-97ae66476b51",
+   "id": "07d6b526-9ba7-4ed3-95d0-481068b22bc9",
    "name": "Carica allegato etichettata",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,

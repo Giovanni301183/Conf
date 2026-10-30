@@ -481,3 +481,9 @@ if SEGRETO and BYPASS:
     with open(os.path.join(ROOT, 'n8n', 'da-importare', 'incolla-allegati-email.json'), 'w', encoding='utf-8') as f:
         f.write(json.dumps(pezzo, ensure_ascii=False, indent=1))
     print('Scritto n8n/da-importare/incolla-allegati-email.json (nodi degli allegati da incollare nel flusso)')
+    # Flusso delle etichette Gmail e delle conversazioni, da incollare al posto del vecchio blocco (stesso flusso, segreto già dentro).
+    nomi = [n['name'] for n in etichette]
+    pezzo = {'nodes': [n for n in tutti if n['name'] in nomi], 'connections': {k: v for k, v in etichette_conn.items() if k in nomi}}
+    with open(os.path.join(ROOT, 'n8n', 'da-importare', 'incolla-etichette-gmail.json'), 'w', encoding='utf-8') as f:
+        f.write(json.dumps(pezzo, ensure_ascii=False, indent=1))
+    print('Scritto n8n/da-importare/incolla-etichette-gmail.json (blocco delle etichette Gmail da incollare nel flusso)')
