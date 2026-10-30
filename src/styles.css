@@ -597,6 +597,11 @@ label.chk small{margin-left:4px}
 .msetl{stroke:var(--line);stroke-width:1.5;stroke-dasharray:3 3}
 .mset{cursor:pointer;outline:none;animation:fade .35s ease-out}.msetl{animation:fade .35s ease-out}
 .msethint{margin:4px 0 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+/* Scheda da compilare aperta da un settore: sotto la mappa (sul telefono sotto i pulsanti dei settori) */
+.mscheda{grid-column:1/-1;border:1.5px solid var(--acc2);border-radius:12px;background:var(--card);margin-top:10px;animation:fade .2s ease-out}
+.mschedah{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap;background:var(--acc-soft);border-radius:11px 11px 0 0}
+.mschedah .sp{flex:1}
+.mschedab{padding:6px 14px 14px}
 .mset .disco{fill:#fff;stroke:var(--ec);stroke-width:2.2;transition:fill .15s}
 .mset .ic{color:var(--ec)}
 .mset:hover .disco,.mset:focus-visible .disco{fill:var(--soft)}

@@ -367,7 +367,7 @@ La Home è fatta di barre che si aprono e chiudono cliccando l'intestazione: **C
 **Settori del reparto aperto**
 - Cliccato un reparto, intorno al suo cerchio, verso l'esterno della mappa (oltre il nome del reparto), compaiono 5 pallini collegati con una linea tratteggiata: **Energia** (tracker e impianti fissi), **Serre**, **Vigneti**, **Recinzioni**, **Lavori speciali**. Sotto la legenda una riga ricorda quali sono. Sul telefono gli stessi settori sono una riga di pulsanti subito sotto il riquadro del reparto scelto.
 - Ogni pallino ha il numero delle voci da guardare (urgenti, scadute, in scadenza) e lampeggia come i reparti.
-- **Clic su un settore**: allarmi, appuntamenti e note mostrano solo quel reparto e quel settore (es. «Produzione · Serre») e la pagina scende ai risultati. Secondo clic sullo stesso settore = tutto il reparto.
+- **Clic su un settore**: allarmi, appuntamenti e note mostrano solo quel reparto e quel settore (es. «Produzione · Serre») e, lì dov'è, si apre la scheda **«Nuovo in Produzione · Serre»** da compilare: sotto la mappa sul computer, sotto i pulsanti dei settori sul telefono. La scheda è quella del «+» (Agenda: promemoria, scadenza, urgenza, appuntamento, da fare; oppure Nota), con reparto e settore già impostati; si chiude con ✕, Esc o dopo il salvataggio. La pagina non scende. Secondo clic sullo stesso settore = tutto il reparto, e la scheda si chiude.
 - Con un settore scelto, «+ Aggiungi», il «+» del reparto e «+ Nota» partono già in quel settore.
 
 **A quale settore appartiene una voce o una nota**

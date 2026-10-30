@@ -388,22 +388,28 @@ function Appuntamenti({ onEdit }: { onEdit?: (s: Scadenza) => void }) {
  *  Se l'utente ha nascosto il calendario: allarmi in breve, poi appuntamenti e note a tutta pagina. */
 /** Dal «+» di un reparto della mappa: voce d'agenda (promemoria, scadenza, urgenza, appuntamento…) o nota, già nel reparto.
  *  La voce prende il reparto, la nota il suo primo tema (in «Da smistare» niente: ci finiscono da sole). */
-function NuovoInReparto({ k, chiudi }: { k: string; chiudi: () => void }) {
+/** Scheda «Nuovo in…»: Agenda o Nota, già nel reparto k (e nel settore st, se c'è). Nella finestra del «+» o, dalla mappa, sotto i settori. */
+function SchedaNuovo({ k, st = '', chiudi, testa = 'saphead', corpo = 'sapbody' }: { k: string; st?: string; chiudi: () => void; testa?: string; corpo?: string }) {
   const [cosa, setCosa] = useState<'voce' | 'nota'>('voce'), qui = k !== SMISTARE;
   const [b, setB] = useState<Bozza>({ genere: 'promemoria', categoria: '', giorno: isoDay(dToday()), ora: '', titolo: '', nota: '', preventivo_id: '', assegnata_a: '', coinvolti: [], reparti: qui ? [k] : [],
-    settori: qui && S.ui.rep === k && S.ui.repSet ? [S.ui.repSet] : [] });
+    settori: qui && st ? [st] : [] });
   const [n, setN] = useState<Nota>({ ...notaVuota(), preventivo_id: '', etichette: qui ? REPARTI.find(r => r.k === k)!.temi.slice(0, 1) : [], settori: b.settori });
   useEffect(() => { const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') chiudi(); }; window.addEventListener('keydown', esc); return () => window.removeEventListener('keydown', esc); }, [chiudi]);
+  return <>
+    <div className={testa}><IcReparto k={k} s={16} /><b>{qui ? `Nuovo in ${nomeReparto(k)}${st ? ' · ' + nomeSettoreMappa(st) : ''}` : 'Nuovo da smistare'}</b><span className="sp" />
+      <span className="seg"><button className={cosa === 'voce' ? 'on' : ''} onClick={() => setCosa('voce')}>Agenda</button>
+        <button className={cosa === 'nota' ? 'on' : ''} onClick={() => setCosa('nota')} disabled={!!docNonDisponibili()}>Nota</button></span>
+      <button className="btn x" onClick={chiudi} title="Chiudi (Esc)" aria-label="Chiudi">✕</button></div>
+    <div className={corpo}>
+      {cosa === 'voce' ? <Modulo b={b} set={setB} chiudi={chiudi} /> : <ModuloNota n={n} set={setN} chiudi={chiudi} dove={{}} />}
+    </div>
+  </>;
+}
+function NuovoInReparto({ k, chiudi }: { k: string; chiudi: () => void }) {
   return (
     <div className="sapscrim noprint" onMouseDown={e => { if (e.target === e.currentTarget) chiudi(); }}>
       <div className="sapwin" role="dialog" aria-modal="true" aria-label={`Nuovo in ${nomeReparto(k)}`}>
-        <div className="saphead"><IcReparto k={k} s={16} /><b>{qui ? `Nuovo in ${nomeReparto(k)}` : 'Nuovo da smistare'}</b><span className="sp" />
-          <span className="seg"><button className={cosa === 'voce' ? 'on' : ''} onClick={() => setCosa('voce')}>Agenda</button>
-            <button className={cosa === 'nota' ? 'on' : ''} onClick={() => setCosa('nota')} disabled={!!docNonDisponibili()}>Nota</button></span>
-          <button className="btn x" onClick={chiudi} title="Chiudi (Esc)" aria-label="Chiudi">✕</button></div>
-        <div className="sapbody">
-          {cosa === 'voce' ? <Modulo b={b} set={setB} chiudi={chiudi} /> : <ModuloNota n={n} set={setN} chiudi={chiudi} dove={{}} />}
-        </div>
+        <SchedaNuovo k={k} st={S.ui.rep === k ? S.ui.repSet : ''} chiudi={chiudi} />
       </div>
     </div>
   );
@@ -414,7 +420,7 @@ export const CalendarioHome = () => {
   // Sotto il calendario la mappa dei reparti: scegliendone uno, allarmi, appuntamenti, note e colonna del giorno mostrano solo le sue cose.
   const sotto = (onEdit?: (s: Scadenza) => void) => <><Appuntamenti onEdit={onEdit} />{!docNonDisponibili() && <NoteHome />}</>;
   // In «📥 Da smistare» compare subito il riquadro con i reparti da cliccare su ogni riga.
-  const mappa = <><MappaReparti vv={vociVisibili()} onNuovo={setNuovo} />{S.ui.rep === SMISTARE && <Smistamento vv={vociVisibili()} />}
+  const mappa = <><MappaReparti vv={vociVisibili()} onNuovo={setNuovo} scheda={(k, st, chiudi) => <SchedaNuovo k={k} st={st} chiudi={chiudi} testa="mschedah" corpo="mschedab" />} />{S.ui.rep === SMISTARE && <Smistamento vv={vociVisibili()} />}
     {nuovo && <NuovoInReparto k={nuovo} chiudi={() => setNuovo('')} />}</>;
   // Calendario chiuso: resta la sua barra in cima, e il resto va a tutta pagina.
   if (barraAperta('calendario')) return <Calendario mappa={mappa} sotto={m => <><Allarmi onEdit={m} />{sotto(m)}</>} />;

@@ -97,6 +97,19 @@ describe('archivio: cruscotto e mappa', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     act(() => { S.scad = []; commit(); });
   });
+  it('clic su un settore del reparto apre lì la scheda da compilare: la voce nasce nel reparto e nel settore', async () => {
+    act(() => { S.scad = []; S.ui.tab = 'archivio'; S.ui.hb = {}; S.ui.rep = ''; S.ui.repSet = ''; commit(); });
+    const { container } = render(<App />);
+    fireEvent.click(container.querySelector('.mnodo[aria-label^="Produzione:"]')!);
+    fireEvent.click(container.querySelector('.mset[aria-label^="Produzione · Serre"]')!);
+    expect(container.querySelector('.mscheda')!.textContent).toContain('Nuovo in Produzione · Serre');
+    expect(S.ui.repSet).toBe('serre');
+    fireEvent.change(screen.getByPlaceholderText(/Richiamare il cliente/), { target: { value: 'Controllo archi' } });
+    await act(async () => { fireEvent.click(screen.getByText('Aggiungi')); });
+    expect(S.scad.map(s => [s.titolo, s.reparti, s.settori])).toEqual([['Controllo archi', ['produzione'], ['serre']]]);
+    expect(container.querySelector('.mscheda')).toBeNull();
+    act(() => { S.scad = []; S.ui.rep = ''; S.ui.repSet = ''; commit(); });
+  });
   it('richiamo di un preventivo inviato: numerino sul menu e agenda nel preventivo', () => {
     act(() => {
       S.scad = []; S.ui.hb = {}; S.ui.tab = 'config'; S.ui.folds['cf-agenda'] = true;
