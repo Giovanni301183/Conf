@@ -174,7 +174,8 @@ export async function bozzaEmail(body: { titolo: string; testo: string; contesto
 export interface Arrivo {
   id: string; creato: string;
   dati: { titolo: string; riassunto: string; mittente: string; oggetto: string; giorno: string; ora: string; preventivo_id: string; etichette?: string[];
-    link?: string; allegati?: { nome: string }[]; attesa?: { id: string; titolo: string }; gmail?: { azione: '' | 'f' | 't' | 'r'; a: string; da_me: boolean } };
+    link?: string; allegati?: { nome: string }[]; attesa?: { id: string; titolo: string }; gmail?: { azione: '' | 'f' | 't' | 'r'; a: string; da_me: boolean };
+    filo?: { id: string; titolo: string }[]; collegata?: { id: string; titolo: string }; domanda?: 'chiudi' | 'riapri' };
 }
 export const arrivo = { vv: [] as Arrivo[], err: '', letto: false };
 export async function loadInArrivo() {

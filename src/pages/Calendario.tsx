@@ -176,7 +176,7 @@ function Passaggio({ s, passo, chiudi }: { s: Scadenza; passo: Passo; chiudi: ()
   );
 }
 
-const EVENTO: Record<string, string> = { annullo_chiesto: 'Chiesto annullamento', annullo_rifiutato: 'Annullamento non concesso' };
+const EVENTO: Record<string, string> = { annullo_chiesto: 'Chiesto annullamento', annullo_rifiutato: 'Annullamento non concesso', email: 'Email' };
 /** Storico dei passaggi della voce: quando, cosa, chi. */
 function Storico({ s }: { s: Scadenza }) {
   const [ee, setEe] = useState<Evento[] | null>(null);

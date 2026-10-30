@@ -50,3 +50,31 @@ export function daEtichetteGmail(nomi: string[], pulisci: (v: unknown) => string
   const azione = nostre.map(n => AZIONI_GMAIL.find(([r]) => r.test(n))?.[1]).find(Boolean) || '';
   return { temi: pulisci(nostre.filter(n => !AZIONI_GMAIL.some(([r, a]) => r.test(n) && a !== 'r'))), azione };
 }
+
+// ---------- Conversazioni email legate alle voci (tabella posta_fili) ----------
+export interface MsgGmail { id: string; thread: string; data: number }   // data = ms (0 se non nota)
+/** Quali email leggere, dalla più vecchia: di una conversazione già legata a una voce o nota, tutte quelle nuove (dopo l'ultima letta);
+ *  di una conversazione non ancora legata, solo l'ultima (etichettando una conversazione lunga arriva una proposta sola) e solo se non ce n'è
+ *  già una da sistemare. Le email già lette (visti) non tornano. A parità di data vale l'ordine di Gmail (dalla più recente). */
+export function daLeggere(mm: MsgGmail[], visti: Set<string>, fili: Map<string, number>, inSospeso: Set<string>): string[] {
+  const per = new Map<string, MsgGmail[]>();
+  mm.forEach(m => { if (m.id && !visti.has(m.id)) per.set(m.thread, [...(per.get(m.thread) || []), m]); });
+  const out: MsgGmail[] = [];
+  for (const [t, xx] of per) {
+    if (t && fili.has(t)) { const u = fili.get(t)!; out.push(...xx.filter(m => !m.data || m.data > u)); continue; }
+    if (t && inSospeso.has(t)) continue;
+    out.push(xx.reduce((a, b) => (b.data > a.data ? b : a)));
+  }
+  return [...new Set(out.sort((a, b) => a.data - b.data).map(m => m.id))];
+}
+/** Voci aperte a cui potrebbe appartenere un'email con un oggetto nuovo: stessa persona dall'altra parte, stessa commessa
+ *  (codice [TN-…] o lettura dell'AI). Al massimo 3, prima quelle che corrispondono in entrambi i modi. */
+export function suggerisciFili<V extends { id: string; titolo: string; preventivo_id: string | null }>(
+  fili: { contatto: string | null; voce: V }[], contatto: string, pid: string): V[] {
+  const punti = new Map<string, { v: V; p: number }>();
+  for (const f of fili) {
+    const p = (contatto && f.contatto === contatto ? 2 : 0) + (pid && f.voce.preventivo_id === pid ? 1 : 0);
+    if (p && (punti.get(f.voce.id)?.p || 0) < p) punti.set(f.voce.id, { v: f.voce, p });
+  }
+  return [...punti.values()].sort((a, b) => b.p - a.p).slice(0, 3).map(x => x.v);
+}

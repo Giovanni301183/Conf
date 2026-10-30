@@ -22,7 +22,7 @@ import { marginiBot, preventivoBot, variantiBot } from './_preventivo.js';
 import { linkGmail, scriviBozza } from './_email.js';
 import { allegatiDaCaricare, indirizzo, leggiEmail, type Commessa, type Lettura } from './_posta.js';
 import { chiaveAvviso, daAvvisare, linkRiunione, minutiA } from '../src/domain/riunione.js';
-import { attesaPer, conCodice, daEtichetteGmail, numDaOggetto, type AzioneGmail } from '../src/domain/posta.js';
+import { attesaPer, conCodice, daEtichetteGmail, daLeggere, numDaOggetto, suggerisciFili, type AzioneGmail } from '../src/domain/posta.js';
 import { ETICHETTE, cartellaPer, nomeSicuro, nomiEtichette, pulisciEtichette } from '../src/domain/documenti.js';
 import { REPARTI, SMISTARE, nomeReparto, nomeSettoreMappa, repartiDaTemi, settoriDi } from '../src/domain/reparti.js';
 import { MANCA_N8N, cambia, etichetta, etichettaSettore, fatto, msgReparti, msgSalvato, msgTipi, pulsanteNuovo, repartiDiVoce, repartoDa, senzaMessaggio, settoreDa, tastiReparti, tastiSettori, temiPerReparto, tg } from './_reparti.js';
@@ -390,8 +390,11 @@ async function avvisiReparto(db: Db, v: Voce) {
 export interface AllegatoPosta { nome: string; mime: string; percorso: string }
 // attesa = voce «✉ Attesa risposta» aperta a cui sembra rispondere l'email (stessa commessa o stesso oggetto): pulsante «È la risposta».
 // gmail = email etichettata in Gmail «Conf/…» (vedi src/domain/posta.ts): scelta proposta, destinatario, se l'ha scritta chi l'ha etichettata, conversazione.
+// filo = voci aperte a cui sembra appartenere (oggetto nuovo, stessa persona o commessa): «Aggiungi a…». collegata + domanda = email entrata da sola
+// in una conversazione già legata, con la sola domanda «È la risposta? Chiudo» o «Riapro la voce chiusa?» (vedi attaccaAlFilo).
 export type Proposta = Lettura & { oggetto: string; link?: string; allegati?: AllegatoPosta[]; attesa?: { id: string; titolo: string };
-  gmail?: { azione: AzioneGmail; a: string; da_me: boolean; thread: string } };
+  gmail?: { azione: AzioneGmail; a: string; da_me: boolean; thread: string; da?: string; ms?: number };
+  filo?: { id: string; titolo: string }[]; collegata?: { id: string; titolo: string }; domanda?: 'chiudi' | 'riapri' };
 const ATTESA = '✉ Attesa risposta · ';
 /** Messaggio in chat privata con la lettura dell'email e i pulsanti "pe:<id>:<scelta>" (v risposta a una voce in attesa, a appunto, p promemoria, r riunione, x ignora). */
 export function propostaTelegram(id: string, l: Proposta, commessa: string | null, oggi: string) {
@@ -400,12 +403,22 @@ export function propostaTelegram(id: string, l: Proposta, commessa: string | nul
     l.link ? `🎥 ${l.link}` : '', commessa ? `Commessa: ${commessa}` : 'Commessa: non riconosciuta (l\'appunto resta libero)',
     l.etichette?.length ? `Temi: ${nomiEtichette(l.etichette)}` : '',
     l.allegati?.length ? `📎 ${l.allegati.length} allegat${l.allegati.length === 1 ? 'o' : 'i'}: ${l.allegati.map(a => a.nome).join(', ')}`.slice(0, 600) : '',
-    l.attesa ? `↩ Sembra la risposta a: ${l.attesa.titolo.replace(ATTESA, '')}` : '', '', 'Cosa ne faccio?']
+    l.attesa ? `↩ Sembra la risposta a: ${l.attesa.titolo.replace(ATTESA, '')}` : '',
+    l.filo?.length ? `🔗 Sembra parte di: ${l.filo.map(f => f.titolo.replace(ATTESA, '')).join(' · ')}` : '', '', 'Cosa ne faccio?']
     .filter((x, i, a) => x || (i > 0 && a[i - 1])).join('\n').slice(0, 4000);
-  const tasti = [...(l.attesa ? [b(`✅ È la risposta: segna fatta e salva`, 'v')] : []), b(commessa ? '📝 Appunto nella commessa' : '📝 Appunto', 'a'),
+  const tasti = [...(l.attesa ? [b(`✅ È la risposta: segna fatta e salva`, 'v')] : []),
+    ...(l.filo || []).map((f, i) => b(`🔗 Aggiungi a: ${f.titolo.replace(ATTESA, '').slice(0, 40)}`, 'l' + i)), b(commessa ? '📝 Appunto nella commessa' : '📝 Appunto', 'a'),
     b(`☑️ Cosa da fare ${giornoIt(giorno)}`, 'f'), ...(l.gmail?.azione === 't' ? [b('⏳ Aspetto la risposta', 't')] : []), b(`🔔 Promemoria ${giornoIt(giorno)}`, 'p'),
     ...(l.giorno ? [b(`📅 Riunione ${giornoIt(l.giorno)}${l.ora ? ' ' + l.ora : ''}`, 'r')] : []), b('🗑 Ignora', 'x')];
   return { text, reply_markup: { inline_keyboard: tasti } };
+}
+
+/** Domanda su un'email entrata da sola in una conversazione già legata: «È la risposta? Chiudo» o «Riapro la voce chiusa?». */
+export function domandaTelegram(id: string, d: Proposta, riga: string) {
+  const b = (text: string, s: string) => [{ text, callback_data: `pe:${id}:${s}` }], t = (d.collegata?.titolo || '').replace(ATTESA, '');
+  return d.domanda === 'chiudi'
+    ? { text: `↩ ${riga}\n\nÈ la risposta che aspettavi per «${t}»?`.slice(0, 4000), reply_markup: { inline_keyboard: [b('✅ Sì, chiudi con questo esito', 'c'), b('⏳ No, resta in attesa', 'k')] } }
+    : { text: `📧 Nuova email su una voce chiusa: «${t}»\n${riga}`.slice(0, 4000), reply_markup: { inline_keyboard: [b('↩ Riapri la voce', 'o'), b('Va bene così', 'k')] } };
 }
 
 /** Email inoltrata all'indirizzo dell'agenda, o etichettata «Conf/…» in Gmail (per = casella collegata a n8n): la legge l'AI e la propone
@@ -420,6 +433,10 @@ async function postaInArrivo(db: Db, b: any, oggi: string) {
   const g = daEtichetteGmail(Array.isArray(b.etichette_gmail) ? b.etichette_gmail.map(String) : [], pulisciEtichette);
   // La stessa email riletta da n8n non fa una seconda proposta.
   if (gid && (await db.from('posta_proposte').select('id').eq('gmail_id', gid).maybeSingle()).data) return { ok: true, doppia: true };
+  // Conversazione già legata a una voce o a una nota (tabella posta_fili): l'email entra da sola, senza proposta (vedi attaccaAlFilo).
+  const thread = per ? String(b.thread_id ?? '').slice(0, 200) : '', ms = Number(b.data_ms) || Date.parse(String(b.data ?? '')) || Date.now();
+  const { data: filo } = thread ? await db.from('posta_fili').select('thread, scadenza_id, nota_id, contatto, ultimo').eq('thread', thread).maybeSingle() : { data: null };
+  const contatto = per && da === per ? indirizzo(String(b.a ?? '')) : da;
   const { data: cc } = await db.from('preventivi').select('id, nome, cliente, rif, num:prev->>num').order('salvato', { ascending: false }).limit(300);
   const commesse = (cc || []) as Commessa[];
   const l = await leggiEmail({ da: String(b.da ?? ''), oggetto, testo: String(b.testo ?? ''), data: String(b.data ?? '') }, commesse, oggi);
@@ -435,10 +452,13 @@ async function postaInArrivo(db: Db, b: any, oggi: string) {
   const cartellaPosta = `posta/${crypto.randomUUID()}`;
   const scelti = allegatiDaCaricare(Array.isArray(b.allegati) ? b.allegati : [])
     .map((a, i) => ({ chiave: a.chiave, nome: a.nome.slice(0, 200), mime: a.mime || '', percorso: `${cartellaPosta}/${i + 1}_${nomeSicuro(a.nome)}` }));
+  // Oggetto nuovo ma stessa persona o stessa commessa di una voce già legata alle email: «Aggiungi a…».
+  const filoSugg = per && !att && !filo ? await suggerimenti(db, contatto, l.preventivo_id) : [];
   const dati: Proposta = { ...l, oggetto, link: linkRiunione(String(b.testo ?? '')), allegati: scelti.map(({ chiave, ...a }) => a),
     ...(att ? { attesa: { id: att.id, titolo: att.titolo }, preventivo_id: l.preventivo_id || att.preventivo_id || '' } : {}),
-    ...(g.temi.length ? { etichette: g.temi } : {}),
-    ...(per ? { gmail: { azione: g.azione, a: indirizzo(String(b.a ?? '')), da_me: da === per, thread: String(b.thread_id ?? '').slice(0, 200) } } : {}) };
+    ...(g.temi.length ? { etichette: g.temi } : {}), ...(filoSugg.length ? { filo: filoSugg } : {}),
+    ...(per ? { gmail: { azione: g.azione, a: indirizzo(String(b.a ?? '')), da_me: da === per, thread, da, ms } } : {}) };
+  if (filo) return attaccaAlFilo(db, filo as Filo, dati, scelti, String(b.testo ?? ''), { email: u.email, telegram_id: u.telegram_id }, gid, contatto, oggi);
   const { data: p, error } = await db.from('posta_proposte').insert({ email: u.email, gmail_id: gid, dati }).select('id').single();
   if (error) return error.code === '23505' ? { ok: true, doppia: true } : fail(error.message);
   const c = commesse.find(x => x.id === dati.preventivo_id);
@@ -448,13 +468,91 @@ async function postaInArrivo(db: Db, b: any, oggi: string) {
     // Un'email etichettata resta comunque in «In arrivo» nell'app.
     if (!t.ok && !per) return fail('Telegram non ha accettato la proposta' + (t.status === 403 ? ': il collega deve aprire la chat con il bot e premere Avvia.' : '.'));
   }
+  return { ok: true, id: p.id, titolo: l.titolo, caricamenti: await caricamentiPer(db, scelti) };
+}
+
+/** Link firmati per caricare gli allegati nello Storage: li usa n8n subito dopo la risposta. */
+async function caricamentiPer(db: Db, scelti: (AllegatoPosta & { chiave: string })[]) {
   const apikey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
   const caricamenti: { chiave: string; url: string; mime: string; apikey: string }[] = [];
   for (const a of scelti) {
     const { data: u } = await db.storage.from(BUCKET).createSignedUploadUrl(a.percorso);
     if (u) caricamenti.push({ chiave: a.chiave, url: u.signedUrl, mime: a.mime || 'application/octet-stream', apikey });
   }
-  return { ok: true, id: p.id, titolo: l.titolo, caricamenti };
+  return caricamenti;
+}
+
+/* ---------- Conversazioni email legate alle voci (migrazione 20261030060000_conversazioni_email.sql) ---------- */
+interface Filo { thread: string; scadenza_id: string | null; nota_id: string | null; contatto: string | null; ultimo: number }
+const lavorativiDopo = (oggi: string, n: number) => { let g = oggi; for (let i = 0; i < n; i++) g = prossimoLavorativo(g); return g; };
+
+/** Conversazioni delle voci aperte (le 15 più recenti): n8n le guarda anche se la risposta non ha l'etichetta. */
+async function filiAttivi(db: Db) {
+  const { data } = await db.from('posta_fili').select('thread, scadenze!inner(fatto)').eq('scadenze.fatto', false).order('creato', { ascending: false }).limit(15);
+  return { ok: true, fili: (data || []).map((r: any) => r.thread) };
+}
+
+/** Delle email trovate da n8n (etichettate o nelle conversazioni attive), quali leggere: vedi daLeggere in src/domain/posta.ts. */
+async function postaNuove(db: Db, b: any) {
+  const mm = (Array.isArray(b.email) ? b.email : []).map((m: any) => ({ id: String(m?.id ?? ''), thread: String(m?.thread ?? ''), data: Number(m?.data) || 0 }))
+    .filter((m: { id: string }) => m.id).slice(0, 300);
+  if (!mm.length) return { ok: true, ids: [] };
+  const ids = mm.map((m: { id: string }) => m.id), tt = [...new Set(mm.map((m: { thread: string }) => m.thread).filter(Boolean))] as string[];
+  const [{ data: pp }, { data: ff }, { data: ss }] = await Promise.all([
+    db.from('posta_proposte').select('gmail_id').in('gmail_id', ids),
+    tt.length ? db.from('posta_fili').select('thread, ultimo').in('thread', tt) : Promise.resolve({ data: [] as any[] }),
+    tt.length ? db.from('posta_proposte').select('thread:dati->gmail->>thread').is('usata', null).in('dati->gmail->>thread', tt) : Promise.resolve({ data: [] as any[] })]);
+  return { ok: true, ids: daLeggere(mm, new Set((pp || []).map((r: any) => r.gmail_id)), new Map((ff || []).map((r: any) => [r.thread, Number(r.ultimo) || 0])),
+    new Set((ss || []).map((r: any) => r.thread))) };
+}
+
+/** Voci aperte già legate alle email con la stessa persona o la stessa commessa (al massimo 3). */
+async function suggerimenti(db: Db, contatto: string, pid: string) {
+  const { data } = await db.from('posta_fili').select('contatto, scadenze!inner(id, titolo, preventivo_id, fatto)').eq('scadenze.fatto', false).limit(300);
+  return suggerisciFili((data || []).map((r: any) => ({ contatto: r.contatto, voce: r.scadenze })), contatto, pid).map(v => ({ id: v.id, titolo: v.titolo }));
+}
+
+/** Ricorda la conversazione dell'email con la voce o la nota appena creata o scelta: le prossime email entrano da sole. */
+async function legaFilo(db: Db, d: Proposta, dove: { scadenza_id: string } | { nota_id: string }) {
+  const g = d.gmail; if (!g?.thread) return;
+  await db.from('posta_fili').upsert({ thread: g.thread, scadenza_id: null, nota_id: null, ...dove, contatto: (g.da_me ? g.a : g.da) || null, ultimo: g.ms || 0 });
+}
+
+/** Email nuova di una conversazione già legata: resta nella voce come appunto breve (con il testo e gli allegati) e nello storico, o in fondo
+ *  alla nota. Se l'ho scritta io, la voce va in attesa della risposta; se risponde chi aspettavo, una sola domanda: «È la risposta? Chiudo».
+ *  Su una voce chiusa: «Riapro?». Altrimenti nessun avviso. */
+async function attaccaAlFilo(db: Db, f: Filo, d: Proposta, scelti: (AllegatoPosta & { chiave: string })[], testoEmail: string,
+  u: { email: string; telegram_id: number | null }, gid: string | null, contatto: string, oggi: string) {
+  const mio = !!d.gmail?.da_me, chi = contatto || d.mittente || 'contatto';
+  const riga = `${mio ? 'Risposta inviata a' : 'Email di'} ${chi}: ${d.riassunto || d.titolo}`;
+  const { data: v } = f.scadenza_id ? await db.from('scadenze').select(COLS + ', stato').eq('id', f.scadenza_id).maybeSingle() : { data: null };
+  const voce = v as (Voce & { stato?: string }) | null, cartella = voce?.preventivo_id ? 'cliente' : 'altro', dove = voce ? { scadenza_id: voce.id } : { nota_id: f.nota_id! };
+  if (voce) {
+    const corpo = [d.riassunto, d.link && `🎥 ${d.link}`, testoEmail.trim() && `— Testo dell'email —\n${testoEmail.trim().slice(0, 8000)}`].filter(Boolean).join('\n\n');
+    await db.from('documenti').insert({ scadenza_id: voce.id, preventivo_id: voce.preventivo_id, tipo: 'nota', cartella, etichette: pulisciEtichette(d.etichette),
+      titolo: (`✉ ${mio ? 'A' : 'Da'} ${chi}${d.oggetto ? ': ' + d.oggetto : ''}`).slice(0, 200), testo: corpo, creato_da: u.email });
+    await db.rpc('scadenze_evento', { v: voce.id, chi: u.email, cosa: 'email', da: null, a: null, testo: riga });
+  } else if (f.nota_id) {
+    const { data: n } = await db.from('documenti').select('testo').eq('id', f.nota_id).maybeSingle();
+    if (n) await db.from('documenti').update({ testo: [n.testo, `↩ ${oggi.split('-').reverse().join('/')} · ${riga}`].filter(Boolean).join('\n\n') }).eq('id', f.nota_id);
+  }
+  // Allegati: le righe si fanno subito, i file li carica n8n con i link firmati della risposta.
+  if (scelti.length) await db.from('documenti').insert(scelti.map(a => ({ ...dove, tipo: 'file', cartella: cartellaPer(a.nome, a.mime), titolo: a.nome,
+    percorso: a.percorso, mime: a.mime || null, creato_da: u.email })));
+  // Flusso della voce.
+  let domanda: Proposta['domanda'];
+  if (voce && !voce.fatto && mio && ['aperta', 'in_corso', 'in_attesa'].includes(voce.stato || 'aperta'))
+    await db.from('scadenze').update({ stato: 'in_attesa', attesa_di: chi, sollecito: lavorativiDopo(oggi, 3), da_chi: u.email }).eq('id', voce.id);
+  else if (voce && !voce.fatto && !mio && voce.stato === 'in_attesa') domanda = 'chiudi';
+  else if (voce && voce.fatto && !mio) domanda = 'riapri';
+  const dati: Proposta = { ...d, collegata: voce ? { id: voce.id, titolo: voce.titolo } : { id: f.nota_id!, titolo: 'nota' }, ...(domanda ? { domanda } : {}) };
+  const { data: p } = await db.from('posta_proposte').insert({ email: u.email, gmail_id: gid, dati, ...(domanda ? {} : { usata: new Date().toISOString() }) }).select('id').single();
+  await db.from('posta_fili').update({ ultimo: Math.max(Number(f.ultimo) || 0, d.gmail?.ms || 0) }).eq('thread', f.thread);
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (domanda && p && token && u.telegram_id)
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: u.telegram_id, ...domandaTelegram(p.id, dati, riga) }) }).catch(() => null);
+  return { ok: true, collegata: dati.collegata!.id, domanda: domanda || '', caricamenti: await caricamentiPer(db, scelti) };
 }
 
 /** Messaggio di avviso di una riunione che sta per iniziare, con il pulsante per entrare se c'e' il link. */
@@ -539,6 +637,7 @@ export async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
       titolo: ('Risposta: ' + d.titolo).slice(0, 200), testo: nota, etichette, creato_da: io.email }).select('id').single();
     if (error) return fail(error.message);
     const na = await legaAllegati(db, d, { nota_id: n.id }, cartella, io);
+    await legaFilo(db, d, { scadenza_id: v.id });
     testo = `✅ Risposta registrata: «${v.titolo.replace(ATTESA, '')}» segnata fatta, email salvata come appunto della voce${conAllegati(na)}`;
   }
   else if (scelta === 'x') {
@@ -553,6 +652,7 @@ export async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
       titolo: d.titolo, testo: nota, etichette, creato_da: io.email }).select('id').single();
     if (error) return fail(error.message);
     const na = await legaAllegati(db, d, { nota_id: n.id }, cartella, io);
+    await legaFilo(db, d, { nota_id: n.id });
     const { data: c } = d.preventivo_id ? await db.from('preventivi').select('nome').eq('id', d.preventivo_id).maybeSingle() : { data: null };
     testo = `📝 Appunto salvato${c ? ' in Documenti di ' + c.nome : ' tra le note (libero)'}: ${d.titolo}${temiTesto(etichette)}${conAllegati(na)}`;
   } else if (scelta === 'f' || scelta === 't') {
@@ -568,6 +668,7 @@ export async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
     if (error && /stato|attesa_di|sollecito|reparti/.test(error.message)) ({ data: v, error } = await db.from('scadenze').insert({ ...base, reparti: undefined }).select(COLS).single());
     if (error) return fail(error.message);
     const na = await legaAllegati(db, d, { scadenza_id: (v as Voce).id }, null, io);
+    await legaFilo(db, d, { scadenza_id: (v as Voce).id });
     testo = `${scelta === 't' ? `⏳ In attesa di ${chiAtt}, sollecito ${giornoIt(giorno)}` : 'Aggiunto'}: ${riga(v as Voce, await contesto(db))}${conAllegati(na)}`;
   } else if (scelta === 'p' || scelta === 'r') {
     if (scelta === 'r' && !d.giorno) return fail("Nell'email non c'è la data della riunione: scegli promemoria e correggila nell'app.");
@@ -575,7 +676,35 @@ export async function sceltaPosta(db: Db, b: any, io: Me, oggi: string) {
       ora: d.ora || null, titolo: d.titolo, nota, preventivo_id: d.preventivo_id || null, assegnata_a: assegnata, creato_da: io.email, origine }).select(COLS).single();
     if (error) return fail(error.message);
     const na = await legaAllegati(db, d, { scadenza_id: (v as Voce).id }, null, io);
+    await legaFilo(db, d, { scadenza_id: (v as Voce).id });
     testo = `Aggiunto: ${riga(v as Voce, await contesto(db))}${conAllegati(na)}`;
+  } else if (scelta[0] === 'l') {
+    // Email con un oggetto nuovo che fa parte di una voce già aperta: appunto della voce, e la sua conversazione si lega a quella voce.
+    const vid = String(m.voce_id || d.filo?.[Number(scelta.slice(1)) || 0]?.id || '');
+    const { data: v } = vid ? await db.from('scadenze').select(COLS).eq('id', vid).maybeSingle() : { data: null };
+    if (!v) return fail("Voce non trovata: scegline un'altra.");
+    const cartella = v.preventivo_id ? 'cliente' : 'altro';
+    const { error } = await db.from('documenti').insert({ scadenza_id: v.id, preventivo_id: v.preventivo_id, tipo: 'nota', cartella, etichette: pulisciEtichette(d.etichette),
+      titolo: ('✉ ' + d.titolo).slice(0, 200), testo: nota, creato_da: io.email });
+    if (error) return fail(error.message);
+    const na = await legaAllegati(db, d, { scadenza_id: v.id }, cartella, io);
+    await legaFilo(db, d, { scadenza_id: v.id });
+    await db.rpc('scadenze_evento', { v: v.id, chi: io.email, cosa: 'email', da: null, a: null, testo: `Email collegata: ${d.riassunto || d.titolo}` });
+    testo = `🔗 Aggiunta a «${v.titolo.replace(ATTESA, '')}»: le prossime email di questa conversazione entrano da sole${conAllegati(na)}`;
+  } else if (scelta === 'c' || scelta === 'o' || scelta === 'k') {
+    // Domanda su un'email entrata da sola: chiudere la voce in attesa con l'esito, riaprire la voce chiusa, o lasciare così.
+    const id = d.collegata?.id || '', esito = d.riassunto || d.titolo;
+    if (scelta === 'c') {
+      let { error } = await db.from('scadenze').update({ fatto: true, esito, da_chi: io.email }).eq('id', id);
+      if (error && /esito|da_chi/.test(error.message)) ({ error } = await db.from('scadenze').update({ fatto: true }).eq('id', id));
+      if (error) return fail(error.message);
+      testo = `✅ Chiusa «${(d.collegata?.titolo || '').replace(ATTESA, '')}»: ${esito}`;
+    } else if (scelta === 'o') {
+      let { error } = await db.from('scadenze').update({ stato: 'in_corso', motivo: 'Nuova email: ' + esito, da_chi: io.email }).eq('id', id);
+      if (error && /stato|motivo|da_chi/.test(error.message)) ({ error } = await db.from('scadenze').update({ fatto: false }).eq('id', id));
+      if (error) return fail(error.message);
+      testo = `↩ Riaperta «${(d.collegata?.titolo || '').replace(ATTESA, '')}»`;
+    } else testo = 'Ok, resta così.';
   } else return fail('Scelta sconosciuta.');
   await db.from('posta_proposte').update({ usata: new Date().toISOString() }).eq('id', p.id);
   return { ok: true, testo };
@@ -612,6 +741,8 @@ export async function esegui(db: Db, b: any, adesso = new Date(), origine = ''):
   }
 
   if (az === 'posta') return postaInArrivo(db, b, oggi);
+  if (az === 'fili') return filiAttivi(db);
+  if (az === 'posta_nuove') return postaNuove(db, b);
   if (az === 'avvisi_riunioni') return avvisiRiunioni(db, oggi, oraRoma(adesso));
 
   // --- Abbinamento dell'account ---

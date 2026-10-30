@@ -431,7 +431,16 @@ Per portare un'email nell'app basta mettere un'etichetta in Gmail, anche dal tel
 
 Dati: nessuna migrazione (le proposte stanno in `posta_proposte`, campo `dati`). Server: azione `posta` con `per` (casella) ed `etichette_gmail`; `api/email.ts` azioni `in_arrivo` e `in_arrivo_scelta` per l'app.
 
-**Prossimi passi**: email successive della stessa conversazione legate da sole alla stessa voce o nota; caselle dei colleghi.
+**Conversazioni (botta e risposta)** — migrazione `20261030060000_conversazioni_email.sql`, tabella `posta_fili`: la conversazione di Gmail di un'email sistemata (cosa da fare, attesa, appuntamento, nota, «È la risposta», «Aggiungi a…») si lega a quella voce o nota. Le email successive della stessa conversazione **entrano da sole**, senza etichetta e senza proposta: appunto breve della voce («✉ Da/A chi: oggetto», riassunto, testo e allegati ripiegati) e riga «Email» nello storico; per una nota, una riga in fondo al testo.
+- Email mia nella conversazione → la voce va *In attesa* dell'altra parte, sollecito tra 3 giorni lavorativi.
+- Risposta dell'altra parte a una voce *In attesa* → **una sola domanda** (In arrivo e Telegram): «È la risposta? Sì, chiudi con questo esito / No, resta in attesa».
+- Email su una voce chiusa → «Riapri la voce / Va bene così». Negli altri casi nessun avviso.
+
+**Oggetto nuovo** (nuova conversazione che fa parte di un flusso già aperto): l'app propone «Sembra parte di: … → Aggiungi a…» se la persona dall'altra parte o la commessa (codice `[TN-…]` o lettura dell'AI) corrispondono a una voce aperta già legata alle email; altrimenti «Collega a…» per scegliere a mano una voce aperta. Da lì anche quella conversazione è legata alla voce (una voce può averne più d'una).
+
+**n8n** (flusso «Agenda - Etichette Gmail», ogni minuto): email etichettate non ancora passate + email delle conversazioni legate alle voci aperte (le 15 più recenti, lette per conversazione); l'app dice quali leggere (azione `posta_nuove`: di una conversazione nuova solo l'ultima, di una legata tutte le nuove), una al minuto; poi `Conf/In app` su tutta la conversazione.
+
+**Prossimi passi**: caselle dei colleghi.
 
 ## 10. Decisioni sui punti aperti
 

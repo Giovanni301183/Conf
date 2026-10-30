@@ -332,48 +332,86 @@ email = [
 email_conn = {'Email in arrivo': {'main': [to('Impostazioni email')]}, 'Impostazioni email': {'main': [to('Email → app')]},
               'Email → app': {'main': [to('Allegati da caricare')]}, 'Allegati da caricare': {'main': [to('Carica allegato')]}}
 
-# ---------- Flusso 4: email etichettate in Gmail ----------
-# Ogni minuto: le etichette «Conf/…» della casella, la prima email che ne ha una e non ha ancora «Conf/In app» (né «Conf/Non entrata»),
-# all'app con le sue etichette (azione posta con per = la casella: l'email è di chi l'ha etichettata anche se il mittente è esterno).
-# Poi n8n le mette «Conf/In app» (o «Conf/Non entrata» se l'app non l'ha presa): così non si rilegge e in Gmail si vede.
-# Va anche per le email vecchie etichettate adesso (il trigger di Gmail guarda solo le nuove). Una email al minuto, per gli allegati.
+# ---------- Flusso 4: email etichettate in Gmail e conversazioni legate alle voci ----------
+# Ogni minuto: le email con un'etichetta «Conf/…» non ancora passate (anche vecchie) e quelle delle conversazioni già legate a una voce aperta
+# (anche senza etichetta). L'app dice quali leggere (azione posta_nuove: di una conversazione nuova solo l'ultima email, di una legata tutte
+# quelle nuove); n8n ne prende una al minuto e la manda all'app (azione posta con per = la casella: l'email è di chi l'ha etichettata anche se
+# il mittente è esterno). L'app la propone in «In arrivo», oppure, se la conversazione è già legata, la aggiunge da sola alla voce.
+# Poi n8n mette «Conf/In app» (o «Conf/Non entrata» se l'app non l'ha presa) a tutta la conversazione: le sue email non tornano nella ricerca,
+# e le risposte che arrivano dopo le prende la lettura delle conversazioni legate.
 CASELLA = 'g.sorrentino@terranovasrl.net'
-ET = "$('Email etichettata').item.json"
-CODICE_RICERCA = r"""// Ricerca Gmail delle email con un'etichetta «Conf/…» non ancora passate all'app, e nomi delle etichette per l'app.
+ET = "$('Email etichettata').first().json"
+IMP = "$('Impostazioni etichette').first().json"
+CODICE_RICERCA = r"""// Ricerca Gmail delle email con un'etichetta «Conf/…» non ancora passate all'app (anche vecchie), e nomi delle etichette per l'app.
 const ll = $input.all().map(i => i.json);
 const conf = ll.filter(l => /^conf\//i.test(l.name || ''));
 const fatta = conf.find(l => /in app/i.test(l.name)), errore = conf.find(l => /non entrata/i.test(l.name));
 const lab = n => 'label:' + n.toLowerCase().replace(/[\s\/]+/g, '-');
-const nostre = conf.filter(l => l !== fatta && l !== errore);
-if (!fatta || !nostre.length) return [];
-return [{ json: { q: '{' + nostre.map(l => lab(l.name)).join(' ') + '} -' + lab(fatta.name) + (errore ? ' -' + lab(errore.name) : ''),
+const cerca = conf.filter(l => l !== fatta && l !== errore);
+if (!fatta || !cerca.length) return [];
+return [{ json: { q: '{' + cerca.map(l => lab(l.name)).join(' ') + '} -' + lab(fatta.name) + (errore ? ' -' + lab(errore.name) : ''),
   nomi: Object.fromEntries(conf.map(l => [l.id, l.name])), fatta: fatta.id, errore: (errore || fatta).id } }];"""
+CODICE_FILI = r"""// Una riga per ogni conversazione legata a una voce aperta (le dà l'app); nessuna = si passa oltre.
+const ff = $('Fili attivi').first().json.fili || [];
+return ff.length ? ff.map(t => ({ json: { thread: t } })) : [{ json: { nessuno: true } }];"""
+CODICE_RACCOGLI = r"""// Tutte le email trovate (etichettate e delle conversazioni legate), con conversazione e data, per chiedere all'app quali leggere.
+const ms = m => Number(m.internalDate) || Date.parse(m.date || (m.headers && m.headers.date) || (((m.payload && m.payload.headers) || []).find(h => /^date$/i.test(h.name)) || {}).value || '') || 0;
+const piatti = xs => xs.flatMap(x => Array.isArray(x.messages) ? x.messages : [x]);
+let tutti = $('Email con etichetta').all().map(i => i.json);
+try { tutti = tutti.concat(piatti($('Messaggi dei fili').all().map(i => i.json))); } catch (e) {}
+return [{ json: { email: tutti.filter(m => m && m.id).map(m => ({ id: m.id, thread: m.threadId || '', data: ms(m) })) } }];"""
+CODICE_PRIMA = r"""// Una email al minuto, la più vecchia da leggere (così gli allegati vanno con la loro email).
+const ids = $input.first().json.ids || [];
+return ids.length ? [{ json: { id: ids[0] } }] : [];"""
 CODICE_ALLEGATI_ET = CODICE_ALLEGATI.replace("$('Email in arrivo')", "$('Email etichettata')")
+ALLEGATI_ET = ALLEGATI.replace("$('Email in arrivo').item", "$('Email etichettata').first()")
+URL_ET = "={{ " + IMP + ".url }}"
+
+
+def gmail(name, pos, params, **extra):
+    n = node(name, 'n8n-nodes-base.gmail', 2.1, pos, params, GMAIL); n.update(extra); return n
+
+
 etichette = [
     node('Ogni minuto', 'n8n-nodes-base.scheduleTrigger', 1.2, [0, 200], {'rule': {'interval': [{'field': 'minutes', 'minutesInterval': 1}]}}),
-    node('Etichette Gmail', 'n8n-nodes-base.gmail', 2.1, [220, 200], {'resource': 'label', 'returnAll': True}, GMAIL),
-    node('Ricerca etichette', 'n8n-nodes-base.code', 2, [440, 200], {'jsCode': CODICE_RICERCA}),
-    node('Email etichettata', 'n8n-nodes-base.gmail', 2.1, [660, 200], {'operation': 'getAll', 'limit': 1, 'simple': False,
-         'filters': {'q': '={{ $json.q }}'}, 'options': {'downloadAttachments': True, 'dataPropertyAttachmentsPrefixName': 'attachment_'}}, GMAIL),
-    node('Impostazioni etichette', 'n8n-nodes-base.set', 3.4, [880, 200], {'assignments': {'assignments': [
+    node('Impostazioni etichette', 'n8n-nodes-base.set', 3.4, [200, 200], {'assignments': {'assignments': [
         {'id': U(), 'name': 'url', 'type': 'string', 'value': API}, {'id': U(), 'name': 'casella', 'type': 'string', 'value': CASELLA}]},
         'includeOtherFields': True, 'options': {}}),
-    http('Etichettata → app', [1100, 200], "{ azione: 'posta', per: $('Impostazioni etichette').item.json.casella, gmail_id: " + ET + ".id, thread_id: " + ET + ".threadId || '', da: "
+    gmail('Etichette Gmail', [400, 200], {'resource': 'label', 'returnAll': True}),
+    node('Ricerca etichette', 'n8n-nodes-base.code', 2, [600, 200], {'jsCode': CODICE_RICERCA}),
+    http('Fili attivi', [800, 200], "{ azione: 'fili' }", url=URL_ET),
+    gmail('Email con etichetta', [1000, 200], {'operation': 'getAll', 'limit': 30, 'filters': {'q': "={{ $('Ricerca etichette').first().json.q }}"}},
+          alwaysOutputData=True),
+    node('Fili da guardare', 'n8n-nodes-base.code', 2, [1200, 200], {'jsCode': CODICE_FILI}),
+    node('Ci sono fili?', 'n8n-nodes-base.if', 2.2, [1400, 200], cond('!$json.nessuno')),
+    gmail('Messaggi dei fili', [1600, 100], {'resource': 'thread', 'operation': 'get', 'threadId': '={{ $json.thread }}', 'options': {}},
+          onError='continueRegularOutput'),
+    node('Raccogli', 'n8n-nodes-base.code', 2, [1800, 200], {'jsCode': CODICE_RACCOGLI}),
+    http('Quali leggere', [2000, 200], "{ azione: 'posta_nuove', email: $json.email }", url=URL_ET),
+    node('Prima da leggere', 'n8n-nodes-base.code', 2, [2200, 200], {'jsCode': CODICE_PRIMA}),
+    gmail('Email etichettata', [2400, 200], {'operation': 'get', 'messageId': '={{ $json.id }}', 'simple': False,
+          'options': {'downloadAttachments': True, 'dataPropertyAttachmentsPrefixName': 'attachment_'}}),
+    http('Etichettata → app', [2600, 200], "{ azione: 'posta', per: " + IMP + ".casella, gmail_id: " + ET + ".id, thread_id: " + ET + ".threadId || '', da: "
          + ET + ".from?.value?.[0]?.address || " + ET + ".from?.text || '', a: " + ET + ".to?.value?.[0]?.address || '', oggetto: " + ET + ".subject || '', testo: "
-         + ET + ".text || '', data: " + ET + ".date || '', etichette_gmail: (" + ET + ".labelIds || []).map(id => $('Ricerca etichette').item.json.nomi[id]).filter(Boolean), allegati: "
-         + ALLEGATI.replace("$('Email in arrivo')", "$('Email etichettata')") + " }", url="={{ $('Impostazioni etichette').item.json.url }}"),
-    node('Segna in Gmail', 'n8n-nodes-base.gmail', 2.1, [1320, 100], {'operation': 'addLabels', 'messageId': "={{ " + ET + ".id }}",
-         'labelIds': "={{ $json.ok ? $('Ricerca etichette').item.json.fatta : $('Ricerca etichette').item.json.errore }}"}, GMAIL),
-    node('Allegati etichettata', 'n8n-nodes-base.code', 2, [1320, 300], {'jsCode': CODICE_ALLEGATI_ET}),
-    node('Carica allegato etichettata', 'n8n-nodes-base.httpRequest', 4.2, [1540, 300], {'method': 'PUT', 'url': '={{ $json.url }}', 'sendHeaders': True,
+         + ET + ".text || '', data: " + ET + ".date || '', data_ms: Number(" + ET + ".internalDate) || 0, etichette_gmail: (" + ET
+         + ".labelIds || []).map(id => $('Ricerca etichette').first().json.nomi[id]).filter(Boolean), allegati: " + ALLEGATI_ET + " }", url=URL_ET),
+    gmail('Segna in Gmail', [2800, 100], {'resource': 'thread', 'operation': 'addLabels', 'threadId': "={{ " + ET + ".threadId }}",
+          'labelIds': "={{ $json.ok ? $('Ricerca etichette').first().json.fatta : $('Ricerca etichette').first().json.errore }}"}),
+    node('Allegati etichettata', 'n8n-nodes-base.code', 2, [2800, 300], {'jsCode': CODICE_ALLEGATI_ET}),
+    node('Carica allegato etichettata', 'n8n-nodes-base.httpRequest', 4.2, [3000, 300], {'method': 'PUT', 'url': '={{ $json.url }}', 'sendHeaders': True,
          'headerParameters': {'parameters': [{'name': 'content-type', 'value': '={{ $json.mime }}'}, {'name': 'apikey', 'value': '={{ $json.apikey }}'},
                                              {'name': 'x-upsert', 'value': 'false'}]},
          'sendBody': True, 'contentType': 'binaryData', 'inputDataFieldName': 'data', 'options': {}}),
 ]
-etichette_conn = {'Ogni minuto': {'main': [to('Etichette Gmail')]}, 'Etichette Gmail': {'main': [to('Ricerca etichette')]},
-                  'Ricerca etichette': {'main': [to('Email etichettata')]}, 'Email etichettata': {'main': [to('Impostazioni etichette')]},
-                  'Impostazioni etichette': {'main': [to('Etichettata → app')]}, 'Etichettata → app': {'main': [to('Segna in Gmail', 'Allegati etichettata')]},
+etichette_conn = {'Ogni minuto': {'main': [to('Impostazioni etichette')]}, 'Impostazioni etichette': {'main': [to('Etichette Gmail')]},
+                  'Etichette Gmail': {'main': [to('Ricerca etichette')]}, 'Ricerca etichette': {'main': [to('Fili attivi')]},
+                  'Fili attivi': {'main': [to('Email con etichetta')]}, 'Email con etichetta': {'main': [to('Fili da guardare')]},
+                  'Fili da guardare': {'main': [to('Ci sono fili?')]}, 'Ci sono fili?': {'main': [to('Messaggi dei fili'), to('Raccogli')]},
+                  'Messaggi dei fili': {'main': [to('Raccogli')]}, 'Raccogli': {'main': [to('Quali leggere')]},
+                  'Quali leggere': {'main': [to('Prima da leggere')]}, 'Prima da leggere': {'main': [to('Email etichettata')]},
+                  'Email etichettata': {'main': [to('Etichettata → app')]}, 'Etichettata → app': {'main': [to('Segna in Gmail', 'Allegati etichettata')]},
                   'Allegati etichettata': {'main': [to('Carica allegato etichettata')]}}
+
 
 SETTINGS = {'executionOrder': 'v1', 'timezone': 'Europe/Rome'}
 # Copia pronta da importare con il codice di bypass di .env.local (VERCEL_BYPASS): va in n8n/da-importare/, esclusa da GitHub.
