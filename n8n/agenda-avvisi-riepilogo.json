@@ -8,7 +8,7 @@
     "authentication": "headerAuth",
     "options": {}
    },
-   "id": "260a8408-de89-47a8-9b51-72f4b221700d",
+   "id": "94afd53f-3b3b-487d-93ec-9dcf78f5cc11",
    "name": "Voce nuova (Supabase)",
    "type": "n8n-nodes-base.webhook",
    "typeVersion": 2,
@@ -33,7 +33,7 @@
      },
      "conditions": [
       {
-       "id": "f7ff70f9-a8eb-4855-b7ae-3727d5215996",
+       "id": "47920ba4-f0e0-4698-8c38-12c15a5f55f8",
        "leftValue": "={{ $json.body.type === 'INSERT' && !!$json.body.record?.id }}",
        "rightValue": "",
        "operator": {
@@ -47,7 +47,7 @@
     },
     "options": {}
    },
-   "id": "80502e58-8259-417a-9b8e-37a89fea9448",
+   "id": "1e529916-c679-4a74-9f7d-62db09ab3c55",
    "name": "È un inserimento?",
    "type": "n8n-nodes-base.if",
    "typeVersion": 2.2,
@@ -61,13 +61,13 @@
     "assignments": {
      "assignments": [
       {
-       "id": "74353c68-34d8-41e6-a0ea-f32d354d94df",
+       "id": "647f7363-2f06-4c45-8b50-c9e433f93ebe",
        "name": "url",
        "type": "string",
        "value": "https://conf-five.vercel.app/api/agenda"
       },
       {
-       "id": "ac36cf54-5930-4cb0-9ac0-f8e54b46ac23",
+       "id": "1486f851-78e1-4461-9427-b84e8690fd1d",
        "name": "gruppo",
        "type": "string",
        "value": "INSERISCI_ID_GRUPPO"
@@ -77,7 +77,7 @@
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "6244fca6-36e0-4b5c-b5d2-cb2eb615ddfb",
+   "id": "4664c10a-5653-4325-8955-f71f92ae3d68",
    "name": "Impostazioni",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -97,7 +97,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'annuncio', id: $('Voce nuova (Supabase)').item.json.body.record.id }) }}",
     "options": {}
    },
-   "id": "76b1b255-04dc-4d93-91c8-93df8c89c79b",
+   "id": "be02f69b-0cd5-4523-bce0-64561e3242dc",
    "name": "Annuncio → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -122,7 +122,7 @@
      },
      "conditions": [
       {
-       "id": "7c825f01-6f40-429b-8823-933c6df8c9da",
+       "id": "b1d8ccc0-a927-43f5-b8e0-731dff12f592",
        "leftValue": "={{ $json.ok && $json.invia }}",
        "rightValue": "",
        "operator": {
@@ -136,7 +136,7 @@
     },
     "options": {}
    },
-   "id": "e1b6ef02-8b32-4a98-8c23-1e0311fb8b44",
+   "id": "0f7c2f38-474f-4c8f-9c16-8313f762d333",
    "name": "Da annunciare?",
    "type": "n8n-nodes-base.if",
    "typeVersion": 2.2,
@@ -176,7 +176,7 @@
      "appendAttribution": false
     }
    },
-   "id": "d5f7c4f4-2a9f-4f94-8fc8-f6c8375d0414",
+   "id": "17b81d79-e224-4dbe-8d8e-55620ba890c1",
    "name": "Annuncia nel gruppo",
    "type": "n8n-nodes-base.telegram",
    "typeVersion": 1.2,
@@ -202,7 +202,7 @@
      ]
     }
    },
-   "id": "242a95c1-bd5c-4cde-a24f-4f7e718d9422",
+   "id": "aa91eafb-4d6e-4386-b300-ef24215f3288",
    "name": "Ogni mattina lun-ven 8:00",
    "type": "n8n-nodes-base.scheduleTrigger",
    "typeVersion": 1.2,
@@ -216,13 +216,13 @@
     "assignments": {
      "assignments": [
       {
-       "id": "8c819807-3120-4a1e-b8a6-e92bda4edc26",
+       "id": "ef4d53c0-e88f-4b46-80be-cf2c89089ee8",
        "name": "url",
        "type": "string",
        "value": "https://conf-five.vercel.app/api/agenda"
       },
       {
-       "id": "64d584b7-5173-4044-8337-88cd2c34570f",
+       "id": "c3d34585-7d43-4aed-90dd-1e8dbb392b05",
        "name": "gruppo",
        "type": "string",
        "value": "INSERISCI_ID_GRUPPO"
@@ -232,7 +232,7 @@
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "b2de8916-6a84-4ef4-93b9-88fb203c15d2",
+   "id": "449c9c36-6921-459e-af42-73199eba5495",
    "name": "Impostazioni riepilogo",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -252,7 +252,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'riepilogo' }) }}",
     "options": {}
    },
-   "id": "cc95711a-c839-4357-b619-641b08a3df60",
+   "id": "2f0eb34d-88c4-427b-8f9e-ea5bdf12db85",
    "name": "Riepilogo → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -275,7 +275,7 @@
      "appendAttribution": false
     }
    },
-   "id": "4b01d8a1-67c6-46b3-8c76-955f94058ae2",
+   "id": "682689b6-454e-4a50-967b-558184e7c18f",
    "name": "Riepilogo nel gruppo",
    "type": "n8n-nodes-base.telegram",
    "typeVersion": 1.2,
@@ -301,7 +301,7 @@
      ]
     }
    },
-   "id": "519747ee-d788-4de0-94f0-8e2584ca47bc",
+   "id": "b7f3d91b-d87f-473f-928c-1f99606f35f3",
    "name": "Ogni 10 minuti",
    "type": "n8n-nodes-base.scheduleTrigger",
    "typeVersion": 1.2,
@@ -315,7 +315,7 @@
     "assignments": {
      "assignments": [
       {
-       "id": "9ccca3e2-ba82-49f1-b1dd-3551a43d960c",
+       "id": "b936d775-559d-477c-b7b8-e6f5ed207458",
        "name": "url",
        "type": "string",
        "value": "https://conf-five.vercel.app/api/agenda"
@@ -325,7 +325,7 @@
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "a212b58b-784e-4c3a-9d81-6cf61960aea3",
+   "id": "17729aef-eeb0-473d-892a-8a9c5684a43d",
    "name": "Impostazioni riunioni",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -345,7 +345,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'avvisi_riunioni' }) }}",
     "options": {}
    },
-   "id": "65794979-0425-4a58-b1ba-bfbc90bce71f",
+   "id": "53d35f56-0bb0-4105-8ebf-9df57eafc957",
    "name": "Riunioni → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,

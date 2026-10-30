@@ -19,7 +19,7 @@
      "dataPropertyAttachmentsPrefixName": "attachment_"
     }
    },
-   "id": "7859d5e4-dd37-4980-bb75-7cc17438220d",
+   "id": "01b5b536-0079-4103-bb5d-3879706893c0",
    "name": "Email in arrivo",
    "type": "n8n-nodes-base.gmailTrigger",
    "typeVersion": 1.2,
@@ -39,7 +39,7 @@
     "assignments": {
      "assignments": [
       {
-       "id": "449358db-a2f9-40fb-86f3-62735460fe12",
+       "id": "50518bb2-fedc-41f1-a332-75313cda40f6",
        "name": "url",
        "type": "string",
        "value": "https://conf-five.vercel.app/api/agenda"
@@ -49,7 +49,7 @@
     "includeOtherFields": true,
     "options": {}
    },
-   "id": "22770160-0a00-40ae-80fe-09262894a8ac",
+   "id": "c6a9dc55-06f3-443b-b76d-19223f8be26c",
    "name": "Impostazioni email",
    "type": "n8n-nodes-base.set",
    "typeVersion": 3.4,
@@ -69,7 +69,7 @@
     "jsonBody": "={{ JSON.stringify({ azione: 'posta', gmail_id: $('Email in arrivo').item.json.id, da: $('Email in arrivo').item.json.from?.value?.[0]?.address || $('Email in arrivo').item.json.from?.text || '', oggetto: $('Email in arrivo').item.json.subject || '', testo: $('Email in arrivo').item.json.text || '', data: $('Email in arrivo').item.json.date || '', allegati: Object.entries($('Email in arrivo').item.binary || {}).map(([k, f]) => ({ chiave: k, nome: f.fileName || k, mime: f.mimeType || '', peso: f.fileSize || '' })) }) }}",
     "options": {}
    },
-   "id": "2f972541-da64-4594-9b30-ec872229eecf",
+   "id": "16710c0b-9a6d-44ab-a98a-f86daa3c1c3a",
    "name": "Email → app",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
@@ -88,7 +88,7 @@
    "parameters": {
     "jsCode": "// Un elemento per ogni allegato da caricare, con il suo file preso dall'email.\nconst file = $('Email in arrivo').first().binary || {};\nconst r = $input.first().json;\nreturn (r.ok && r.caricamenti ? r.caricamenti : []).filter(c => file[c.chiave]).map(c => ({ json: c, binary: { data: file[c.chiave] } }));"
    },
-   "id": "f6ed32ae-931b-44ef-b8a1-08650a77cc73",
+   "id": "9f4daf7f-10ae-4ed3-98ad-acbdbda929db",
    "name": "Allegati da caricare",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
@@ -123,7 +123,7 @@
     "inputDataFieldName": "data",
     "options": {}
    },
-   "id": "164fdefd-8a91-4f7f-8078-cc44a364e6a5",
+   "id": "4ccbf39f-bf69-4423-8aee-c56194d2c2cd",
    "name": "Carica allegato",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,

@@ -517,3 +517,31 @@ if SEGRETO and BYPASS:
     with open(os.path.join(ROOT, 'n8n', 'da-importare', 'incolla-etichette-amministrazione.json'), 'w', encoding='utf-8') as f:
         f.write(json.dumps(pezzo, ensure_ascii=False, indent=1))
     print('Scritto n8n/da-importare/incolla-etichette-amministrazione.json (etichette Gmail della casella amministrazione da incollare nel flusso)')
+
+# ---------- Crea le etichette «CONF/…» nella casella dell'amministrazione (una volta sola) ----------
+# Si incolla nel flusso, si apre «Crea etichette (amm.)» e si preme «Execute step» sul primo nodo: usa la credenziale «Gmail Amministrazione».
+# Prima la madre CONF, poi le altre, una dopo l'altra; quelle che esistono già danno errore e si passa alla successiva.
+ETICHETTE_GMAIL = ['CONF', 'CONF/In app', 'CONF/Non entrata', 'CONF/Da fare', 'CONF/Attesa risposta', 'CONF/Riunione', 'CONF/Commerciale',
+                   'CONF/Vendita', 'CONF/Opportunità', 'CONF/Marketing e fiere', 'CONF/Acquisti', 'CONF/Amministrazione', 'CONF/Produzione',
+                   'CONF/Logistica', 'CONF/Cantiere e montaggio', 'CONF/Qualità e reclami', 'CONF/Sicurezza', 'CONF/Assistenza e post-vendita',
+                   'CONF/Tecnico e progetto', 'CONF/Geologia e terreni', 'CONF/Prove di pull-out', 'CONF/Normativa e schede tecniche',
+                   'CONF/Sviluppo prodotto', 'CONF/Idea', 'CONF/Direzione', 'CONF/Personale']
+crea = [
+    node('Crea etichette (amm.)', 'n8n-nodes-base.manualTrigger', 1, [0, 3400], {}),
+    node('Elenco etichette (amm.)', 'n8n-nodes-base.code', 2, [200, 3400],
+         {'jsCode': '// Le etichette da creare, nell\'ordine (prima la madre CONF).\nreturn ' + json.dumps(ETICHETTE_GMAIL, ensure_ascii=False) + '.map(nome => ({ json: { nome } }));'}),
+    {**node('Nuova etichetta (amm.)', 'n8n-nodes-base.gmail', 2.1, [400, 3400], {'resource': 'label', 'operation': 'create', 'name': '={{ $json.nome }}', 'options': {}},
+            {'gmailOAuth2': {'id': '', 'name': 'Gmail Amministrazione'}}), 'onError': 'continueRegularOutput'},
+]
+crea_conn = {'Crea etichette (amm.)': {'main': [to('Elenco etichette (amm.)')]}, 'Elenco etichette (amm.)': {'main': [to('Nuova etichetta (amm.)')]}}
+os.makedirs(os.path.join(ROOT, 'n8n', 'da-importare'), exist_ok=True)
+with open(os.path.join(ROOT, 'n8n', 'da-importare', 'incolla-crea-etichette-amministrazione.json'), 'w', encoding='utf-8') as f:
+    f.write(json.dumps({'nodes': crea, 'connections': crea_conn}, ensure_ascii=False, indent=1))
+print('Scritto n8n/da-importare/incolla-crea-etichette-amministrazione.json (crea le etichette CONF/… nella casella amministrazione)')
+# Anche dentro il flusso completo (in fondo, sotto le etichette dell'amministrazione).
+fc = os.path.join(ROOT, 'n8n', 'da-importare', 'agenda-completo.json')
+if os.path.exists(fc) and SEGRETO and BYPASS:
+    with open(fc, encoding='utf-8') as f: d = json.load(f)
+    d['nodes'] += crea; d['connections'].update(crea_conn)
+    with open(fc, 'w', encoding='utf-8') as f: f.write(json.dumps(d, ensure_ascii=False, indent=1))
+    print('Aggiunte a agenda-completo.json le etichette da creare (amm.)')
