@@ -360,6 +360,7 @@ La Home è fatta di barre che si aprono e chiudono cliccando l'intestazione: **C
 | 4 | — | Allarmi, Appuntamenti, Note |
 
 **Mappa dei reparti**
+- **Vista sul computer**: nell'intestazione «Reparti» il selettore **Mappa | Riquadri**. «Mappa» = i cerchi descritti qui sotto; «Riquadri» = la stessa vista del telefono (riquadri su più colonne, settori come pulsanti sotto la riga del reparto scelto, scheda da compilare sotto i pulsanti). La scelta resta ricordata in quel browser; sul telefono il selettore non c'è e la vista è sempre a riquadri.
 - «Terranova» al centro e intorno i 12 reparti (Direzione, Commerciale, Tecnico, R&S, Acquisti, Produzione, Qualità e sicurezza, Logistica, Cantiere, Assistenza, Amministrazione, Risorse umane), più «Da smistare». Sul telefono (fino a 640 px) la mappa diventa una griglia di riquadri.
 - Ogni reparto lampeggia come gli Allarmi: rosso con urgenze o voci scadute, arancio con scadenze nei prossimi giorni; il numero conta le voci da guardare, il pallino blu le note nuove. Intorno al cerchio le iniziali delle persone del reparto. Il «+» aggiunge una voce d'agenda o una nota già nel reparto.
 - **Clic su un reparto**: allarmi, appuntamenti, note e colonna del giorno mostrano solo le sue cose; le barre Allarmi, Appuntamenti e Note si aprono da sole. La pagina resta sulla mappa, perché lì compaiono i settori. Secondo clic sullo stesso reparto (o «Tutti i reparti», o «Terranova») = tutti.

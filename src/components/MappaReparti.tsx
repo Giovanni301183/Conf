@@ -37,7 +37,8 @@ function useStretto() {
 export function MappaReparti({ vv, onNuovo, scheda }: { vv: Voce[]; onNuovo?: (k: string) => void; scheda?: (k: string, st: string, chiudi: () => void) => ReactNode }) {
   const [aperta, setAperta] = useState(false), stretto = useStretto();
   const [visto, setVisto] = useState<Record<string, string>>(() => leggi(KEY_VISTO) || {});
-  const [pref, setPref] = useState<{ miei?: boolean; persone?: Pers }>(() => leggi(KEY_MAPPA) || {});
+  // vista: sul computer si sceglie tra la mappa a cerchi e i riquadri del telefono (ricordata in questo browser); sul telefono sempre riquadri.
+  const [pref, setPref] = useState<{ miei?: boolean; persone?: Pers; vista?: 'mappa' | 'riquadri' }>(() => leggi(KEY_MAPPA) || {});
   const quali = pref.persone || 'reparto';
   const salvaPref = (p: typeof pref) => { setPref(p); scrivi(KEY_MAPPA, p); };
   const me = mioEmail(), miei = cloud.me?.reparti || [], oggi = dToday();
@@ -97,6 +98,7 @@ export function MappaReparti({ vv, onNuovo, scheda }: { vv: Voce[]; onNuovo?: (k
   const qui = aperta && scheda && sel && selSet ? <div className="mscheda" key={sel + selSet}>{scheda(sel, selSet, () => setAperta(false))}</div> : null;
   const titoloSet = (t: (typeof settori)[number]) => `${nomeReparto(sel)} · ${t.nome}: ${t.late} urgenti o scadute, ${t.soon} in scadenza, ${t.note} note`;
   const classeSet = (t: (typeof settori)[number]) => `${t.late ? ' late' : t.soon ? ' soon' : ''}${selSet === t.k ? ' on' : ''}`;
+  const riq = stretto || pref.vista === 'riquadri';
   const dim = (k: string) => !!pref.miei && miei.length > 0 && k !== SMISTARE && !miei.includes(k);
   const classe = (s: Stato) => (s.late ? ' late' : s.soon ? ' soon' : '');
   const quanti = (s: Stato) => s.late + s.soon + (s.k === SMISTARE ? s.note : 0);
@@ -171,10 +173,12 @@ export function MappaReparti({ vv, onNuovo, scheda }: { vv: Voce[]; onNuovo?: (k
   };
 
   return (
-    <div className="card mrep">
+    <div className={`card mrep${pref.vista === 'riquadri' ? ' riq' : ''}`}>
       <h2 className="hbh" onClick={clicBarra('mappa')}>Reparti
         {sel && <span className="tag on"><IcReparto k={sel} s={12} />{nomeReparto(sel)}{selSet && ` · ${nomeSettoreMappa(selSet)}`}</span>}
         <span className="sp" />
+        <span className="seg mvista" title="Come vedere i reparti su questo computer"><button className={pref.vista === 'riquadri' ? '' : 'on'} onClick={() => salvaPref({ ...pref, vista: 'mappa' })}>Mappa</button>
+          <button className={pref.vista === 'riquadri' ? 'on' : ''} onClick={() => salvaPref({ ...pref, vista: 'riquadri' })}>Riquadri</button></span>
         {miei.length > 0 && <span className="seg"><button className={pref.miei ? '' : 'on'} onClick={() => salvaPref({ ...pref, miei: false })}>Tutti</button>
           <button className={pref.miei ? 'on' : ''} onClick={() => salvaPref({ ...pref, miei: true })} title={'I tuoi reparti: ' + miei.map(nomeReparto).join(', ')}>I miei reparti</button></span>}
         <select className="mpsel" value={quali} onChange={e => salvaPref({ ...pref, persone: e.target.value as Pers })} title="Quali persone mostrare intorno ai reparti (il reparto aperto le mostra tutte)">
@@ -185,7 +189,7 @@ export function MappaReparti({ vv, onNuovo, scheda }: { vv: Voce[]; onNuovo?: (k
       <div className="mleg"><span><i className="late" />urgenze o scadute</span><span><i className="soon" />in scadenza</span><span><i className="new" />note nuove</span>
         <span><i className="pnel" />nel reparto</span><span><i className="pcoi" />coinvolto</span>
         <span className="muted">· il numero conta le voci da guardare · clic su un reparto per vedere solo le sue cose, poi su un settore per restringere</span></div>
-      {settori.length > 0 && <p className="hint msethint"><IcReparto k={sel} s={13} /> Intorno a <b>{nomeReparto(sel)}</b> ci sono i settori: {settori.map(t => t.nome).join(', ')}. Cliccane uno per vedere solo le sue cose{scheda ? ' e aggiungere subito una voce o una nota' : ''}{selSet ? '; di nuovo per tornare a tutto il reparto' : ''}.</p>}
+      {settori.length > 0 && <p className="hint msethint"><IcReparto k={sel} s={13} /> {riq ? 'Sotto' : 'Intorno a'} <b>{nomeReparto(sel)}</b> ci sono i settori: {settori.map(t => t.nome).join(', ')}. Cliccane uno per vedere solo le sue cose{scheda ? ' e aggiungere subito una voce o una nota' : ''}{selSet ? '; di nuovo per tornare a tutto il reparto' : ''}.</p>}
       <div className="msvg">
         <svg viewBox={`0 0 ${W} ${H}`} role="group" aria-label="Mappa dei reparti">
           {pos.map(p => <line key={p.k} className={`mlink${sel === p.k ? ' on' : ''}`} x1={cx} y1={cy} x2={p.x.toFixed(1)} y2={p.y.toFixed(1)} />)}
@@ -198,7 +202,7 @@ export function MappaReparti({ vv, onNuovo, scheda }: { vv: Voce[]; onNuovo?: (k
           <Settori />
         </svg>
       </div>
-      {!stretto && qui}
+      {!riq && qui}
       <div className="mtiles">
         {tutti.map(s => (<Fragment key={s.k}><div className="mtw">
           <button className={`mtile${classe(s)}${sel === s.k ? ' sel' : ''}${dim(s.k) ? ' dim' : ''}`} onClick={() => scegli(s.k)} aria-pressed={sel === s.k} title={titolo(s)}>
@@ -212,7 +216,7 @@ export function MappaReparti({ vv, onNuovo, scheda }: { vv: Voce[]; onNuovo?: (k
         {sel === s.k && settori.length > 0 && <div className="msetrow">{settori.map(t => (
           <button key={t.k} className={`msetb${classeSet(t)}`} style={{ '--ec': t.colore } as CSSProperties} onClick={() => scegliSet(t.k)} aria-pressed={selSet === t.k} title={titoloSet(t)}>
             <IcSettore k={t.k} />{t.nome}{t.late + t.soon > 0 && <span className="snum">{t.late + t.soon}</span>}</button>))}</div>}
-        {sel === s.k && stretto && qui}
+        {sel === s.k && riq && qui}
         </Fragment>))}
       </div>
     </div>

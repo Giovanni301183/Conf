@@ -110,6 +110,16 @@ describe('archivio: cruscotto e mappa', () => {
     expect(container.querySelector('.mscheda')).toBeNull();
     act(() => { S.scad = []; S.ui.rep = ''; S.ui.repSet = ''; commit(); });
   });
+  it('vista dei reparti sul computer: «Riquadri» come sul telefono, ricordata nel browser', () => {
+    act(() => { S.ui.tab = 'archivio'; S.ui.hb = {}; S.ui.rep = ''; commit(); });
+    const { container, unmount } = render(<App />);
+    fireEvent.click(within(container.querySelector('.mvista') as HTMLElement).getByText('Riquadri'));
+    expect(container.querySelector('.mrep')!.classList.contains('riq')).toBe(true);
+    expect(JSON.parse(localStorage.getItem('tracker_prev_mappa_v1')!).vista).toBe('riquadri');
+    fireEvent.click(within(container.querySelector('.mvista') as HTMLElement).getByText('Mappa'));
+    expect(container.querySelector('.mrep')!.classList.contains('riq')).toBe(false);
+    unmount(); localStorage.removeItem('tracker_prev_mappa_v1');
+  });
   it('richiamo di un preventivo inviato: numerino sul menu e agenda nel preventivo', () => {
     act(() => {
       S.scad = []; S.ui.hb = {}; S.ui.tab = 'config'; S.ui.folds['cf-agenda'] = true;

@@ -592,11 +592,13 @@ label.chk small{margin-left:4px}
 .mtile.dim{opacity:.4}
 .mtile.late{--bl:var(--bad);animation:lampeggia 1.2s ease-in-out infinite}
 .mtile.soon{--bl:var(--warn);animation:lampeggia 2s ease-in-out infinite}
-@media (max-width:640px){.msvg{display:none}.mtiles{display:grid}}
+@media (max-width:640px){.msvg{display:none}.mtiles{display:grid}.mvista{display:none}}
+/* Sul computer, vista «Riquadri»: come sul telefono, più colonne; i settori del reparto scelto vanno sotto la sua riga */
+@media (min-width:641px){.mrep.riq .msvg{display:none}.mrep.riq .mtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));grid-auto-flow:row dense}}
 /* Settori del reparto aperto: pallini sulla mappa, riga di pulsanti sotto il riquadro sul telefono */
 .msetl{stroke:var(--line);stroke-width:1.5;stroke-dasharray:3 3}
 .mset{cursor:pointer;outline:none;animation:fade .35s ease-out}.msetl{animation:fade .35s ease-out}
-.msethint{margin:4px 0 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.msethint{margin:4px 0 0}.msethint .ic{vertical-align:-2px;margin-right:2px}
 /* Scheda da compilare aperta da un settore: sotto la mappa (sul telefono sotto i pulsanti dei settori) */
 .mscheda{grid-column:1/-1;border:1.5px solid var(--acc2);border-radius:12px;background:var(--card);margin-top:10px;animation:fade .2s ease-out}
 .mschedah{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap;background:var(--acc-soft);border-radius:11px 11px 0 0}
