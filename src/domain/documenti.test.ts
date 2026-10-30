@@ -86,6 +86,8 @@ describe('etichette da AI e Telegram', () => {
     expect(pulisciEtichette('Vendita, qualità, boh, vendita')).toEqual(['vendita', 'qualita']);
     expect(pulisciEtichette('sviluppo')).toEqual(['sviluppo']);
     expect(pulisciEtichette('')).toEqual([]);
+    // nomi completi delle etichette Gmail e Commerciale (reparto) → vendita
+    expect(pulisciEtichette(['Prove di pull-out', 'Qualità e reclami', 'Assistenza e post-vendita', 'Commerciale'])).toEqual(['pullout', 'qualita', 'assistenza', 'vendita']);
     expect(pulisciEtichette(null)).toEqual([]);
   });
 });

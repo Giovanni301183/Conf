@@ -35,11 +35,13 @@ export const nomeEtichetta = (k: string) => ETICHETTE.find(e => e[0] === k)?.[1]
 export const coloreEtichetta = (k: string) => ETICHETTE.find(e => e[0] === k)?.[2] || '#8a9196';
 export const etichetteDi = (d: Pick<Documento, 'etichette'>) => d.etichette || [];
 const chiave = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z]/g, '');
+// Nomi di reparto usati come etichetta (per esempio «Conf/Commerciale» in Gmail): valgono come il tema principale del reparto.
+const ALIAS: Record<string, string> = { commerciale: 'vendita' };
 /** Etichette valide da quello che scrive l'AI o Telegram: chiavi o nomi, in lista o separati da virgola ("Acquisti, opportunità"). */
 export function pulisciEtichette(v: unknown): string[] {
   const xx = Array.isArray(v) ? v : String(v ?? '').split(/[,;]/);
   const kk = xx.map(x => chiave(String(x))).filter(Boolean)
-    .map(x => ETICHETTE.find(([k, l]) => k === x || chiave(l) === x || chiave(l).startsWith(x) && x.length >= 4)?.[0]).filter((k): k is string => !!k);
+    .map(x => ALIAS[x] || ETICHETTE.find(([k, l]) => k === x || chiave(l) === x || chiave(l).startsWith(x) && x.length >= 4)?.[0]).filter((k): k is string => !!k);
   return [...new Set(kk)];
 }
 /** Nomi delle etichette per i testi ("Acquisti, Vendita"). */
