@@ -554,7 +554,7 @@ label.chk small{margin-left:4px}
 .mleg{display:flex;gap:6px 12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:4px}
 .mleg span{display:inline-flex;align-items:center;gap:5px}
 .mleg i{width:9px;height:9px;border-radius:50%}.mleg i.late{background:var(--bad)}.mleg i.soon{background:var(--warn)}.mleg i.new{background:#2f6fb0}
-.msvg svg{display:block;width:100%;height:auto;max-height:540px}
+.msvg svg{display:block;width:100%;height:auto;max-height:640px}
 .mlink{stroke:var(--line);stroke-width:2}.mlink.on{stroke:var(--acc2);stroke-width:3}
 .mhub{cursor:pointer;outline:none}.mhub circle{fill:var(--side)}.mhub text{fill:#fff;font-weight:700;font-size:17px;letter-spacing:.08em}.mhub rect{fill:var(--yel)}
 .mhub:focus-visible circle{stroke:var(--acc2);stroke-width:4}

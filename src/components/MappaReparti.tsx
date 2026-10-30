@@ -96,7 +96,8 @@ export function MappaReparti({ vv, onNuovo }: { vv: Voce[]; onNuovo?: (k: string
   );
 
   // Mappa: i reparti su un'ellisse intorno al centro, «Da smistare» in basso a destra.
-  const W = 900, H = 540, cx = W / 2, cy = H / 2 - 4, rx = 330, ry = 200;
+  // Margine intorno all'ellisse per i pallini dei settori, che escono verso l'esterno del reparto aperto.
+  const W = 960, H = 700, cx = W / 2, cy = H / 2, rx = 330, ry = 200;
   const pos = REPARTI.map((r, i) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / REPARTI.length; return { k: r.k, x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) }; });
   const tasto = (k: string) => (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scegli(k); } };
   const Nodo = ({ s, x, y, piccolo = false }: { s: Stato; x: number; y: number; piccolo?: boolean }) => {
@@ -127,16 +128,16 @@ export function MappaReparti({ vv, onNuovo }: { vv: Voce[]; onNuovo?: (k: string
     );
   };
 
-  // Pallini dei settori intorno al reparto aperto, dal lato del centro e più in là delle iniziali, collegati al cerchio.
+  // Pallini dei settori intorno al reparto aperto, verso l'esterno (dal centro in fuori), oltre il nome del reparto, collegati al cerchio.
   const Settori = () => {
     const p = pos.find(q => q.k === sel), s = tutti.find(x => x.k === sel);
     if (!p || !s || !settori.length) return null;
-    const r = 30 + Math.min(quanti(s), 5) * 3, R = r + 64, dir = Math.atan2(cy - p.y, cx - p.x), passo = 50 / R;
+    const r = 30 + Math.min(quanti(s), 5) * 3, R = r + 70, dir = Math.atan2(p.y - cy, p.x - cx), passo = 52 / R;
     return (
       <g transform={`translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`}>
         {settori.map((t, i) => { const a = dir + (i - (settori.length - 1) / 2) * passo, c = Math.cos(a), sn = Math.sin(a), n = t.late + t.soon; return (
           <g key={t.k}>
-            <line className="msetl" x1={(r * c).toFixed(1)} y1={(r * sn).toFixed(1)} x2={((R - 16) * c).toFixed(1)} y2={((R - 16) * sn).toFixed(1)} />
+            <line className="msetl" x1={((r + 26) * c).toFixed(1)} y1={((r + 26) * sn).toFixed(1)} x2={((R - 16) * c).toFixed(1)} y2={((R - 16) * sn).toFixed(1)} />
             <g className={`mset${classeSet(t)}`} style={{ '--ec': t.colore } as CSSProperties} transform={`translate(${(R * c).toFixed(1)} ${(R * sn).toFixed(1)})`}
               role="button" tabIndex={0} aria-pressed={selSet === t.k} aria-label={titoloSet(t)} onClick={() => scegliSet(t.k)}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scegliSet(t.k); } }}>
