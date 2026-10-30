@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Versione** | 1.4 |
+| **Versione** | 1.5 |
 | **Data** | 30/10/2026 |
 | **Autore** | G. Sorrentino |
 | **Fonte dati** | `CONFIGURATORE TRACKER 12 MODULI 1303 (RIORDINATO).xlsx` |
@@ -26,6 +26,7 @@
 | 1.2 | Gantt solo di produzione: tolti montaggio in campo e installazione quadri (si pianificano dopo); ultima fase = spedizione |
 | 1.3 | Scheda **Montaggio** (§9sexies): computo con listino montaggio, Gantt di cantiere con progettazione e pull-out test, export Excel e PDF |
 | 1.4 | **Home con mappa dei reparti e settori** (§9septies): mappa subito sotto il calendario anche sul telefono, pallini dei settori intorno al reparto aperto, filtro reparto + settore su allarmi, appuntamenti e note; settori anche nell'assistente e su Telegram |
+| 1.5 | **Flusso delle voci fino alla chiusura** (§9octies): stati aperta → in corso → in attesa → fatta → chiusa, esito obbligatorio, seguito collegato, conferma dell'autore, rinvii con motivo, storico; annullamento solo amministratore (autore solo su voce intatta) |
 
 ---
 
@@ -382,6 +383,33 @@ Dati: colonna `settori` (testo, elenco) sulle tabelle `scadenze` e `documenti`, 
 **Assistente e Telegram**
 - Assistente dell'app: le proposte di evento e di nota portano i settori solo se l'utente li dice; altrimenti vale il preventivo.
 - Telegram: voci e note create dal bot prendono il settore se detto; sotto quello che si salva ci sono «Cambia reparto», «Settore» e «Annulla»; la situazione di un reparto (`/reparto produzione`) ha i pulsanti dei settori per restringerla. Le modifiche al flusso n8n sono nel file completo `n8n/da-importare/agenda-completo.json` (o da incollare con `n8n/incolla-settori.txt`).
+
+## 9octies. Flusso delle voci d'agenda fino alla chiusura (v1.5)
+
+Ogni cosa da fare deve arrivare a una chiusura chiara: chi la fa, a che punto è, cosa si aspetta e com'è finita. Seguono il flusso **cose da fare, scadenze e urgenze**; appuntamenti e promemoria restano con la sola spunta.
+
+| Stato | Quando | Come ci si arriva |
+|---|---|---|
+| **Da fare** (aperta) | appena creata | — |
+| **In corso** | qualcuno se ne occupa | «La prendo io» (una voce per chiunque la può prendere ogni collega, e diventa sua) |
+| **In attesa** | si aspetta qualcun altro | «In attesa»: *di chi* + *data del sollecito*. Fino a quella data la voce non scade e non lampeggia; poi torna negli allarmi |
+| **Fatta · da confermare** | chi la doveva fare l'ha finita | spunta → **esito obbligatorio** (una riga) e domanda «Serve un seguito?» |
+| **Chiusa** | confermata | chi ha creato la voce preme «Confermo» (o «Riapri» con il motivo). Chi chiude una voce creata da lui la chiude subito |
+| **Annullata** | non serve più | con il motivo, vedi sotto |
+
+**Annullamento ed eliminazione**: spettano all'**amministratore**. L'autore può annullare (o eliminare) da solo solo una voce **intatta**, cioè ancora da fare, senza passaggi, senza note o file allegati e senza messaggi della chat legati. Altrimenti c'è «Chiedi annullamento» con il motivo: la richiesta compare negli Allarmi dell'amministratore («Annulla voce» / «Resta in agenda»).
+
+**Seguito**: chiudendo una voce si può creare subito la voce successiva (titolo «Seguito: …», data proposta tra 5 giorni lavorativi, stessa commessa, reparti, settori e coinvolti), collegata alla prima: nella scheda si vedono «Seguito di» e «Seguiti».
+
+**Rinvio**: spostare più avanti una voce già arrivata alla sua data (o scaduta) chiede il motivo e conta un rinvio; da 3 rinvii la voce si segnala in arancio.
+
+**Storico**: nella scheda della voce («Vedi») c'è l'elenco dei passaggi con data, persona e testo (esito, motivo, attesa). Lo scrive il database a ogni cambio, anche da Telegram ed email.
+
+**Allarmi**: in cima le richieste di annullamento (per l'amministratore) e le voci fatte dai colleghi da confermare (per chi le ha create).
+
+Dati: migrazione `20261030040000_flusso_voci.sql` — colonne `stato`, `esito`, `attesa_di`, `sollecito`, `seguito_di`, `rinvii`, `passaggi`, `annullo_chiesto`, `annullo_da` su `scadenze`; tabella `scadenze_eventi` (storico); il trigger tiene d'accordo `stato` e `fatto` (Telegram, n8n e le versioni vecchie che cambiano solo `fatto` continuano a funzionare) e applica le regole su conferma, riapertura e annullamento. Senza la migrazione l'app resta con la sola spunta.
+
+**Prossimi passi**: avviso all'autore per le voci che nessuno prende in carico entro un giorno e solleciti delle attese nel promemoria del mattino; pulsanti del flusso su Telegram; conteggio di voci aperte, in attesa e ferme nella mappa dei reparti; «✉ Attesa risposta» come caso dello stato In attesa.
 
 ## 10. Decisioni sui punti aperti
 

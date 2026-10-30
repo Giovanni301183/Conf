@@ -6,6 +6,7 @@ import { S, withPrev } from '../store/state';
 import { eStato } from './kpi';
 import { clone, normPrev } from './model';
 import { AUTO, buildGantt, buildLavor, buildMontGantt, dNum, dToday, isWork, montDrv } from './plan';
+import { giornoAllarme, statoDi, type Stato } from './flusso';
 
 export type Genere = 'attivita' | 'promemoria' | 'scadenza' | 'appuntamento' | 'urgenza';
 export interface Scadenza {
@@ -13,6 +14,10 @@ export interface Scadenza {
   assegnata_a: string | null; coinvolti?: string[] | null; fatto: boolean; origine: 'app' | 'telegram'; creato_da: string; creato: string;
   reparti?: string[] | null;   // reparti della mappa nella Home (vedi reparti.ts); vuoto = quelli di chi la deve fare
   settori?: string[] | null;   // settori della mappa (energia, serre…); vuoto = quello del preventivo collegato
+  // Flusso fino alla chiusura (vedi flusso.ts): stato, esito, attesa con sollecito, seguito di un'altra voce, rinvii, richiesta di annullamento.
+  stato?: Stato | null; esito?: string | null; attesa_di?: string | null; sollecito?: string | null; seguito_di?: string | null;
+  rinvii?: number | null; passaggi?: number | null; annullo_chiesto?: string | null; annullo_da?: string | null;
+  motivo?: string | null;      // solo per lo storico: non resta sulla voce
 }
 export type Tipo = 'prod' | 'prodFine' | 'mont' | 'richiamo' | 'man';
 export interface Voce { key: string; giorno: number; tipo: Tipo; titolo: string; sotto: string; prevId?: string; s?: Scadenza }
@@ -100,15 +105,21 @@ export function voci(arch: any[], sc: Scadenza[], conFatte = false): Voce[] {
 }
 
 /** Urgenze aperte (qualunque data, finche' non sono risolte). Scadute: voci a mano non fatte e richiami con data passata.
- *  In arrivo: da oggi a oggi + PREAVVISO. Le voci fatte no; un'urgenza compare solo tra le urgenze. */
+ *  In arrivo: da oggi a oggi + PREAVVISO. Le voci fatte no; un'urgenza compare solo tra le urgenze.
+ *  Una voce in attesa conta dalla data del sollecito: prima non scade. */
 export function allarmi(vv: Voce[], oggi: number) {
-  const aperta = (v: Voce) => !v.s?.fatto && !urgente(v);
+  const aperta = (v: Voce) => !v.s?.fatto && !urgente(v), g = (v: Voce) => giornoAllarme(v.s, v.giorno);
   return {
     urgenze: vv.filter(urgente),
-    scadute: vv.filter(v => daFare(v) && aperta(v) && v.giorno < oggi),
-    prossime: vv.filter(v => aperta(v) && v.giorno >= oggi && v.giorno <= oggi + PREAVVISO),
+    scadute: vv.filter(v => daFare(v) && aperta(v) && g(v) < oggi),
+    prossime: vv.filter(v => aperta(v) && g(v) >= oggi && g(v) <= oggi + PREAVVISO),
   };
 }
+
+/** Voci fatte da un collega che aspettano la mia conferma (le ho create io). */
+export const daConfermare = (sc: Scadenza[], me: string) => sc.filter(s => statoDi(s) === 'fatta' && s.creato_da === me);
+/** Richieste di annullamento in attesa dell'amministratore. */
+export const annulliChiesti = (sc: Scadenza[]) => sc.filter(s => !s.fatto && !!s.annullo_chiesto);
 
 /** Agenda: le voci aperte rimaste indietro, poi tutto quello che c'e' da oggi per i prossimi giorni. */
 export function agenda(vv: Voce[], oggi: number, giorni = 30) {

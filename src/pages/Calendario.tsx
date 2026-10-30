@@ -2,7 +2,9 @@
 // inserite a mano, dettaglio del giorno scelto. Si nasconde e si rimette con un pulsante (scelta ricordata in questo browser);
 // nascosto restano gli allarmi in breve.
 import { useEffect, useState } from 'react';
-import { ATTESA, CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, aspetto, daFare, daPianificare, fatte, inAttesa, mia, oraBreve, perGiorno, persone, voci, vociScadenze, type Genere, type Scadenza, type Voce } from '../domain/calendario';
+import { ATTESA, CATEGORIE, GENERI, PREAVVISO, RICHIAMO, TIPI, agenda, allarmi, annulliChiesti, aspetto, daConfermare, daFare, daPianificare, fatte, inAttesa, mia, oraBreve, perGiorno, persone, traGiorniLavorativi, voci, vociScadenze, type Genere, type Scadenza, type Voce } from '../domain/calendario';
+import { RINVII_TROPPI, STATI, azioni, intatta, nelFlusso, statoDi, type Stato } from '../domain/flusso';
+import { messaggiDi } from '../domain/squadra';
 import { ChevBarra, Fold, barraAperta, clicBarra } from '../components/ui';
 import { StatoSel } from './Cruscotto';
 import { eStato } from '../domain/kpi';
@@ -17,7 +19,7 @@ import { Discuti } from '../components/Collegamento';
 import { MappaReparti, SceltaSettori } from '../components/MappaReparti';
 import { Smistamento } from '../components/Smistamento';
 import { REPARTI, SMISTARE, nomeReparto, nomeSettoreMappa, repartiVoce, settoriDi } from '../domain/reparti';
-import { cloud, coinvoltiDisponibili, eliminaScadenza, repartiDi, repartiVociDisponibili, settoriDisponibili, settorePrev, miaVista, mioEmail, online, puoModificare, puoSpuntare, riassumiRisposta, salvaNota, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
+import { cambiaStato, cloud, coinvoltiDisponibili, eliminaScadenza, flussoDisponibile, isAdmin, squadra, storicoVoce, type Evento, repartiDi, repartiVociDisponibili, settoriDisponibili, settorePrev, miaVista, mioEmail, online, puoModificare, puoSpuntare, riassumiRisposta, salvaNota, salvaScadenza, salvaVista, spuntaScadenza, type Utente } from '../store/remote';
 import { VISTA_TUTTO, filtraVista, normVista, vedeTutto, type Quanto, type Vista } from '../domain/vista';
 import { Ic, IcReparto } from '../components/Icona';
 
@@ -82,6 +84,114 @@ function RispostaArrivata({ s, chiudi }: { s: Scadenza; chiudi: () => void }) {
     </div>
   );
 }
+/* ---------- Flusso fino alla chiusura (domain/flusso.ts) ---------- */
+// La voce segue il flusso se è una cosa da fare, una scadenza o un'urgenza e il database ha la migrazione del flusso.
+const conFlusso = (s?: Scadenza | null) => !!s && nelFlusso(s) && flussoDisponibile();
+const nAllegati = (s: Scadenza) => S.docs.filter(d => d.scadenza_id === s.id).length;
+const nMessaggi = (s: Scadenza) => messaggiDi(squadra.mm, { tipo: 'voce', id: s.id }).length;
+const azioniDi = (s: Scadenza) => azioni(s, mioEmail(), isAdmin(), intatta(s, nAllegati(s), nMessaggi(s)));
+const passa = async (s: Scadenza, patch: Partial<Scadenza>, ok: string) => {
+  const e = await cambiaStato(s, patch, nAllegati(s), nMessaggi(s));
+  toast(e ? 'Voce non aggiornata: ' + e : ok); commit(); return !e;
+};
+const prendi = (s: Scadenza) => passa(s, { stato: 'in_corso', ...(s.assegnata_a ? {} : { assegnata_a: mioEmail() }) }, 'Presa in carico: la voce è in corso');
+const conferma = (s: Scadenza) => passa(s, { stato: 'chiusa' }, 'Chiusura confermata: la voce è chiusa');
+const dIso = (iso: string) => dFmt(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / DAY);
+/** Riga breve sullo stato del flusso, accanto al tipo della voce. */
+function statoBreve(s: Scadenza) {
+  const st = statoDi(s), r = s.rinvii || 0, out: string[] = [];
+  if (st === 'in_attesa') out.push(`in attesa${s.attesa_di ? ' di ' + s.attesa_di : ''}${s.sollecito ? ', sollecito il ' + dIso(s.sollecito) : ''}`);
+  else if (st !== 'aperta') out.push(STATI[st].toLowerCase());
+  if (r) out.push(`rinviata ${r} volt${r === 1 ? 'a' : 'e'}`);
+  if (s.annullo_chiesto && !s.fatto) out.push('annullamento chiesto');
+  return out.join(' · ');
+}
+
+type Passo = 'attesa' | 'fatta' | 'riapri' | 'annulla' | 'chiedi' | 'rifiuta';
+// [titolo, pulsante, campo di testo, testo obbligatorio]
+const PASSI: Record<Passo, [string, string, string, boolean]> = {
+  attesa: ['In attesa: di chi e quando sollecitare', 'Metti in attesa', 'Nota (facoltativa)', false],
+  fatta: ["Fatta: com'è andata?", 'Segna fatta', 'Esito', true],
+  riapri: ['Riapri la voce', 'Riapri', 'Motivo', true],
+  annulla: ['Annulla la voce', 'Annulla la voce', 'Motivo', true],
+  chiedi: ["Chiedi all'amministratore di annullarla", 'Chiedi annullamento', 'Motivo', true],
+  rifiuta: ['Non annullare: la voce resta in agenda', 'Resta in agenda', 'Motivo (facoltativo)', false],
+};
+/** Modulo di un passaggio del flusso: attesa (di chi + sollecito), fatta (esito obbligatorio + seguito), riapri, annulla, richiesta di annullamento. */
+function Passaggio({ s, passo, chiudi }: { s: Scadenza; passo: Passo; chiudi: () => void }) {
+  const [titolo, bottone, campo, serve] = PASSI[passo];
+  const [testo, setTesto] = useState(''), [chi, setChi] = useState(s.attesa_di || ''), [soll, setSoll] = useState(s.sollecito || isoDay(traGiorniLavorativi(3)));
+  const [seguito, setSeguito] = useState(false), [busy, setBusy] = useState(false);
+  const [sg, setSg] = useState({ titolo: 'Seguito: ' + s.titolo.slice(0, 180), giorno: isoDay(traGiorniLavorativi(5)), assegnata_a: s.assegnata_a || '' });
+  const manca = (serve && !testo.trim()) || (passo === 'attesa' && (!chi.trim() || !soll)) || (seguito && (!sg.titolo.trim() || !sg.giorno));
+  const fai = async () => {
+    setBusy(true);
+    const t = testo.trim() || null;
+    const patch: Partial<Scadenza> = passo === 'attesa' ? { stato: 'in_attesa', attesa_di: chi.trim(), sollecito: soll, motivo: t }
+      : passo === 'fatta' ? { stato: 'fatta', esito: t }
+      : passo === 'riapri' ? { stato: s.assegnata_a ? 'in_corso' : 'aperta', motivo: t }
+      : passo === 'annulla' ? { stato: 'annullata', motivo: t }
+      : passo === 'chiedi' ? { annullo_chiesto: t } : { annullo_chiesto: null, motivo: t };
+    const ok = {
+      attesa: `In attesa di ${chi.trim()}: torna negli allarmi il ${dIso(soll)}`,
+      fatta: s.creato_da === mioEmail() ? 'Fatta e chiusa: la ritrovi in Archivio attività' : `Fatta: ${nomeDi(s.creato_da)} deve confermare la chiusura`,
+      riapri: 'Voce riaperta: è di nuovo in agenda', annulla: 'Voce annullata: la ritrovi in Archivio attività',
+      chiedi: "Richiesta mandata: decide l'amministratore", rifiuta: 'La voce resta in agenda',
+    }[passo];
+    if (!(await passa(s, patch, ok))) { setBusy(false); return; }
+    if (passo === 'fatta' && seguito) {
+      const e = await salvaScadenza({ genere: s.genere === 'urgenza' ? 'attivita' : s.genere, titolo: sg.titolo, giorno: sg.giorno, assegnata_a: sg.assegnata_a || null,
+        coinvolti: s.coinvolti || [], preventivo_id: s.preventivo_id, reparti: s.reparti || [], settori: s.settori || [], seguito_di: s.id });
+      toast(e ? 'Voce fatta, ma seguito non creato: ' + e : 'Fatta, con il seguito in agenda il ' + dIso(sg.giorno)); commit();
+    }
+    chiudi();
+  };
+  return (
+    <div className="cform">
+      <b className="wide">{titolo}</b>
+      {passo === 'attesa' && <>
+        <label className="f">Di chi<input value={chi} autoFocus maxLength={120} placeholder="es. fornitore zincatura, cliente, un collega" onChange={e => setChi(e.target.value)} /></label>
+        <label className="f">Sollecitare il<input type="date" value={soll} onChange={e => setSoll(e.target.value)} /></label>
+        <p className="hint wide" style={{ margin: 0 }}>Fino a quel giorno la voce non scade e non lampeggia; poi torna negli allarmi per il sollecito.</p>
+      </>}
+      <label className="f wide">{campo}
+        <textarea rows={2} autoFocus={passo !== 'attesa'} value={testo} maxLength={1000} onChange={e => setTesto(e.target.value)}
+          placeholder={passo === 'fatta' ? 'Una riga: es. Ordine confermato, consegna il 20' : passo === 'attesa' ? 'es. Chiesto il certificato via email' : ''} /></label>
+      {passo === 'fatta' && <>
+        <label className="chk wide"><input type="checkbox" checked={seguito} onChange={e => setSeguito(e.target.checked)} /> Serve un seguito? Crea una voce collegata a questa</label>
+        {seguito && <>
+          <label className="f wide">Cosa<input value={sg.titolo} maxLength={200} onChange={e => setSg({ ...sg, titolo: e.target.value })} /></label>
+          <label className="f">Giorno<input type="date" value={sg.giorno} onChange={e => setSg({ ...sg, giorno: e.target.value })} /></label>
+          {cloud.colleghi.length > 0 && <label className="f">Per chi<select value={sg.assegnata_a} onChange={e => setSg({ ...sg, assegnata_a: e.target.value })}>
+            <option value="">— chiunque —</option>
+            {cloud.colleghi.map(u => <option key={u.email} value={u.email}>{u.nome || u.email}{u.email === mioEmail() ? ' (io)' : ''}</option>)}</select></label>}
+        </>}
+      </>}
+      <div className="wide" style={{ display: 'flex', gap: 8 }}>
+        <button className="btn p" disabled={busy || manca} onClick={fai}>{busy ? 'Salvo…' : bottone}</button>
+        <button className="btn" disabled={busy} onClick={chiudi}>Annulla</button>
+      </div>
+    </div>
+  );
+}
+
+const EVENTO: Record<string, string> = { annullo_chiesto: 'Chiesto annullamento', annullo_rifiutato: 'Annullamento non concesso' };
+/** Storico dei passaggi della voce: quando, cosa, chi. */
+function Storico({ s }: { s: Scadenza }) {
+  const [ee, setEe] = useState<Evento[] | null>(null);
+  useEffect(() => { let vivo = true; storicoVoce(s.id).then(x => { if (vivo) setEe(x); }); return () => { vivo = false; }; }, [s.id, s.stato, s.passaggi]);
+  if (!ee?.length) return null;
+  const cosa = (e: Evento) => e.cosa === 'stato' ? (e.da === 'fatta' && e.a === 'chiusa' ? 'Chiusura confermata' : STATI[e.a as Stato] || e.a)
+    : e.cosa === 'rinvio' ? `Rinviata dal ${dIso(e.da!)} al ${dIso(e.a!)}` : EVENTO[e.cosa] || e.cosa;
+  return (
+    <div className="cstorico">
+      <b><Ic n="storico" />Storico</b>
+      <ol>{ee.map(e => <li key={e.id}><span className="muted">{new Date(e.quando).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+        {' '}<b>{cosa(e)}</b>{e.chi ? ' · ' + nomeDi(e.chi) : ' · da Telegram o email'}{e.testo ? <> — {e.testo}</> : null}</li>)}</ol>
+    </div>
+  );
+}
+
 // Voci visibili: prima la scelta personale «Cosa vedo», poi con "Le mie" solo quelle create da me o assegnate a me.
 // Le fatte stanno nell'Archivio attività.
 const soloMie = (vv: Voce[]) => { const me = mioEmail(), x = filtraVista(vv, miaVista(), me); return S.ui.calMie && me ? x.filter(v => mia(v, me)) : x; };
@@ -139,33 +249,47 @@ function Riga({ v, oggi, onEdit, data = true, allarme = '', qui = false, aperta 
   const [l, c] = aspetto(v), s = v.s, mio = s && puoModificare(s), spunta = s && puoSpuntare(s), ora = oraBreve(s), link = s && !s.fatto ? linkRiunione(s.nota) : '';
   // Allegati della voce (file e note): la graffetta mostra quanti sono e apre l'elenco sotto la voce.
   const [email, setEmail] = useState<'' | 'email' | 'sollecito'>(''), [vedi, setVedi] = useState(aperta), [risp, setRisp] = useState(false), [mod, setMod] = useState<Bozza | null>(null), [ass, setAss] = useState(false), attesa = inAttesa(s) && !s!.fatto, nAll = s ? S.docs.filter(d => d.scadenza_id === s.id).length : 0, docOk = !!s && !docNonDisponibili();
+  // Flusso: la spunta apre la chiusura con l'esito (o la riapertura con il motivo); gli altri passaggi hanno i loro pulsanti.
+  const [passo, setPasso] = useState<Passo | null>(null), fl = conFlusso(s), az = fl ? azioniDi(s!) : null, sb = fl ? statoBreve(s!) : '';
+  const puoSpunta = az ? (s!.fatto ? az.riapri : az.fatta) : spunta;
   return (<>
     <div className={`cvoce ${s?.fatto ? 'fatto' : ''} ${allarme ? 'blink ' + allarme : ''}`} style={{ '--vc': c } as React.CSSProperties}>
-      {s ? <input type="checkbox" checked={s.fatto} disabled={!spunta} onChange={() => segna(s)} title={spunta ? 'Fatto' : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
+      {s ? <input type="checkbox" checked={s.fatto} disabled={!puoSpunta} onChange={() => (fl ? setPasso(s.fatto ? 'riapri' : 'fatta') : segna(s))}
+        title={puoSpunta ? (fl ? (s.fatto ? 'Riapri la voce' : "Segna fatta, con l'esito") : 'Fatto') : fl && s.fatto ? "La riaprono solo chi l'ha creata e l'amministratore" : "Solo chi l'ha creata, chi l'ha assegnata o un amministratore"} /> : <i className="vdot" />}
       <div className={`vt${s ? ' apri' : ''}`} onClick={s ? () => setVedi(!vedi) : undefined} title={s ? (vedi ? 'Chiudi' : 'Apri la voce per intero, con le note e i file allegati') : undefined}>
         <b>{ora && <span className="vora">{ora}</span>}{v.titolo}</b>
         <small>{l}{s?.categoria ? ' · ' + s.categoria.toLowerCase() : ''}{data ? <> · {dFmt(v.giorno)} ({quando(v.giorno, oggi, daFare(v) && !s?.fatto)})</> : null}{v.sotto ? ' · ' + v.sotto : ''}
-          {s?.assegnata_a ? ' · per ' + nomeDi(s.assegnata_a) : ''}{s?.coinvolti?.length ? ' · con ' + s.coinvolti.map(nomeDi).join(', ') : ''}{s?.creato_da ? ' · da ' + nomeDi(s.creato_da) : ''}{s?.origine === 'telegram' ? ' (Telegram)' : ''}</small>
+          {s?.assegnata_a ? ' · per ' + nomeDi(s.assegnata_a) : ''}{s?.coinvolti?.length ? ' · con ' + s.coinvolti.map(nomeDi).join(', ') : ''}{s?.creato_da ? ' · da ' + nomeDi(s.creato_da) : ''}{s?.origine === 'telegram' ? ' (Telegram)' : ''}
+          {sb && <> · <span className={(s!.rinvii || 0) >= RINVII_TROPPI || s!.annullo_chiesto ? 'vstato warn' : 'vstato'}>{sb}</span></>}</small>
         {s?.nota && !vedi ? <span className="muted small vnota">{s.nota}</span> : null}
+        {s?.esito && !vedi ? <span className="small vnota"><b>Esito:</b> {s.esito}</span> : null}
         {v.tipo === 'richiamo' ? <span className="muted small">Offerta inviata da {RICHIAMO}+ giorni senza risposta: quando il cliente risponde, cambia lo stato.</span> : null}
       </div>
       {v.tipo === 'richiamo' && v.prevId && <StatoSel id={v.prevId} k="inviato" />}
       {link && <a className="btn s p" href={link} target="_blank" rel="noopener noreferrer" title={link}><Ic n="video" />Entra</a>}
       {v.prevId && <button className="btn s" onClick={() => apri(v.prevId!)} title={'Apre il preventivo nel configuratore: ' + (S.arch.find(e => e.id === v.prevId)?.nome || '')}>Apri preventivo</button>}
       {s && <Discuti r={{ tipo: 'voce', id: s.id }} stanza={s.preventivo_id || null} />}
+      {az?.prendi && <button className="btn s p" onClick={() => prendi(s!)} title="Prendi in carico la voce: diventa «in corso»"><Ic n="prendo" />La prendo io</button>}
+      {az?.attesa && passo !== 'attesa' && <button className="btn s" onClick={() => setPasso('attesa')} title="Aspetti qualcuno: di chi e quando sollecitare (fino ad allora non scade)"><Ic n="attesa" />{statoDi(s!) === 'in_attesa' ? 'Cambia attesa' : 'In attesa'}</button>}
+      {az?.conferma && <><button className="btn s p" onClick={() => conferma(s!)} title="La voce è fatta davvero: chiudila"><Ic n="conferma" />Confermo</button>
+        <button className="btn s" onClick={() => setPasso('riapri')} title="Non è fatta: rimettila in agenda con il motivo"><Ic n="riapri" />Riapri</button></>}
+      {az?.decidiAnnullo && <><button className="btn s" onClick={() => setPasso('annulla')} title={'Richiesta: ' + s!.annullo_chiesto}><Ic n="annulla" />Annulla voce</button>
+        <button className="btn s" onClick={() => setPasso('rifiuta')}>Resta in agenda</button></>}
       {attesa && spunta && !risp && <button className="btn s p" onClick={() => setRisp(true)} title="Segna la voce come fatta, con una nota su cosa hanno risposto (anche incollando l'email)">Risposta arrivata</button>}
       {s && online() && !email && <button className="btn s" onClick={() => setEmail(attesa ? 'sollecito' : 'email')} title={attesa ? 'Scrivi un sollecito cortese' : "Scrivi un'email di aggiornamento da questa voce"}><Ic n="email" />{attesa ? 'Sollecita' : 'Email'}</button>}
       {s && <button className={`btn s${vedi ? ' on' : ''}`} onClick={() => setVedi(!vedi)} title="Vedi la voce per intero, con le note e i file allegati"><Ic n="vedi" />Vedi{nAll ? <> · <Ic n="allega" />{nAll}</> : ''}</button>}
       {mio && !s.fatto && cloud.colleghi.length > 0 && !ass && <button className="btn s" onClick={() => setAss(true)} title="Assegna la voce a un collega"><Ic n="persona" />{s.assegnata_a ? 'Riassegna' : 'Assegna'}</button>}
-      {mio && (qui || onEdit) && !mod && <><button className="btn s" onClick={() => qui ? setMod(bozzaDa(s)) : onEdit!(s)}>Modifica</button><button className="btn x" onClick={() => togli(s)} title="Elimina">✕</button></>}
+      {mio && (qui || onEdit) && !mod && <><button className="btn s" onClick={() => qui ? setMod(bozzaDa(s)) : onEdit!(s)}>Modifica</button>
+        {(!az || az.elimina) && <button className="btn x" onClick={() => togli(s)} title="Elimina">✕</button>}</>}
     </div>
+    {passo && s && <div className="callegati"><Passaggio s={s} passo={passo} chiudi={() => setPasso(null)} /></div>}
     {mod && <div className="callegati"><Modulo b={mod} set={setMod} chiudi={() => setMod(null)} /></div>}
     {risp && s && <div className="callegati"><RispostaArrivata s={s} chiudi={() => setRisp(false)} /></div>}
     {ass && s && <div className="callegati"><Assegna s={s} chiudi={() => setAss(false)} /></div>}
     {email && s && <div className="callegati"><ModuloEmail titolo={s.titolo} testo={s.nota || ''} contesto={contestoEmail(s.preventivo_id, s.id)}
       chiave={s.preventivo_id || s.id} preventivo={s.preventivo_id} chiudi={() => setEmail('')}
       richiesta0={email === 'sollecito' ? 'Sollecito cortese: non abbiamo ancora ricevuto risposta alla nostra email.' : ''} /></div>}
-    {vedi && s && <div className="callegati"><Scheda s={s} />{docOk && <DocPanel scadenza={s.id} preventivo={s.preventivo_id} compatto />}</div>}
+    {vedi && s && <div className="callegati"><Scheda s={s} onPasso={setPasso} />{docOk && <DocPanel scadenza={s.id} preventivo={s.preventivo_id} compatto />}</div>}
   </>);
 }
 
@@ -176,14 +300,21 @@ export function VoceScheda({ s }: { s: Scadenza }) {
 }
 
 /** La voce per intero, in sola lettura: per chi non la può modificare e per non dover entrare in Modifica. */
-function Scheda({ s }: { s: Scadenza }) {
-  const prev = s.preventivo_id ? S.arch.find(e => e.id === s.preventivo_id)?.nome : '';
+function Scheda({ s, onPasso }: { s: Scadenza; onPasso: (p: Passo) => void }) {
+  const prev = s.preventivo_id ? S.arch.find(e => e.id === s.preventivo_id)?.nome : '', fl = conFlusso(s), az = fl ? azioniDi(s) : null, st = statoDi(s);
+  const padre = s.seguito_di ? S.scad.find(x => x.id === s.seguito_di) : null, figli = S.scad.filter(x => x.seguito_di === s.id);
   const righe: [string, React.ReactNode][] = [
     ['Tipo', (inAttesa(s) ? 'In attesa di risposta' : GENERI[s.genere]?.[0] || '') + (s.categoria ? ' · ' + s.categoria.toLowerCase() : '')],
     ['Quando', dFmt(Date.UTC(+s.giorno.slice(0, 4), +s.giorno.slice(5, 7) - 1, +s.giorno.slice(8, 10)) / DAY) + (oraBreve(s) ? ' alle ' + oraBreve(s) : '')],
     ['Riferita a', prev || ''], ['Per', s.assegnata_a ? nomeDi(s.assegnata_a) : ''], ['Coinvolti', (s.coinvolti || []).map(nomeDi).join(', ')],
     ['Creata da', nomeDi(s.creato_da) + (s.origine === 'telegram' ? ' (Telegram)' : '') + (s.creato ? ' il ' + new Date(s.creato).toLocaleDateString('it-IT') : '')],
-    ['Stato', s.fatto ? '✓ fatta' : 'da fare'],
+    ['Stato', fl ? STATI[st] : s.fatto ? '✓ fatta' : 'da fare'],
+    ['Esito', s.esito || ''],
+    ['In attesa di', st === 'in_attesa' ? (s.attesa_di || '') + (s.sollecito ? ' · sollecito il ' + dIso(s.sollecito) : '') : ''],
+    ['Rinvii', s.rinvii ? String(s.rinvii) + ((s.rinvii || 0) >= RINVII_TROPPI ? ' (troppi: va guardata)' : '') : ''],
+    ['Annullamento', s.annullo_chiesto && !s.fatto ? `chiesto${s.annullo_da ? ' da ' + nomeDi(s.annullo_da) : ''}: ${s.annullo_chiesto}` : ''],
+    ['Seguito di', padre ? padre.titolo + (padre.esito ? ' — ' + padre.esito : '') : ''],
+    ['Seguiti', figli.map(x => x.titolo + (x.fatto ? ' ✓' : '')).join(' · ')],
   ];
   return (
     <div className="cscheda">
@@ -191,6 +322,12 @@ function Scheda({ s }: { s: Scadenza }) {
       <dl>{righe.filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
       {s.nota ? <p className="cnota">{s.nota}</p> : <p className="muted small" style={{ margin: 0 }}>Nessuna nota sulla voce.</p>}
       {!puoModificare(s) && <p className="hint" style={{ margin: 0 }}>La voce la modificano solo chi l'ha creata e l'amministratore{puoSpuntare(s) ? ': tu puoi segnarla fatta e aggiungere note qui sotto' : ''}.</p>}
+      {az && (az.annulla || az.chiediAnnullo || (az.riapri && st !== 'fatta')) && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {az.riapri && st !== 'fatta' && <button className="btn s" onClick={() => onPasso('riapri')}><Ic n="riapri" />Riapri</button>}
+        {az.annulla && <button className="btn s" onClick={() => onPasso('annulla')} title={isAdmin() ? 'Annulla la voce, con il motivo' : 'La voce è ancora intatta: la puoi annullare tu'}><Ic n="annulla" />Annulla la voce</button>}
+        {az.chiediAnnullo && <button className="btn s" onClick={() => onPasso('chiedi')} title="La voce ha già dei passaggi: decide l'amministratore"><Ic n="annulla" />Chiedi annullamento</button>}
+      </div>}
+      {fl && <Storico s={s} />}
     </div>
   );
 }
@@ -199,11 +336,16 @@ function Scheda({ s }: { s: Scadenza }) {
 export function Allarmi({ onEdit }: { onEdit?: (s: Scadenza) => void }) {
   const oggi = dToday(), { urgenze, scadute, prossime } = allarmi(vociHome(), oggi), np = daPianificare(S.arch);
   const tutte = [...urgenze, ...scadute, ...prossime], ap = barraAperta('allarmi');
+  // Flusso: voci fatte da altri che aspettano la mia conferma; per l'amministratore, le richieste di annullamento.
+  const conf = flussoDisponibile() ? vociScadenze(daConfermare(S.scad, mioEmail()), S.arch) : [];
+  const ann = flussoDisponibile() && isAdmin() && cloud.session ? vociScadenze(annulliChiesti(S.scad), S.arch) : [];
   return (
     <div className={`card calarm${ap ? '' : ' chiusa'}`}>
       <h2 className="hbh" onClick={clicBarra('allarmi')}>Allarmi
         {urgenze.length > 0 && <span className="tag alate"><Ic n="attenzione" s={12} />{urgenze.length} urgenz{urgenze.length === 1 ? 'a' : 'e'}</span>}
         {scadute.length > 0 && <span className="tag alate">{scadute.length} scadut{scadute.length === 1 ? 'a' : 'e'}</span>}
+        {conf.length > 0 && <span className="tag on">{conf.length} da confermare</span>}
+        {ann.length > 0 && <span className="tag alate">{ann.length} annullament{ann.length === 1 ? 'o' : 'i'} da decidere</span>}
         <span className="tag asoon">{prossime.length} nei prossimi {PREAVVISO} giorni</span>
         {S.ui.calMie && <span className="tag">solo le mie</span>}
         {S.ui.rep && <span className="tag on">{nomeReparto(S.ui.rep)}{S.ui.repSet && ` · ${nomeSettoreMappa(S.ui.repSet)}`}</span>}
@@ -211,6 +353,8 @@ export function Allarmi({ onEdit }: { onEdit?: (s: Scadenza) => void }) {
         <ChevBarra k="allarmi" />
       </h2>
       {ap && <>
+      {ann.length > 0 && <div className="agiorno late"><h3>Annullamenti chiesti: decidi tu</h3>{ann.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} qui />)}</div>}
+      {conf.length > 0 && <div className="agiorno"><h3>Fatte dai colleghi: conferma la chiusura o riapri</h3>{conf.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} qui />)}</div>}
       {tutte.length ? tutte.map(v => <Riga key={v.key} v={v} oggi={oggi} onEdit={onEdit} qui allarme={prossime.includes(v) ? 'soon' : 'late'} />) : <p className="hint" style={{ margin: 0 }}>Niente di scaduto o in arrivo.</p>}
       {np.length > 0 && <p className="hint" style={{ margin: '10px 0 0' }}>
         Commesse vinte senza data di avvio della produzione (non compaiono nel calendario): {np.map((e, i) => <span key={e.id}>{i ? ', ' : ''}<a href="#" onClick={ev => { ev.preventDefault(); apri(e.id); }}>{e.nome}</a></span>)}.
@@ -220,7 +364,7 @@ export function Allarmi({ onEdit }: { onEdit?: (s: Scadenza) => void }) {
   );
 }
 
-type Bozza = { id?: string; genere: Genere; categoria: string; giorno: string; ora: string; titolo: string; nota: string; preventivo_id: string; assegnata_a: string; coinvolti: string[]; reparti?: string[]; settori?: string[] };
+type Bozza = { id?: string; genere: Genere; categoria: string; giorno: string; ora: string; titolo: string; nota: string; preventivo_id: string; assegnata_a: string; coinvolti: string[]; reparti?: string[]; settori?: string[]; motivo?: string };
 const bozzaDa = (s: Scadenza): Bozza => ({ id: s.id, genere: s.genere || 'attivita', categoria: s.categoria || '', giorno: s.giorno, ora: oraBreve(s), titolo: s.titolo, nota: s.nota || '', preventivo_id: s.preventivo_id || '', assegnata_a: s.assegnata_a || '', coinvolti: s.coinvolti || [], reparti: s.reparti || [], settori: s.settori || [] });
 const ESEMPI: Record<Genere, string> = {
   attivita: 'es. Rifare il computo bulloneria', promemoria: 'es. Richiamare il cliente per il preventivo',
@@ -230,8 +374,12 @@ const ESEMPI: Record<Genere, string> = {
 function Modulo({ b, set, chiudi }: { b: Bozza; set: (b: Bozza) => void; chiudi: () => void }) {
   const [busy, setBusy] = useState(false);
   const vinti = S.arch.filter(e => eStato(e) === 'vinto'), altri = S.arch.filter(e => eStato(e) !== 'vinto');
+  // Rinvio: la voce era già arrivata alla sua data (o scaduta) e la si sposta più avanti: serve il motivo, che resta nello storico.
+  const prima = b.id ? S.scad.find(x => x.id === b.id) : null;
+  const rinvio = !!prima && conFlusso(prima) && !prima.fatto && b.giorno > prima.giorno && prima.giorno <= isoDay(dToday());
   const salva = async () => {
-    setBusy(true); const e = await salvaScadenza({ ...b, fatto: !!S.scad.find(x => x.id === b.id)?.fatto }); setBusy(false);
+    if (rinvio && !b.motivo?.trim()) { toast('Scrivi perché la rinvii'); return; }
+    setBusy(true); const e = await salvaScadenza({ ...b, fatto: !!prima?.fatto, motivo: rinvio ? b.motivo!.trim() : null }); setBusy(false);
     if (e) { toast('Voce non salvata: ' + e); return; }
     toast(b.id ? 'Voce aggiornata' : `${GENERI[b.genere][0]} aggiunt${b.genere === 'attivita' ? 'o' : 'a'}`); chiudi(); commit();
   };
@@ -242,6 +390,8 @@ function Modulo({ b, set, chiudi }: { b: Bozza; set: (b: Bozza) => void; chiudi:
       <label className="f wide">Cosa<input value={b.titolo} placeholder={ESEMPI[b.genere]} maxLength={200} autoFocus onChange={e => set({ ...b, titolo: e.target.value })}
         onKeyDown={e => { if (e.key === 'Enter') salva(); }} /></label>
       <label className="f">Giorno<input type="date" value={b.giorno} onChange={e => set({ ...b, giorno: e.target.value })} /></label>
+      {rinvio && <label className="f wide">Perché la rinvii{(prima!.rinvii || 0) >= RINVII_TROPPI - 1 ? ` (è già stata rinviata ${prima!.rinvii} volt${prima!.rinvii === 1 ? 'a' : 'e'})` : ''}
+        <input value={b.motivo || ''} maxLength={300} placeholder="es. Il fornitore ha spostato la consegna" onChange={e => set({ ...b, motivo: e.target.value })} /></label>}
       <label className="f">Ora (facoltativa)<input type="time" value={b.ora} onChange={e => set({ ...b, ora: e.target.value })} /></label>
       <label className="f">Riferita a (facoltativo)<select value={b.preventivo_id} onChange={e => set({ ...b, preventivo_id: e.target.value })}>
         <option value="">— niente —</option>
@@ -263,7 +413,7 @@ function Modulo({ b, set, chiudi }: { b: Bozza; set: (b: Bozza) => void; chiudi:
         <SceltaSettori val={b.settori || []} set={x => set({ ...b, settori: x })} /></div>}
       <label className="f wide">Nota (facoltativa)<textarea rows={3} value={b.nota} onChange={e => set({ ...b, nota: e.target.value })} /></label>
       <div className="wide" style={{ display: 'flex', gap: 8 }}>
-        <button className="btn p" disabled={busy || !b.titolo.trim() || !b.giorno} onClick={salva}>{b.id ? 'Salva modifiche' : 'Aggiungi'}</button>
+        <button className="btn p" disabled={busy || !b.titolo.trim() || !b.giorno || (rinvio && !b.motivo?.trim())} onClick={salva}>{b.id ? 'Salva modifiche' : 'Aggiungi'}</button>
         <button className="btn" onClick={chiudi}>Annulla</button>
       </div>
     </div>

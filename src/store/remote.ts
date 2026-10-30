@@ -2,6 +2,8 @@
 import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { linkType, supabase } from '../lib/supabase';
 import { perMe, type Scadenza } from '../domain/calendario';
+import { cambia, intatta } from '../domain/flusso';
+import { isoDay, dToday } from '../domain/plan';
 import { normListinoFisso } from '../domain/fissoCosti';
 import { LIMITE_MB, libero, percorsoPer, tecnico, type Documento } from '../domain/documenti';
 import type { Messaggio, PropostaNota, Rif } from '../domain/squadra';
@@ -207,6 +209,10 @@ export const repartiVociDisponibili = () => !supabase || conReparti;
 // I settori (pallini della mappa) arrivano con la migrazione 20261030030000_settori_mappa.sql: finché manca, valgono quelli del preventivo.
 let conSettori = true;
 export const settoriDisponibili = () => !supabase || conSettori;
+// Il flusso fino alla chiusura (stato, esito, attesa, storico) arriva con la migrazione 20261030040000_flusso_voci.sql: finché manca, c'è solo la spunta.
+const FLUSSO_COLS = ', stato, esito, attesa_di, sollecito, seguito_di, rinvii, passaggi, annullo_chiesto, annullo_da';
+let conFlusso = true;
+export const flussoDisponibile = () => !supabase || conFlusso;
 /** Settore del preventivo con quell'id ('' = tracker), undefined se non è nell'archivio. */
 export const settorePrev = (id: string) => { const e = S.arch.find(x => x.id === id); return e ? String(e.prev?.settore || '') : undefined; };
 /** Reparti di un collega (li assegna l'amministratore dalla pagina Utenti). */
@@ -229,8 +235,9 @@ export const puoModificare = (s: Scadenza) => isAdmin() || s.creato_da === mioEm
 export const puoSpuntare = (s: Scadenza) => puoModificare(s) || perMe(s, mioEmail());
 async function loadScadenze() {
   listUtenti().then(u => { cloud.colleghi = u.filter(x => x.attivo); }, () => {});
-  const leggi = () => supabase!.from('scadenze').select(SCAD_COLS + (conCoinvolti ? ', coinvolti' : '') + (conReparti ? ', reparti' : '') + (conSettori ? ', settori' : '')).order('giorno');
+  const leggi = () => supabase!.from('scadenze').select(SCAD_COLS + (conCoinvolti ? ', coinvolti' : '') + (conReparti ? ', reparti' : '') + (conSettori ? ', settori' : '') + (conFlusso ? FLUSSO_COLS : '')).order('giorno');
   let { data, error } = await leggi();
+  if (error && conFlusso && /stato|esito|attesa_di|sollecito|seguito_di|rinvii|passaggi|annullo/.test(error.message)) { conFlusso = false; ({ data, error } = await leggi()); }
   if (error && conSettori && /settori/.test(error.message)) { conSettori = false; ({ data, error } = await leggi()); }
   if (error && conReparti && /reparti/.test(error.message)) { conReparti = false; ({ data, error } = await leggi()); }
   if (error && conCoinvolti && /coinvolti/.test(error.message)) { conCoinvolti = false; ({ data, error } = await leggi()); }
@@ -242,7 +249,9 @@ export async function salvaScadenza(s: Partial<Scadenza>): Promise<string> {
     preventivo_id: s.preventivo_id || null, assegnata_a: s.assegnata_a || null, fatto: !!s.fatto,
     ...(coinvoltiDisponibili() ? { coinvolti: (s.coinvolti || []).filter(e => e && e !== s.assegnata_a) } : {}),
     ...(repartiVociDisponibili() && s.reparti !== undefined ? { reparti: s.reparti || [] } : {}),
-    ...(settoriDisponibili() && s.settori !== undefined ? { settori: s.settori || [] } : {}) };
+    ...(settoriDisponibili() && s.settori !== undefined ? { settori: s.settori || [] } : {}),
+    ...(supabase && conFlusso && s.motivo ? { motivo: s.motivo } : {}),
+    ...(conFlusso && !s.id && s.seguito_di ? { seguito_di: s.seguito_di } : {}) };
   if (!v.titolo || !v.giorno) return 'Servono titolo e data.';
   if (!coinvoltiDisponibili() && s.coinvolti?.length) return 'per coinvolgere più persone manca la migrazione 20261028010000_coinvolti.sql nel database';
   if (!supabase) {
@@ -261,10 +270,30 @@ export async function spuntaScadenza(s: Scadenza): Promise<string> {
   if (error) return error.message;
   await loadScadenze(); return '';
 }
+/** Passaggio del flusso (stato, esito, attesa, richiesta di annullamento, motivo): le regole le controlla il database. */
+export async function cambiaStato(s: Scadenza, patch: Partial<Scadenza>, nAllegati = 0, nMessaggi = 0): Promise<string> {
+  if (!supabase) {
+    const n = cambia(s, patch, mioEmail(), isAdmin(), isoDay(dToday()), intatta(s, nAllegati, nMessaggi));
+    if (typeof n === 'string') return n;
+    S.scad = S.scad.map(x => (x.id === s.id ? n : x)); store(KEY_SCAD, S.scad); return '';
+  }
+  if (!conFlusso) return 'manca la migrazione 20261030040000_flusso_voci.sql (va eseguita nel SQL Editor di Supabase)';
+  const { error } = await supabase.from('scadenze').update(patch).eq('id', s.id);
+  if (error) return error.message;
+  await loadScadenze(); return '';
+}
+export interface Evento { id: number; quando: string; chi: string | null; cosa: string; da: string | null; a: string | null; testo: string | null }
+/** Storico dei passaggi di una voce, dal più vecchio. */
+export async function storicoVoce(id: string): Promise<Evento[]> {
+  if (!supabase || !conFlusso) return [];
+  const { data, error } = await supabase.from('scadenze_eventi').select('*').eq('scadenza_id', id).order('quando');
+  return error ? [] : (data as Evento[]);
+}
 export async function eliminaScadenza(id: string): Promise<string> {
   if (!supabase) { S.scad = S.scad.filter(x => x.id !== id); store(KEY_SCAD, S.scad); return ''; }
-  const { error } = await supabase.from('scadenze').delete().eq('id', id);
+  const { data, error } = await supabase.from('scadenze').delete().eq('id', id).select('id');
   if (error) return error.message;
+  if (!data?.length) return "una voce con dei passaggi la elimina solo l'amministratore: chiedi l'annullamento";
   await loadScadenze(); return '';
 }
 let scadCh: RealtimeChannel | null = null;

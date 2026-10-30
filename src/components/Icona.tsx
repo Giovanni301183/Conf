@@ -4,7 +4,8 @@ import type { SVGProps } from 'react';
 import {
   AlarmClock, Bell, BellOff, Calendar, ChartColumn, ChartPie, CircleCheck, Compass, Construction, Eye, Factory, FileText, Handshake,
   HardHat, Inbox, Link, Lock, Mail, MapPin, MessageCircle, Mic, Microscope, NotebookPen, PartyPopper, Paperclip, Pin, Ruler, Search,
-  Send, ShoppingCart, TriangleAlert, Truck, User, Users, Video, Wrench, Bolt, Sun, Warehouse, Grape, Fence, Sparkles, type LucideIcon,
+  Send, ShoppingCart, TriangleAlert, Truck, User, Users, Video, Wrench, Bolt, Sun, Warehouse, Grape, Fence, Sparkles, Hand, Hourglass,
+  RotateCcw, Ban, History, CheckCheck, type LucideIcon,
 } from 'lucide-react';
 
 const ICONE = {
@@ -12,6 +13,7 @@ const ICONE = {
   persone: Users, persona: User, smistare: Inbox, voce: AlarmClock, avvisi: Bell, muto: BellOff, vedi: Eye, grafico: ChartColumn,
   video: Video, telegram: Send, fatto: CircleCheck, luogo: MapPin, giorno: Calendar, preventivo: FileText, articolo: Bolt,
   festa: PartyPopper, attenzione: TriangleAlert, privato: Lock,
+  prendo: Hand, attesa: Hourglass, riapri: RotateCcw, annulla: Ban, storico: History, conferma: CheckCheck,
 } satisfies Record<string, LucideIcon>;
 export type NomeIcona = keyof typeof ICONE;
 
